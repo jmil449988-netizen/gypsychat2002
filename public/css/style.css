@@ -31,6 +31,11 @@ transform:rotate(45deg);border:1px solid var(--gold-lo);box-shadow:0 0 8px rgba(
   .users{display:none}
   .gc-root{padding:4px 0}
   .win{max-width:100%;min-height:calc(100vh - 8px);display:flex;flex-direction:column}
+  /* iOS Safari's address bar shrinks/grows the visual viewport without firing a resize the way
+     100vh expects, which can leave the frame short or clip the cooldown/mute banner and warning
+     popup below the fold. 100dvh tracks the real visible area there; browsers that don't know it
+     (this rule is simply skipped) keep the 100vh value set just above. */
+  .win{min-height:calc(100dvh - 8px)}
   .win > .title{position:sticky;top:0;z-index:15;box-shadow:0 2px 0 #000,0 4px 12px rgba(0,0,0,.6)}
   .win > .body{flex:1;display:grid;grid-template-rows:1fr auto;min-height:0;padding:8px}
   .win > .body .log{height:auto;min-height:0}
