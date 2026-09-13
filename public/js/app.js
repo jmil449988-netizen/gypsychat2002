@@ -94,7 +94,7 @@ function up() { bar.removeEventListener('pointermove', mv); bar.removeEventListe
 bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up);
 });
 $('ims').appendChild(el); wins[id] = win;
-makeTab(id);
+makeTab(id); updateTab(id); // tab starts visible (win starts minimized) regardless of who the first message is from
 return win;
 }
 function makeTab(id) {
