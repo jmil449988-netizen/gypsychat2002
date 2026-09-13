@@ -13,6 +13,10 @@ var threadsPanel = $('threadsPanel'), tpList = $('tpList'), tpDetail = $('tpDeta
 var tpNewBtn = $('tpNewBtn'), tpNewPost = $('tpNewPost'), tpNewBody = $('tpNewBody'), tpNewCancel = $('tpNewCancel'), tpNewSubmit = $('tpNewSubmit');
 var tpBack = $('tpBack'), tpPosts = $('tpPosts'), tpReplyBody = $('tpReplyBody'), tpReplySend = $('tpReplySend');
 var threadToggleBtn = $('threadToggleBtn'), dmToggleBtn = $('dmToggleBtn');
+var tpNewImgBtn = $('tpNewImgBtn'), tpNewImgFile = $('tpNewImgFile'), tpNewGifBtn = $('tpNewGifBtn');
+var tpNewPreviewWrap = $('tpNewPreviewWrap'), tpNewPreviewImg = $('tpNewPreviewImg'), tpNewImgRemove = $('tpNewImgRemove');
+var tpReplyImgBtn = $('tpReplyImgBtn'), tpReplyImgFile = $('tpReplyImgFile'), tpReplyGifBtn = $('tpReplyGifBtn');
+var tpReplyPreviewWrap = $('tpReplyPreviewWrap'), tpReplyPreviewImg = $('tpReplyPreviewImg'), tpReplyImgRemove = $('tpReplyImgRemove');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
 
@@ -31,6 +35,9 @@ var openThreadId = null;
 var threadsChannel = null;
 var threadPostsSeen = {};
 var lastThreadSend = 0;
+var tpNewImageUrl = null, tpReplyImageUrl = null; // pending image_url for the post currently being composed
+var MAX_IMG_BYTES = 5 * 1024 * 1024;
+var ALLOWED_IMG_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
 
 /* ---------- my status (Online / Away / Busy, plus auto-Idle) ----------
    manualStatus is what I chose; autoIdle layers "idle" on top of Online after inactivity.
@@ -605,7 +612,7 @@ switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
 case 'help': addSys('Commands: /w name msg · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /unmute name · /muted · /reports' : '') + '. Click your status pill (bottom bar) to go Away/Busy. The ⚡ in a whisper window sends a buzz.'); return true;
-case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg); return true;
+case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
 case 'blocks': var bl = Object.keys(blocked).map(function (k) { return blocked[k]; }); addSys(bl.length ? 'Blocked: ' + bl.join(', ') : 'You have blocked no one.'); return true;
@@ -655,11 +662,25 @@ picker.appendChild(b);
 $('emoBtn').onclick = function () { gifPicker.classList.remove('open'); picker.classList.toggle('open'); };
 document.addEventListener('click', function (e) { if (!picker.contains(e.target) && e.target !== $('emoBtn')) picker.classList.remove('open'); });
 
-/* ---------- GIF picker (Giphy) ---------- */
-var gifTimer = null, gifSeq = 0;
+/* ---------- GIF picker (Giphy) ----------
+   Shared by the main chat compose box and the thread new-post/reply compose boxes. Since the
+   picker now lives as a direct child of .gc-root (so it isn't dimmed/disabled along with .win when
+   a thread is open), it's positioned with fixed coordinates computed from whichever button opened
+   it, and gifTarget says where a picked GIF should go. */
+var gifTimer = null, gifSeq = 0, gifTarget = 'main';
 function closeGif() { gifPicker.classList.remove('open'); }
-function openGifPicker(seedQuery) {
-picker.classList.remove('open'); gifPicker.classList.add('open');
+function positionPicker(el, anchor) {
+var r = anchor.getBoundingClientRect();
+var w = el.offsetWidth || 280;
+el.style.left = Math.max(6, Math.min(r.left, window.innerWidth - w - 6)) + 'px';
+el.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+el.style.top = 'auto';
+}
+function openGifPicker(seedQuery, target, anchorEl) {
+picker.classList.remove('open');
+gifTarget = target || 'main';
+gifPicker.classList.add('open');
+positionPicker(gifPicker, anchorEl || gifBtn);
 gifQ.value = seedQuery || ''; gifQ.focus();
 searchGifs(gifQ.value.trim());
 }
@@ -673,7 +694,12 @@ var full = (images.fixed_height || images.original || images.fixed_width || {}).
 if (!thumb || !full) return;
 var b = document.createElement('button'); b.type = 'button';
 b.innerHTML = '<img src="' + esc(thumb) + '" alt="' + esc(g.title || 'GIF') + '" loading="lazy">';
-b.onclick = function () { closeGif(); gifQ.value = ''; post(full); msg.focus(); };
+b.onclick = function () {
+closeGif(); gifQ.value = '';
+if (gifTarget === 'thread-new') setPendingImage('new', full);
+else if (gifTarget === 'thread-reply') setPendingImage('reply', full);
+else { post(full); msg.focus(); }
+};
 gifResults.appendChild(b);
 });
 if (!gifResults.children.length) gifResults.innerHTML = '<div class="gmsg">No results.</div>';
@@ -695,13 +721,17 @@ if (seq === gifSeq) gifResults.innerHTML = '<div class="gmsg">Could not reach Gi
 }
 }
 gifBtn.onclick = function () {
-var opening = !gifPicker.classList.contains('open');
-if (opening) { openGifPicker(''); } else { closeGif(); }
+var opening = !gifPicker.classList.contains('open') || gifTarget !== 'main';
+if (opening) { openGifPicker('', 'main', gifBtn); } else { closeGif(); }
 };
 gifGo.onclick = function () { searchGifs(gifQ.value.trim()); };
 gifQ.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); searchGifs(gifQ.value.trim()); } if (e.key === 'Escape') closeGif(); };
 gifQ.oninput = function () { clearTimeout(gifTimer); var v = gifQ.value.trim(); gifTimer = setTimeout(function () { searchGifs(v); }, 450); };
-document.addEventListener('click', function (e) { if (!gifPicker.contains(e.target) && e.target !== gifBtn) closeGif(); });
+document.addEventListener('click', function (e) {
+if (gifPicker.contains(e.target)) return;
+if (e.target === gifBtn || e.target === tpNewGifBtn || e.target === tpReplyGifBtn) return;
+closeGif();
+});
 
 /* ---------- threads board ----------
    A single flat "general" board — no topics/categories. Anyone signed in can start a thread or
@@ -717,14 +747,40 @@ var m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
 var h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
 return Math.floor(h / 24) + 'd ago';
 }
+
+/* ---------- pictures in threads: upload your own image, or reuse the Giphy picker above ----------
+   Uploaded images go to the public "thread-images" Storage bucket under a path prefixed with your
+   own user id (storage.objects RLS only allows writing there); a picked GIF just reuses its Giphy
+   CDN URL. Either way the result is a plain URL stored in the thread/post's image_url column. */
+function setPendingImage(which, url) {
+if (which === 'new') { tpNewImageUrl = url; tpNewPreviewImg.src = url; tpNewPreviewWrap.classList.remove('hidden'); }
+else { tpReplyImageUrl = url; tpReplyPreviewImg.src = url; tpReplyPreviewWrap.classList.remove('hidden'); }
+}
+function clearPendingImage(which) {
+if (which === 'new') { tpNewImageUrl = null; tpNewPreviewImg.src = ''; tpNewPreviewWrap.classList.add('hidden'); tpNewImgFile.value = ''; }
+else { tpReplyImageUrl = null; tpReplyPreviewImg.src = ''; tpReplyPreviewWrap.classList.add('hidden'); tpReplyImgFile.value = ''; }
+}
+async function uploadThreadImage(file) {
+if (!file) return null;
+var ext = ALLOWED_IMG_TYPES[file.type];
+if (!ext) { addSys('Images must be JPG, PNG, GIF, or WEBP.'); return null; }
+if (file.size > MAX_IMG_BYTES) { addSys('Images must be 5MB or smaller.'); return null; }
+var path = me.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
+var up = await sb.storage.from('thread-images').upload(path, file, { contentType: file.type, upsert: false });
+if (up.error) { addSys('Image upload failed: ' + up.error.message); return null; }
+var pub = sb.storage.from('thread-images').getPublicUrl(path);
+return (pub.data && pub.data.publicUrl) || null;
+}
 function renderThreadList() {
 if (!tpItems) return;
 if (!threadsOrder.length) { tpItems.innerHTML = '<div class="tp-empty">No threads yet. Start one!</div>'; return; }
 tpItems.innerHTML = threadsOrder.map(function (id) {
 var t = threadsCache[id]; if (!t) return '';
 var n = t.reply_count || 0;
-return '<button type="button" class="tp-item" data-id="' + id + '"><div class="tp-op">' + esc(t.op_name) + '</div><div class="tp-preview">' +
-esc(String(t.body || '').slice(0, 180)) + '</div><div class="tp-meta">' + n + ' repl' + (n === 1 ? 'y' : 'ies') + ' · ' + timeAgo(t.bumped_at) + '</div></button>';
+var preview = t.body ? '<div class="tp-preview">' + esc(String(t.body).slice(0, 180)) + '</div>' : '';
+var thumb = t.image_url ? '<img class="tp-thumb" src="' + esc(t.image_url) + '" alt="" loading="lazy">' : '';
+return '<button type="button" class="tp-item" data-id="' + id + '"><div class="tp-op">' + esc(t.op_name) + '</div>' + preview + thumb +
+'<div class="tp-meta">' + n + ' repl' + (n === 1 ? 'y' : 'ies') + ' · ' + timeAgo(t.bumped_at) + '</div></button>';
 }).join('');
 }
 function upsertThread(t) {
@@ -745,13 +801,17 @@ renderThreadList();
 function appendThreadPost(p, isOp) {
 if (threadPostsSeen[p.id]) return; threadPostsSeen[p.id] = 1;
 var d = document.createElement('div'); d.className = 'tp-post' + (isOp ? ' op' : '');
-d.innerHTML = '<span class="t">' + fmt(p.created_at) + '</span><b>' + esc(p.sender_name) + (isOp ? ' (OP)' : '') + ':</b> ' + bodyHtml(p.body);
+var html = '<span class="t">' + fmt(p.created_at) + '</span><b>' + esc(p.sender_name) + (isOp ? ' (OP)' : '') + ':</b> ';
+if (p.body) html += bodyHtml(p.body);
+if (p.image_url) html += (p.body ? '<br>' : '') + '<img class="tp-posted-img" src="' + esc(p.image_url) + '" alt="Image" loading="lazy">';
+d.innerHTML = html;
 var atBottom = tpPosts.scrollHeight - tpPosts.scrollTop - tpPosts.clientHeight < 60;
 tpPosts.appendChild(d);
 if (atBottom) tpPosts.scrollTop = tpPosts.scrollHeight;
 }
 async function openThread(id) {
 if (!threadsCache[id]) return;
+closeGif();
 openThreadId = id; threadPostsSeen = {};
 tpList.classList.add('hidden'); tpDetail.classList.remove('hidden');
 if (gcRoot) gcRoot.classList.add('thread-open');
@@ -760,13 +820,14 @@ var t = threadsCache[id];
 var r = await sb.from('thread_posts').select('*').eq('thread_id', id).order('created_at', { ascending: true }).limit(500);
 if (openThreadId !== id) return; // closed/switched while the query was in flight
 tpPosts.innerHTML = '';
-appendThreadPost({ id: 'op-' + id, sender_name: t.op_name, body: t.body, created_at: t.created_at }, true);
+appendThreadPost({ id: 'op-' + id, sender_name: t.op_name, body: t.body, image_url: t.image_url, created_at: t.created_at }, true);
 if (!r.error) r.data.forEach(function (p) { appendThreadPost(p, false); });
 tpPosts.scrollTop = tpPosts.scrollHeight;
 if (tpReplyBody) tpReplyBody.focus();
 }
 function closeThread() {
 openThreadId = null;
+closeGif();
 tpDetail.classList.add('hidden'); tpList.classList.remove('hidden');
 if (gcRoot) gcRoot.classList.remove('thread-open');
 }
@@ -789,23 +850,29 @@ return true;
 }
 async function submitNewThread() {
 var body = sanitizeInput(tpNewBody.value).trim().slice(0, 500);
-if (!body) return;
+var imageUrl = tpNewImageUrl;
+if (!body && !imageUrl) return;
 if (!(await threadGate())) return;
-var r = await sb.from('threads').insert({ op_id: me.id, op_name: me.name, body: body }).select().single();
+var row = { op_id: me.id, op_name: me.name, body: body || null };
+if (imageUrl) row.image_url = imageUrl;
+var r = await sb.from('threads').insert(row).select().single();
 if (r.error) { addSys('Your thread was lost: ' + r.error.message); return; }
-tpNewBody.value = ''; tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden');
+tpNewBody.value = ''; clearPendingImage('new'); tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden');
 upsertThread(r.data);
 openThread(r.data.id);
 }
 async function submitReply() {
 if (!openThreadId) return;
 var body = sanitizeInput(tpReplyBody.value).trim().slice(0, 500);
-if (!body) return;
+var imageUrl = tpReplyImageUrl;
+if (!body && !imageUrl) return;
 if (!(await threadGate())) return;
 var tid = openThreadId;
-var r = await sb.from('thread_posts').insert({ thread_id: tid, sender_id: me.id, sender_name: me.name, body: body }).select().single();
+var row = { thread_id: tid, sender_id: me.id, sender_name: me.name, body: body || null };
+if (imageUrl) row.image_url = imageUrl;
+var r = await sb.from('thread_posts').insert(row).select().single();
 if (r.error) { addSys('Your reply was lost: ' + r.error.message); return; }
-tpReplyBody.value = '';
+tpReplyBody.value = ''; clearPendingImage('reply');
 if (openThreadId === tid) appendThreadPost(r.data, false);
 if (threadsCache[tid]) {
 threadsCache[tid].bumped_at = new Date().toISOString();
@@ -828,7 +895,7 @@ if (threadsChannel) { threadsChannel.unsubscribe(); threadsChannel = null; }
 }
 if (tpNewBtn) {
 tpNewBtn.onclick = function () { tpNewPost.classList.remove('hidden'); tpNewBtn.classList.add('hidden'); tpNewBody.focus(); };
-tpNewCancel.onclick = function () { tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden'); tpNewBody.value = ''; };
+tpNewCancel.onclick = function () { tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden'); tpNewBody.value = ''; clearPendingImage('new'); };
 tpNewSubmit.onclick = submitNewThread;
 tpNewBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitNewThread(); } };
 tpItems.onclick = function (e) { var b = e.target.closest('.tp-item'); if (!b) return; openThread(Number(b.dataset.id)); };
@@ -836,10 +903,35 @@ tpBack.onclick = closeThread;
 tpReplySend.onclick = submitReply;
 tpReplyBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitReply(); } };
 }
+if (tpNewImgBtn) {
+tpNewImgBtn.onclick = function () { tpNewImgFile.click(); };
+tpNewImgFile.onchange = async function () {
+var f = tpNewImgFile.files && tpNewImgFile.files[0]; if (!f) return;
+tpNewImgBtn.disabled = true;
+var url = await uploadThreadImage(f);
+tpNewImgBtn.disabled = false;
+if (url) setPendingImage('new', url); else tpNewImgFile.value = '';
+};
+tpNewImgRemove.onclick = function () { clearPendingImage('new'); };
+tpNewGifBtn.onclick = function () { openGifPicker('', 'thread-new', tpNewGifBtn); };
+}
+if (tpReplyImgBtn) {
+tpReplyImgBtn.onclick = function () { tpReplyImgFile.click(); };
+tpReplyImgFile.onchange = async function () {
+var f = tpReplyImgFile.files && tpReplyImgFile.files[0]; if (!f) return;
+tpReplyImgBtn.disabled = true;
+var url = await uploadThreadImage(f);
+tpReplyImgBtn.disabled = false;
+if (url) setPendingImage('reply', url); else tpReplyImgFile.value = '';
+};
+tpReplyImgRemove.onclick = function () { clearPendingImage('reply'); };
+tpReplyGifBtn.onclick = function () { openGifPicker('', 'thread-reply', tpReplyGifBtn); };
+}
 /* mobile toggle: below the 1340px breakpoint there's no blank space for a persistent side panel,
    so a floating button swaps the whole screen between the chat window and the threads board. */
 if (threadToggleBtn) {
 threadToggleBtn.onclick = function () {
+closeGif();
 var open = gcRoot.classList.toggle('mobile-threads-open');
 threadToggleBtn.classList.toggle('open', open);
 threadToggleBtn.textContent = open ? '💬' : '🧵';
