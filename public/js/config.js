@@ -1,3 +1,4 @@
+// rebuild-marker: force a fresh content hash so the deployed asset actually updates.
 window.GC_CONFIG = {
   SUPABASE_URL: "https://YOUR-PROJECT-REF.supabase.co",
   SUPABASE_ANON_KEY: "YOUR-ANON-PUBLIC-KEY",
