@@ -245,6 +245,7 @@
       var user = s.data.session && s.data.session.user;
       if (!user) { var a = await sb.auth.signInAnonymously(); if (a.error) throw a.error; user = a.data.user; }
       await sb.auth.updateUser({ data: { name: n } });
+      await sb.auth.refreshSession(); // updateUser() above doesn't rotate the JWT; refresh so auth.jwt() carries the new name for RLS checks
       me = { id: user.id, name: n };
 
       channel = sb.channel('room:' + (C.ROOM || 'main'), { config: { presence: { key: me.id } } });
