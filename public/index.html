@@ -48,7 +48,7 @@
 <button class="btn emo" id="emoBtn" aria-label="Insert emoji" title="Emoji">😊</button>
 <button class="btn gif" id="gifBtn" aria-label="Search GIFs" title="GIF">GIF</button>
 <div class="cooldown hidden" id="cooldownMsg" role="status" aria-live="polite"></div>
-<textarea id="msg" class="sunk" maxlength="500" placeholder="Speak... Enter to send"></textarea>
+<textarea id="msg" class="sunk" maxlength="140" placeholder="Speak... Enter to send"></textarea>
 <button class="btn" id="send">Send</button>
 </div>
 </div>
@@ -68,7 +68,7 @@
 <div class="tp-hd"><span>Threads</span></div>
 <div class="tp-newwrap"><button class="btn tp-new" type="button" id="tpNewBtn">+ New Thread</button></div>
 <div class="tp-newpost hidden" id="tpNewPost">
-<textarea id="tpNewBody" class="sunk" maxlength="500" placeholder="Post anything to start a thread..."></textarea>
+<textarea id="tpNewBody" class="sunk" maxlength="1000" placeholder="Post anything to start a thread..."></textarea>
 <div class="tp-preview-wrap hidden" id="tpNewPreviewWrap"><img class="tp-preview-img" id="tpNewPreviewImg" alt="Selected image"><button class="tp-img-remove" type="button" id="tpNewImgRemove" aria-label="Remove image">✕</button></div>
 <div class="tp-composebar">
 <button class="btn tp-img" type="button" id="tpNewImgBtn" title="Attach image">🖼️ Image</button>
@@ -84,7 +84,7 @@
 <div class="tp-posts" id="tpPosts"></div>
 <div class="tp-reply">
 <div class="tp-reply-compose">
-<textarea id="tpReplyBody" class="sunk" maxlength="500" placeholder="Reply..."></textarea>
+<textarea id="tpReplyBody" class="sunk" maxlength="1000" placeholder="Reply..."></textarea>
 <div class="tp-preview-wrap hidden" id="tpReplyPreviewWrap"><img class="tp-preview-img" id="tpReplyPreviewImg" alt="Selected image"><button class="tp-img-remove" type="button" id="tpReplyImgRemove" aria-label="Remove image">✕</button></div>
 <div class="tp-composebar">
 <button class="btn tp-img" type="button" id="tpReplyImgBtn" title="Attach image">🖼️</button>
@@ -118,6 +118,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="./js/config.js?v=2"></script>
-<script src="./js/app.js?v=13"></script>
+<script src="./js/app.js?v=14"></script>
 </body>
 </html>
