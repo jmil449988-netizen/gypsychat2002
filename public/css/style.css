@@ -166,7 +166,7 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .picker.open{display:grid}
 .picker button{font-size:18px;width:32px;height:32px;background:#0f0d0b;border:1px solid #3a3026;cursor:pointer;padding:0}
 .picker button:hover,.picker button:focus-visible{border-color:var(--gold);box-shadow:0 0 8px rgba(201,162,74,.6);outline:none}
-.gifpicker{position:absolute;bottom:66px;left:0;z-index:5;display:none;flex-direction:column;width:280px;max-width:calc(100vw - 20px);
+.gifpicker{position:fixed;z-index:56;display:none;flex-direction:column;width:280px;max-width:calc(100vw - 20px);
 background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double var(--gold-lo);box-shadow:0 0 0 1px #000,0 8px 24px #000}
 .gifpicker.open{display:flex}
 .gifpicker .gsearch{display:flex;gap:4px;padding:6px}
@@ -217,6 +217,13 @@ font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-s
 .tp-newpost textarea,.tp-reply textarea{font:inherit;color:var(--bone);resize:none;padding:6px 8px;outline:none;caret-color:var(--gold-hi)}
 .tp-newpost textarea{height:64px}
 .tp-newpost textarea:focus,.tp-reply textarea:focus{box-shadow:inset 0 0 18px #000,0 0 0 1px var(--gold)}
+.tp-composebar{display:flex;gap:6px;align-items:center;flex:none}
+.tp-composebar .tp-img{font-size:11px;min-width:38px;padding:0 6px;flex:none}
+.tp-preview-wrap{position:relative;display:inline-block;align-self:flex-start;margin:2px 0;flex:none}
+.tp-preview-img{max-width:120px;max-height:120px;display:block;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
+.tp-img-remove{position:absolute;top:-8px;right:-8px;width:20px;height:20px;line-height:16px;padding:0;font-size:12px;color:#fff;
+background:var(--blood);border:1px solid #000;border-radius:50%;cursor:pointer}
+.tp-img-remove:hover{background:#d33}
 .tp-newactions{display:flex;gap:6px;justify-content:flex-end}
 .tp-items{flex:1;overflow-y:auto;padding:0 6px 8px;display:flex;flex-direction:column;gap:6px;scrollbar-color:var(--gold-lo) #0f0d0b}
 .tp-item{display:block;width:100%;text-align:left;padding:8px;cursor:pointer;font:inherit;color:var(--bone);background:#0f0d0b;border:1px solid #3a3026}
@@ -231,9 +238,11 @@ font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-s
 .tp-posts .tp-post.op b{color:var(--me)}
 .tp-posts .tp-post .t{color:#5f5648;font-size:11px;margin-right:6px}
 .tp-posts .tp-loading{color:#5f5648;font-style:italic;font-size:12px;padding:8px}
-.tp-posts img.gif{max-width:200px;max-height:200px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
-.tp-reply{display:flex;gap:6px;padding:8px;border-top:1px solid var(--gold-lo);flex:none}
-.tp-reply textarea{flex:1;height:44px}
+.tp-posts img.gif,.tp-posts img.tp-posted-img{max-width:200px;max-height:200px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
+.tp-thumb{width:100%;max-height:120px;object-fit:cover;display:block;margin-top:4px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
+.tp-reply{display:flex;gap:6px;padding:8px;border-top:1px solid var(--gold-lo);flex:none;align-items:flex-end}
+.tp-reply-compose{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tp-reply-compose textarea{height:44px}
 
 /* threads board — mobile toggle (no blank space on narrow viewports, so a floating button swaps
    the whole screen between the chat window and the threads board instead of showing both) */
