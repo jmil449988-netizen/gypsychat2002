@@ -8,6 +8,10 @@ var $ = function (id) { return document.getElementById(id); };
 var log = $('log'), msg = $('msg'), st = $('st'), cnt = $('cnt'), ulist = $('ulist'), flist = $('flist'), picker = $('picker');
 var gifBtn = $('gifBtn'), gifPicker = $('gifPicker'), gifQ = $('gifQ'), gifGo = $('gifGo'), gifResults = $('gifResults');
 var tray = $('imTray');
+var gcRoot = document.querySelector('.gc-root');
+var threadsPanel = $('threadsPanel'), tpList = $('tpList'), tpDetail = $('tpDetail'), tpItems = $('tpItems');
+var tpNewBtn = $('tpNewBtn'), tpNewPost = $('tpNewPost'), tpNewBody = $('tpNewBody'), tpNewCancel = $('tpNewCancel'), tpNewSubmit = $('tpNewSubmit');
+var tpBack = $('tpBack'), tpPosts = $('tpPosts'), tpReplyBody = $('tpReplyBody'), tpReplySend = $('tpReplySend');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
 
@@ -18,6 +22,14 @@ var blocked = {}; // user id -> name (people I've blocked)
 var friends = {}; // user id -> {name, group} (my buddy list; persists across sessions, independent of who's here now)
 var isAdmin = false, bans = {}, mutedUsers = {}; // bans/mutedUsers only loaded for admins
 var lastSend = 0;
+
+/* ---------- threads board state (a single flat "general" board, 4chan-style — no topics) ---------- */
+var threadsCache = {}; // thread id -> thread row {id, op_id, op_name, body, created_at, bumped_at, reply_count}
+var threadsOrder = []; // thread ids, kept sorted by bumped_at desc
+var openThreadId = null;
+var threadsChannel = null;
+var threadPostsSeen = {};
+var lastThreadSend = 0;
 
 /* ---------- my status (Online / Away / Busy, plus auto-Idle) ----------
    manualStatus is what I chose; autoIdle layers "idle" on top of Online after inactivity.
@@ -144,21 +156,27 @@ function fail(t) { $('err').textContent = t; }
 var moderation = { cooldownUntil: 0, muted: false, mutedPermanent: false, offenseCount: 0 };
 var modTimer = null;
 function clearModTimer() { if (modTimer) { clearInterval(modTimer); modTimer = null; } }
+function lockThreadCompose(locked) {
+if (tpNewBody) tpNewBody.disabled = locked;
+if (tpNewSubmit) tpNewSubmit.disabled = locked;
+if (tpReplyBody) tpReplyBody.disabled = locked;
+if (tpReplySend) tpReplySend.disabled = locked;
+}
 function updateComposeLock() {
 var bar = $('cooldownMsg'), now = Date.now();
 if (moderation.muted) {
-msg.disabled = true; $('send').disabled = true;
+msg.disabled = true; $('send').disabled = true; lockThreadCompose(true);
 bar.textContent = '🔇 Muted for repeated spam. Only an admin can lift this.';
 bar.classList.remove('hidden'); bar.classList.add('muted');
 clearModTimer();
 return;
 }
 if (moderation.cooldownUntil > now) {
-msg.disabled = true; $('send').disabled = true;
+msg.disabled = true; $('send').disabled = true; lockThreadCompose(true);
 bar.textContent = '⏳ Cooldown: ' + Math.max(1, Math.ceil((moderation.cooldownUntil - now) / 1000)) + 's remaining';
 bar.classList.remove('hidden'); bar.classList.remove('muted');
 } else {
-msg.disabled = false; $('send').disabled = false;
+msg.disabled = false; $('send').disabled = false; lockThreadCompose(false);
 bar.classList.add('hidden'); bar.classList.remove('muted');
 clearModTimer();
 }
@@ -520,6 +538,10 @@ delete bans[id]; addSys(name + ' may return.');
 }
 function kicked(reason) {
 if (channel) { channel.unsubscribe(); channel = null; }
+unsubscribeThreads();
+if (threadsPanel) { threadsPanel.classList.remove('ready'); }
+if (gcRoot) gcRoot.classList.remove('thread-open');
+openThreadId = null;
 clearTimeout(idleTimer);
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
 if ($('statusBtn')) $('statusBtn').classList.add('hidden');
@@ -657,6 +679,140 @@ gifQ.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); sea
 gifQ.oninput = function () { clearTimeout(gifTimer); var v = gifQ.value.trim(); gifTimer = setTimeout(function () { searchGifs(v); }, 450); };
 document.addEventListener('click', function (e) { if (!gifPicker.contains(e.target) && e.target !== gifBtn) closeGif(); });
 
+/* ---------- threads board ----------
+   A single flat "general" board — no topics/categories. Anyone signed in can start a thread or
+   reply. Threads bump to the top of the list whenever they get a new reply (4chan-style). Opening
+   a thread visually minimizes the main chat window and expands this panel; this whole feature is
+   desktop-only (see the CSS media query on .threads-panel) — on narrow/mobile viewports it never
+   appears, and we still load/subscribe quietly in the background so it's ready if the window is
+   ever widened. */
+function timeAgo(t) {
+var s = Math.max(1, Math.floor((Date.now() - new Date(t).getTime()) / 1000));
+if (s < 60) return s + 's ago';
+var m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
+var h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+return Math.floor(h / 24) + 'd ago';
+}
+function renderThreadList() {
+if (!tpItems) return;
+if (!threadsOrder.length) { tpItems.innerHTML = '<div class="tp-empty">No threads yet. Start one!</div>'; return; }
+tpItems.innerHTML = threadsOrder.map(function (id) {
+var t = threadsCache[id]; if (!t) return '';
+var n = t.reply_count || 0;
+return '<button type="button" class="tp-item" data-id="' + id + '"><div class="tp-op">' + esc(t.op_name) + '</div><div class="tp-preview">' +
+esc(String(t.body || '').slice(0, 180)) + '</div><div class="tp-meta">' + n + ' repl' + (n === 1 ? 'y' : 'ies') + ' · ' + timeAgo(t.bumped_at) + '</div></button>';
+}).join('');
+}
+function upsertThread(t) {
+if (!t || !t.id) return;
+threadsCache[t.id] = t;
+if (threadsOrder.indexOf(t.id) === -1) threadsOrder.push(t.id);
+threadsOrder.sort(function (a, b) { return new Date(threadsCache[b].bumped_at) - new Date(threadsCache[a].bumped_at); });
+renderThreadList();
+}
+async function loadThreads() {
+if (!threadsPanel) return;
+var r = await sb.from('threads').select('*').order('bumped_at', { ascending: false }).limit(100);
+if (r.error) return; // quiet failure — the board is a bonus feature, never block the main room over it
+threadsCache = {}; threadsOrder = [];
+r.data.forEach(function (t) { threadsCache[t.id] = t; threadsOrder.push(t.id); });
+renderThreadList();
+}
+function appendThreadPost(p, isOp) {
+if (threadPostsSeen[p.id]) return; threadPostsSeen[p.id] = 1;
+var d = document.createElement('div'); d.className = 'tp-post' + (isOp ? ' op' : '');
+d.innerHTML = '<span class="t">' + fmt(p.created_at) + '</span><b>' + esc(p.sender_name) + (isOp ? ' (OP)' : '') + ':</b> ' + bodyHtml(p.body);
+var atBottom = tpPosts.scrollHeight - tpPosts.scrollTop - tpPosts.clientHeight < 60;
+tpPosts.appendChild(d);
+if (atBottom) tpPosts.scrollTop = tpPosts.scrollHeight;
+}
+async function openThread(id) {
+if (!threadsCache[id]) return;
+openThreadId = id; threadPostsSeen = {};
+tpList.classList.add('hidden'); tpDetail.classList.remove('hidden');
+if (gcRoot) gcRoot.classList.add('thread-open');
+tpPosts.innerHTML = '<div class="tp-loading">Loading…</div>';
+var t = threadsCache[id];
+var r = await sb.from('thread_posts').select('*').eq('thread_id', id).order('created_at', { ascending: true }).limit(500);
+if (openThreadId !== id) return; // closed/switched while the query was in flight
+tpPosts.innerHTML = '';
+appendThreadPost({ id: 'op-' + id, sender_name: t.op_name, body: t.body, created_at: t.created_at }, true);
+if (!r.error) r.data.forEach(function (p) { appendThreadPost(p, false); });
+tpPosts.scrollTop = tpPosts.scrollHeight;
+if (tpReplyBody) tpReplyBody.focus();
+}
+function closeThread() {
+openThreadId = null;
+tpDetail.classList.add('hidden'); tpList.classList.remove('hidden');
+if (gcRoot) gcRoot.classList.remove('thread-open');
+}
+async function threadGate() {
+var now = Date.now();
+if (now - lastThreadSend < 700) return false; // gentle client-side throttle; the DB enforces its own too
+if (moderation.muted) { updateComposeLock(); warnPopup(moderation.offenseCount, true, moderation.mutedPermanent, 0); return false; }
+if (moderation.cooldownUntil > now) { updateComposeLock(); return false; }
+lastThreadSend = now;
+var chk = await sb.rpc('gc_check_and_record_send', { p_name: me.name });
+if (chk.error) { addSys('Your words were lost: ' + chk.error.message); return false; }
+var d = chk.data || {};
+if (!d.ok) {
+var cdUntil = d.retry_at ? new Date(d.retry_at).getTime() : (Date.now() + (d.cooldown_seconds || 0) * 1000);
+applyModeration({ muted: d.reason === 'muted', mutedPermanent: !!d.permanent, offenseCount: d.offense_count || moderation.offenseCount, cooldownUntil: cdUntil });
+warnPopup(d.offense_count || moderation.offenseCount, d.reason === 'muted', !!d.permanent, d.cooldown_seconds || 0);
+return false;
+}
+return true;
+}
+async function submitNewThread() {
+var body = sanitizeInput(tpNewBody.value).trim().slice(0, 500);
+if (!body) return;
+if (!(await threadGate())) return;
+var r = await sb.from('threads').insert({ op_id: me.id, op_name: me.name, body: body }).select().single();
+if (r.error) { addSys('Your thread was lost: ' + r.error.message); return; }
+tpNewBody.value = ''; tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden');
+upsertThread(r.data);
+openThread(r.data.id);
+}
+async function submitReply() {
+if (!openThreadId) return;
+var body = sanitizeInput(tpReplyBody.value).trim().slice(0, 500);
+if (!body) return;
+if (!(await threadGate())) return;
+var tid = openThreadId;
+var r = await sb.from('thread_posts').insert({ thread_id: tid, sender_id: me.id, sender_name: me.name, body: body }).select().single();
+if (r.error) { addSys('Your reply was lost: ' + r.error.message); return; }
+tpReplyBody.value = '';
+if (openThreadId === tid) appendThreadPost(r.data, false);
+if (threadsCache[tid]) {
+threadsCache[tid].bumped_at = new Date().toISOString();
+threadsCache[tid].reply_count = (threadsCache[tid].reply_count || 0) + 1;
+upsertThread(threadsCache[tid]);
+}
+}
+function subscribeThreads() {
+if (threadsChannel || !threadsPanel) return;
+threadsChannel = sb.channel('threads-board');
+threadsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'threads' }, function (p) { upsertThread(p.new); });
+threadsChannel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'threads' }, function (p) { upsertThread(p.new); });
+threadsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'thread_posts' }, function (p) {
+if (openThreadId === p.new.thread_id) appendThreadPost(p.new, false);
+});
+threadsChannel.subscribe();
+}
+function unsubscribeThreads() {
+if (threadsChannel) { threadsChannel.unsubscribe(); threadsChannel = null; }
+}
+if (tpNewBtn) {
+tpNewBtn.onclick = function () { tpNewPost.classList.remove('hidden'); tpNewBtn.classList.add('hidden'); tpNewBody.focus(); };
+tpNewCancel.onclick = function () { tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden'); tpNewBody.value = ''; };
+tpNewSubmit.onclick = submitNewThread;
+tpNewBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitNewThread(); } };
+tpItems.onclick = function (e) { var b = e.target.closest('.tp-item'); if (!b) return; openThread(Number(b.dataset.id)); };
+tpBack.onclick = closeThread;
+tpReplySend.onclick = submitReply;
+tpReplyBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitReply(); } };
+}
+
 /* ---------- sign on ---------- */
 async function join() {
 var n = $('sn').value.trim(); fail('');
@@ -734,6 +890,12 @@ $('login').classList.add('hidden'); log.classList.remove('hidden'); $('users').c
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
 setStatus('Signed on as ' + me.name + (isAdmin ? ' (admin)' : ''));
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
+if (threadsPanel) {
+threadsPanel.classList.add('ready');
+loadThreads();
+subscribeThreads();
+if (window.matchMedia('(min-width:1340px)').matches) addSys('Tip: there\'s a Threads board to the right — general chat, no topics, post anything.');
+}
 resetIdle();
 msg.focus();
 } catch (e) {
