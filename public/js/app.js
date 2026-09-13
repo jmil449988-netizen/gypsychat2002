@@ -955,13 +955,16 @@ fail('');
 }
 async function join() {
 var n = $('sn').value.trim(); fail('');
-if (!/^[\w .'-]{2,16}$/.test(n)) { fail('2–16 letters, numbers, spaces or . \' -'); return; }
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0) { fail('Backend not configured — edit js/config.js.'); return; }
 if (!window.supabase) { fail('Could not load the chat library. Check your connection.'); return; }
 var adminEmailVal, adminPasswordVal;
 if (adminMode) {
 adminEmailVal = adminEmail.value.trim(); adminPasswordVal = adminPassword.value;
 if (!adminEmailVal || !adminPasswordVal) { fail('Enter your admin email and password.'); return; }
+if (!n) { n = (adminEmailVal.split('@')[0] || '').replace(/[^\w .'-]/g, ''); if (n.length < 2) n = 'Admin'; n = n.slice(0, 16); }
+if (!/^[\w .'-]{2,16}$/.test(n)) { fail('Character name: 2–16 letters, numbers, spaces or . \' -'); return; }
+} else {
+if (!/^[\w .'-]{2,16}$/.test(n)) { fail('2–16 letters, numbers, spaces or . \' -'); return; }
 }
 ensureAudioCtx(); // warm up audio on this user gesture so later sounds aren't blocked by autoplay policy
 $('join').disabled = true; setStatus('Signing on...');
