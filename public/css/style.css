@@ -176,7 +176,7 @@ background:linear-gradient(180deg,#0f0d0b,#171310);border:1px solid var(--gold-l
 .gifpicker .gresults{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:0 6px 6px;max-height:220px;overflow-y:auto;scrollbar-color:var(--gold-lo) #0f0d0b}
 .gifpicker .gresults button{padding:0;border:1px solid #3a3026;background:#0f0d0b;cursor:pointer;overflow:hidden;aspect-ratio:1/1}
 .gifpicker .gresults button:hover,.gifpicker .gresults button:focus-visible{border-color:var(--gold);box-shadow:0 0 8px rgba(201,162,74,.6);outline:none}
-.gifpicker .gresults img{width:100%;height:100%;object-fit:cover;display:block}
+.gifpicker .gresults img{width:100%;height:100%;object-fit:contain;background:#0f0d0b;display:block}
 .gifpicker .gmsg{grid-column:1 / -1;padding:10px 4px;color:var(--ash);font-style:italic;font-size:12px;text-align:center}
 .log img.gif,.im .ilog img.gif{max-width:220px;max-height:220px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
 .status{display:flex;justify-content:space-between;gap:8px;padding:5px 12px;font-size:12px;color:var(--ash);
