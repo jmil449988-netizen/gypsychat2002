@@ -1026,8 +1026,11 @@ fail('');
    read. A verified human still gets muted server-side if the token fails verify-join's
    server-side check -- this is only the client half. */
 var turnstileToken = null;
-function onTurnstileSuccess(token) { turnstileToken = token; }
-function onTurnstileExpired() { turnstileToken = null; }
+// Must hang off window: the widget looks these callback names up in the GLOBAL scope (it has
+// no idea this script is wrapped in an IIFE), so plain function declarations here would be
+// invisible to it and the token would never get set.
+window.onTurnstileSuccess = function (token) { turnstileToken = token; };
+window.onTurnstileExpired = function () { turnstileToken = null; };
 /* Picks a random "AdjectiveNoun##" name for anyone who leaves the character-name field blank
    (either sign-on path) — never derived from their email or anything else identifying. */
 function randomName() {
