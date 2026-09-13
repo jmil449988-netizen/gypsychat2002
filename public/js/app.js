@@ -257,12 +257,17 @@ if (!$('warnOverlay').classList.contains('hidden')) $('warnOk').click();
 if (!$('infoOverlay').classList.contains('hidden')) $('infoOk').click();
 });
 
-/* Giphy CDN links only — keeps the message body allowlist tight so we never turn arbitrary
-   pasted URLs into <img> tags. */
+/* Giphy CDN links, or our own "thread-images" Storage bucket (see uploadImage below), only —
+   keeps the message body allowlist tight so we never turn arbitrary pasted URLs into <img> tags.
+   Our own bucket is safe to trust the same way Giphy is: storage.objects RLS only lets someone
+   upload under their own user-id folder, in a fixed set of image types, so a URL that matches this
+   prefix can't have been forged into pointing anywhere else. This is what lets a whisper photo-send
+   (and a thread image) show up as an embedded picture instead of a bare link. */
 var GIF_RE = /^https:\/\/(?:media\d{0,3}\.giphy\.com|i\.giphy\.com)\/media\/[^\s"'<>]+\.gif(?:\?[^\s"'<>]*)?$/i;
+var OWN_IMG_RE = C.SUPABASE_URL ? new RegExp('^' + C.SUPABASE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/storage/v1/object/public/thread-images/[^\\s"\'<>]+$', 'i') : null;
 function bodyHtml(body) {
   var t = String(body || '').trim();
-  if (GIF_RE.test(t)) return '<img class="gif" src="' + esc(t) + '" alt="GIF" loading="lazy">';
+  if (GIF_RE.test(t) || (OWN_IMG_RE && OWN_IMG_RE.test(t))) return '<img class="gif" src="' + esc(t) + '" alt="Image" loading="lazy">';
   return linkify(wrapEmoji(esc(body)));
 }
 
@@ -340,14 +345,23 @@ function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
 el.innerHTML = '<div class="bar"><span class="gem"></span><span class="nm"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" aria-label="Minimize">–</button></div>' +
-'<div class="ilog" aria-live="polite"></div><div class="icomp"><textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
+'<div class="ilog" aria-live="polite"></div><div class="icomp">' +
+'<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
+'<input type="file" class="im-img-file hidden" accept="image/jpeg,image/png,image/gif,image/webp">' +
+'<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
 el.querySelector('.nm').textContent = name;
 var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), gone: !people[id], name: name, minimized: true, tab: null };
 win.ta.placeholder = 'Whisper to ' + name + '...';
 var off = (nWin++ % 6) * 24; el.style.left = (30 + off) + 'px'; el.style.top = (70 + off) + 'px';
 el.querySelector('.x').onclick = function () { minimizeIM(id); };
 el.querySelector('.buzz').onclick = function () { sendBuzz(id); };
-el.querySelector('.icomp .btn').onclick = function () { sendIM(id); };
+el.querySelector('.icomp .btn:last-child').onclick = function () { sendIM(id); };
+var imgBtn = el.querySelector('.icomp .img'), imgFile = el.querySelector('.im-img-file');
+imgBtn.onclick = function () { imgFile.click(); };
+imgFile.onchange = function () {
+var f = imgFile.files && imgFile.files[0]; imgFile.value = '';
+if (f) sendIMImage(id, f);
+};
 win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') minimizeIM(id); };
 el.addEventListener('pointerdown', function () { front(el); });
 var bar = el.querySelector('.bar');
@@ -443,6 +457,19 @@ var w = wins[id]; var t = w.ta.value.trim(); if (!t) return;
 if (w.gone) { imSys(id, w.name + ' is not here to hear you.'); return; }
 w.ta.value = '';
 await post(t, id, w.name);
+w.ta.focus();
+}
+/* Photo-send in a whisper: reuses the same upload (and the same "thread-images" bucket) as thread
+   image posts, then sends the resulting URL as an ordinary whisper message -- bodyHtml's OWN_IMG_RE
+   is what makes it show up embedded rather than as a bare link. */
+async function sendIMImage(id, file) {
+var w = wins[id]; if (!w) return;
+if (w.gone) { imSys(id, w.name + ' is not here to hear you.'); return; }
+var imgBtn = w.el.querySelector('.icomp .img');
+if (imgBtn) imgBtn.disabled = true;
+var url = await uploadImage(file);
+if (imgBtn) imgBtn.disabled = false;
+if (url) await post(url, id, w.name);
 w.ta.focus();
 }
 /* ---------- name menu: Get Info / Whisper / Block / Report / Friend / Kick ---------- */
@@ -782,10 +809,11 @@ var h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
 return Math.floor(h / 24) + 'd ago';
 }
 
-/* ---------- pictures in threads: upload your own image, or reuse the Giphy picker above ----------
+/* ---------- pictures: upload your own image, or reuse the Giphy picker above ----------
    Uploaded images go to the public "thread-images" Storage bucket under a path prefixed with your
    own user id (storage.objects RLS only allows writing there); a picked GIF just reuses its Giphy
-   CDN URL. Either way the result is a plain URL stored in the thread/post's image_url column. */
+   CDN URL. Shared by thread posts (result stored in the thread/post's image_url column) and by
+   whisper photo-sends (result posted as the message body, same as a picked GIF is). */
 function setPendingImage(which, url) {
 if (which === 'new') { tpNewImageUrl = url; tpNewPreviewImg.src = url; tpNewPreviewWrap.classList.remove('hidden'); }
 else { tpReplyImageUrl = url; tpReplyPreviewImg.src = url; tpReplyPreviewWrap.classList.remove('hidden'); }
@@ -794,7 +822,7 @@ function clearPendingImage(which) {
 if (which === 'new') { tpNewImageUrl = null; tpNewPreviewImg.src = ''; tpNewPreviewWrap.classList.add('hidden'); tpNewImgFile.value = ''; }
 else { tpReplyImageUrl = null; tpReplyPreviewImg.src = ''; tpReplyPreviewWrap.classList.add('hidden'); tpReplyImgFile.value = ''; }
 }
-async function uploadThreadImage(file) {
+async function uploadImage(file) {
 if (!file) return null;
 var ext = ALLOWED_IMG_TYPES[file.type];
 if (!ext) { addSys('Images must be JPG, PNG, GIF, or WEBP.'); return null; }
@@ -985,7 +1013,7 @@ tpNewImgBtn.onclick = function () { tpNewImgFile.click(); };
 tpNewImgFile.onchange = async function () {
 var f = tpNewImgFile.files && tpNewImgFile.files[0]; if (!f) return;
 tpNewImgBtn.disabled = true;
-var url = await uploadThreadImage(f);
+var url = await uploadImage(f);
 tpNewImgBtn.disabled = false;
 if (url) setPendingImage('new', url); else tpNewImgFile.value = '';
 };
@@ -997,7 +1025,7 @@ tpReplyImgBtn.onclick = function () { tpReplyImgFile.click(); };
 tpReplyImgFile.onchange = async function () {
 var f = tpReplyImgFile.files && tpReplyImgFile.files[0]; if (!f) return;
 tpReplyImgBtn.disabled = true;
-var url = await uploadThreadImage(f);
+var url = await uploadImage(f);
 tpReplyImgBtn.disabled = false;
 if (url) setPendingImage('reply', url); else tpReplyImgFile.value = '';
 };
