@@ -1,0 +1,8 @@
+{
+  "appId": "com.gypsychat.app",
+  "appName": "Gypsy Chat 2000",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "ios": { "contentInset": "always" },
+  "android": { "allowMixedContent": false }
+}

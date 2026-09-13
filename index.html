@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gypsy Chat 2000</title>
+  <meta name="description" content="A small, old-school chat room.">
+  <meta name="theme-color" content="#141210">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gypsy Chat">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+<div class="gc-root">
+<div class="win" role="application" aria-label="Gypsy Chat 2000">
+  <span class="corner bl" aria-hidden="true"></span><span class="corner br" aria-hidden="true"></span>
+  <div class="title"><span class="gem" aria-hidden="true"></span><span class="name">Gypsy Chat 2000</span><span class="gem" aria-hidden="true"></span></div>
+
+  <div class="body">
+    <div class="login" id="login">
+      <h1>Gypsy Chat 2000</h1>
+      <div class="rule"></div>
+      <div class="tag">Stay awhile, and chat.</div>
+      <label for="sn">Character name</label>
+      <input id="sn" class="sunk" maxlength="16" autocomplete="off" placeholder="e.g. xXsk8rXx">
+      <div class="err" id="err"></div>
+      <button class="btn" id="join" style="height:32px">Enter the room</button>
+    </div>
+
+    <div class="log sunk hidden" id="log" aria-live="polite" aria-label="Chat messages"></div>
+    <div class="users sunk hidden" id="users"><div class="hd">Present</div><div class="list" id="ulist"></div><div class="hint">Tap a name to open a whisper</div></div>
+
+    <div class="compose hidden" id="compose">
+      <div class="picker" id="picker" role="listbox" aria-label="Emoji"></div>
+      <button class="btn emo" id="emoBtn" aria-label="Insert emoji" title="Emoji">😊</button>
+      <textarea id="msg" class="sunk" maxlength="500" placeholder="Speak... Enter to send"></textarea>
+      <button class="btn" id="send">Send</button>
+    </div>
+  </div>
+
+  <div id="ims"></div>
+  <div class="status"><span class="cell" id="st">Not signed on</span><span class="cell" id="cnt">0 present</span></div>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="./js/config.js"></script>
+<script src="./js/app.js"></script>
+</body>
+</html>
