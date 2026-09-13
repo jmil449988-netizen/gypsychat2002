@@ -153,7 +153,10 @@ updateDmToggleBtn();
 var BASE_TITLE = document.title, unreadTitle = 0;
 function bumpTitle() { unreadTitle++; document.title = '(' + unreadTitle + ') ' + BASE_TITLE; }
 function clearTitle() { unreadTitle = 0; document.title = BASE_TITLE; }
-document.addEventListener('visibilitychange', function () { if (!document.hidden) clearTitle(); });
+/* Phones suspend background tabs and can silently drop the realtime socket; when the tab comes
+   back to the foreground, re-announce presence in case the reconnect didn't already do it, so the
+   person doesn't quietly vanish from other people's Online list while they were still around. */
+document.addEventListener('visibilitychange', function () { if (!document.hidden) { clearTitle(); updateMyPresence(); } });
 window.addEventListener('focus', clearTitle);
 
 /* ---------- helpers ----------
@@ -292,7 +295,7 @@ var tag = showStatus ? ' <span class="stag">(' + status + ')</span>' : '';
 var title = (status === 'away' && p.awayMsg) ? ' title="' + esc(p.awayMsg) + '"' : '';
 return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + esc(p.name) + tag + '</div>';
 }).join('');
-cnt.textContent = ids.length + ' present';
+cnt.textContent = ids.length + ' online';
 Object.keys(wins).forEach(function (id) {
 var w = wins[id], here = !!people[id];
 if (!here && !w.gone) { w.gone = true; imSys(id, w.name + ' has left the room.'); }
@@ -483,8 +486,7 @@ flist.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.pre
 document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu(); });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
 /* Click a name right in the chat log to bring up the same menu (Whisper/Block/Report/Friend, plus
-   Kick/Mute for admins) — no need to go hunting for them in the Present list first. Only works for
-   someone currently online (or a saved friend), same as clicking their name in the Present list. */
+   Kick/Mute for admins) — no need to go hunting for them in the Online list first. */
 log.onclick = function (e) {
 var b = e.target.closest('.who[data-id]'); if (!b || b.dataset.id === me.id) return;
 e.stopPropagation(); openMenu(b.dataset.id, b, b.dataset.name);
@@ -632,7 +634,7 @@ var cmd = m[1].toLowerCase(), arg = m[2], rest = m[3].trim(), id;
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports' : '') + '. Click a name in the chat log or Present list for options. Click your status pill (bottom bar) to go Away/Busy. The ⚡ in a whisper window sends a buzz.'); return true;
+case 'help': addSys('Commands: /w name msg · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports' : '') + '. Click a name in the chat log or Online list for options. Click your status pill (bottom bar) to go Away/Busy. The ⚡ in a whisper window sends a buzz.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
@@ -1094,10 +1096,13 @@ if (document.hidden) bumpTitle();
 channel.on('presence', { event: 'leave' }, function (p) { if (p.leftPresences[0]) addSys(p.leftPresences[0].name + ' has left the room.'); });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + (C.ROOM || 'main') }, function (p) { handleMessage(p.new); });
 
+var firstSub = true;
 await new Promise(function (res, rej) {
 channel.subscribe(function (status, err) {
-if (status === 'SUBSCRIBED') res();
-else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') rej(err || new Error('Could not reach the room.'));
+if (status === 'SUBSCRIBED') {
+if (firstSub) { firstSub = false; res(); }
+else updateMyPresence(); // reconnected after a dropped connection (common on mobile) — re-announce
+} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') rej(err || new Error('Could not reach the room.'));
 });
 });
 await new Promise(function (r) { setTimeout(r, 400); }); // let presence sync so we can check the name
