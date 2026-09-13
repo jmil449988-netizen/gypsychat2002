@@ -346,6 +346,7 @@ if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
 el.innerHTML = '<div class="bar"><span class="gem"></span><span class="nm"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" aria-label="Minimize">–</button></div>' +
 '<div class="ilog" aria-live="polite"></div><div class="icomp">' +
+'<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
 '<input type="file" class="im-img-file hidden" accept="image/jpeg,image/png,image/gif,image/webp">' +
 '<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
@@ -356,6 +357,8 @@ var off = (nWin++ % 6) * 24; el.style.left = (30 + off) + 'px'; el.style.top = (
 el.querySelector('.x').onclick = function () { minimizeIM(id); };
 el.querySelector('.buzz').onclick = function () { sendBuzz(id); };
 el.querySelector('.icomp .btn:last-child').onclick = function () { sendIM(id); };
+var emoBtnWin = el.querySelector('.icomp .emo');
+emoBtnWin.onclick = function () { openEmojiPicker(win.ta, emoBtnWin); };
 var imgBtn = el.querySelector('.icomp .img'), imgFile = el.querySelector('.im-img-file');
 imgBtn.onclick = function () { imgFile.click(); };
 imgFile.onchange = function () {
@@ -701,18 +704,31 @@ msg.value = ''; await post(t); msg.focus();
 $('send').onclick = send;
 msg.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 
-/* ---------- emoji picker ---------- */
+/* ---------- emoji picker ----------
+   Shared by the main chat compose box and every whisper window's compose bar (one picker element,
+   repositioned to whichever emoji button opened it -- same pattern the GIF picker below uses,
+   via positionPicker()). emojiTa is the textarea an emoji click should land in. */
+var emojiTa = null;
 EMOJI.forEach(function (ch) {
 var b = document.createElement('button'); b.textContent = ch; b.type = 'button'; b.setAttribute('role', 'option');
 b.onclick = function () {
-var s = msg.selectionStart || msg.value.length;
-msg.value = msg.value.slice(0, s) + ch + msg.value.slice(s);
-picker.classList.remove('open'); msg.focus(); msg.selectionStart = msg.selectionEnd = s + ch.length;
+var ta = emojiTa || msg;
+var s = ta.selectionStart || ta.value.length;
+ta.value = ta.value.slice(0, s) + ch + ta.value.slice(s);
+picker.classList.remove('open'); ta.focus(); ta.selectionStart = ta.selectionEnd = s + ch.length;
 };
 picker.appendChild(b);
 });
-$('emoBtn').onclick = function () { gifPicker.classList.remove('open'); picker.classList.toggle('open'); };
-document.addEventListener('click', function (e) { if (!picker.contains(e.target) && e.target !== $('emoBtn')) picker.classList.remove('open'); });
+function openEmojiPicker(ta, anchorEl) {
+gifPicker.classList.remove('open');
+var opening = !picker.classList.contains('open') || emojiTa !== ta;
+emojiTa = ta;
+if (!opening) { picker.classList.remove('open'); return; }
+picker.classList.add('open');
+positionPicker(picker, anchorEl);
+}
+$('emoBtn').onclick = function () { openEmojiPicker(msg, $('emoBtn')); };
+document.addEventListener('click', function (e) { if (picker.contains(e.target) || e.target.closest('.emo')) return; picker.classList.remove('open'); });
 
 /* ---------- GIF picker (Giphy) ----------
    Shared by the main chat compose box and the thread new-post/reply compose boxes. Since the
