@@ -621,7 +621,8 @@ applyModeration({ muted: d.reason === 'muted', mutedPermanent: !!d.permanent, of
 warnPopup(d.offense_count || moderation.offenseCount, d.reason === 'muted', !!d.permanent, d.cooldown_seconds || 0);
 return;
 }
-var row = { room: C.ROOM || 'main', sender_id: me.id, sender_name: me.name, body: sanitizeInput(body).slice(0, 500) };
+var cap = recipientId ? 500 : 140; // main room chat is capped at 140; whispers keep the old 500
+var row = { room: C.ROOM || 'main', sender_id: me.id, sender_name: me.name, body: sanitizeInput(body).slice(0, cap) };
 if (recipientId) { row.recipient_id = recipientId; row.recipient_name = recipientName; }
 var r = await sb.from('messages').insert(row).select().single();
 if (r.error) { addSys('Your words were lost: ' + r.error.message); return; }
@@ -914,7 +915,7 @@ return false;
 return true;
 }
 async function submitNewThread() {
-var body = sanitizeInput(tpNewBody.value).trim().slice(0, 500);
+var body = sanitizeInput(tpNewBody.value).trim().slice(0, 1000);
 var imageUrl = tpNewImageUrl;
 if (!body && !imageUrl) return;
 if (!(await threadGate())) return;
@@ -928,7 +929,7 @@ openThread(r.data.id);
 }
 async function submitReply() {
 if (!openThreadId) return;
-var body = sanitizeInput(tpReplyBody.value).trim().slice(0, 500);
+var body = sanitizeInput(tpReplyBody.value).trim().slice(0, 1000);
 var imageUrl = tpReplyImageUrl;
 if (!body && !imageUrl) return;
 if (!(await threadGate())) return;
