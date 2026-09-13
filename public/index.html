@@ -44,6 +44,7 @@
 <div class="gresults" id="gifResults"></div>
 </div>
 <button class="btn gif" id="gifBtn" aria-label="Search GIFs" title="GIF">GIF</button>
+<div class="cooldown hidden" id="cooldownMsg" role="status" aria-live="polite"></div>
 <textarea id="msg" class="sunk" maxlength="500" placeholder="Speak... Enter to send"></textarea>
 <button class="btn" id="send">Send</button>
 </div>
@@ -52,6 +53,14 @@
 <div id="ims"></div>
 <div id="imTray" class="im-tray"></div>
 <div class="status"><span class="cell" id="st">Not signed on</span><span class="cell" id="cnt">0 present</span></div>
+</div>
+</div>
+
+<div class="modal-overlay hidden" id="warnOverlay">
+<div class="modal" role="alertdialog" aria-modal="true" aria-live="assertive" aria-label="Chat warning">
+<div class="modal-hd" id="warnTitle">Warning</div>
+<div class="modal-body" id="warnBody"></div>
+<button class="btn" type="button" id="warnOk">OK</button>
 </div>
 </div>
 
