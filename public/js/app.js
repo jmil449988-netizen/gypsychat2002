@@ -7,6 +7,7 @@ var C = window.GC_CONFIG || {};
 var $ = function (id) { return document.getElementById(id); };
 var log = $('log'), msg = $('msg'), st = $('st'), cnt = $('cnt'), ulist = $('ulist'), picker = $('picker');
 var gifBtn = $('gifBtn'), gifPicker = $('gifPicker'), gifQ = $('gifQ'), gifGo = $('gifGo'), gifResults = $('gifResults');
+var tray = $('imTray');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
 
@@ -65,20 +66,24 @@ if (here && w.gone) { w.gone = false; imSys(id, w.name + ' is back.'); }
 }
 function nameTaken(n) { return Object.keys(people).some(function (id) { return id !== me.id && people[id].toLowerCase() === n.toLowerCase(); }); }
 
-/* ---------- whisper windows (keyed by user id) ---------- */
+/* ---------- whisper windows (keyed by user id) ----------
+   A whisper window is never forced open on its own — history replay on login and
+   any incoming message while it's closed just update a small tab in the tray
+   (like a mail icon) instead of popping a window over the room. Only a deliberate
+   action (tapping a name > Whisper, /w, or tapping its tray tab) opens it. */
 var zTop = 20, nWin = 0;
-function openIM(id, name, focus) {
-if (wins[id]) { front(wins[id].el); if (focus) wins[id].ta.focus(); return wins[id]; }
-var el = document.createElement('div'); el.className = 'im'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
-el.innerHTML = '<div class="bar"><span class="gem"></span><span class="nm"></span><button class="x" type="button" aria-label="Close">×</button></div>' +
+function ensureWin(id, name) {
+if (wins[id]) return wins[id];
+var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
+el.innerHTML = '<div class="bar"><span class="gem"></span><span class="nm"></span><button class="x" type="button" aria-label="Minimize">–</button></div>' +
 '<div class="ilog" aria-live="polite"></div><div class="icomp"><textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
 el.querySelector('.nm').textContent = name;
-var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), gone: !people[id], name: name };
+var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), gone: !people[id], name: name, minimized: true, tab: null };
 win.ta.placeholder = 'Whisper to ' + name + '...';
 var off = (nWin++ % 6) * 24; el.style.left = (30 + off) + 'px'; el.style.top = (70 + off) + 'px';
-el.querySelector('.x').onclick = function () { el.remove(); delete wins[id]; msg.focus(); };
+el.querySelector('.x').onclick = function () { minimizeIM(id); };
 el.querySelector('.icomp .btn').onclick = function () { sendIM(id); };
-win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') el.querySelector('.x').click(); };
+win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') minimizeIM(id); };
 el.addEventListener('pointerdown', function () { front(el); });
 var bar = el.querySelector('.bar');
 bar.addEventListener('pointerdown', function (e) {
@@ -88,10 +93,43 @@ function mv(ev) { el.style.left = Math.max(0, Math.min(window.innerWidth - 60, e
 function up() { bar.removeEventListener('pointermove', mv); bar.removeEventListener('pointerup', up); }
 bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up);
 });
-$('ims').appendChild(el); wins[id] = win; front(el);
-unread[id] = 0; renderPeople();
-if (focus) win.ta.focus();
+$('ims').appendChild(el); wins[id] = win;
+makeTab(id);
 return win;
+}
+function makeTab(id) {
+var w = wins[id];
+var b = document.createElement('button'); b.type = 'button'; b.className = 'im-tab hidden';
+b.innerHTML = '<span class="env" aria-hidden="true">✉</span><span class="nm"></span><span class="badge hidden">0</span>';
+b.querySelector('.nm').textContent = w.name;
+b.setAttribute('aria-label', 'Open whisper with ' + w.name);
+b.onclick = function () { openIM(id, w.name, true); };
+tray.appendChild(b);
+w.tab = b;
+}
+function updateTab(id) {
+var w = wins[id]; if (!w || !w.tab) return;
+w.tab.classList.toggle('hidden', !w.minimized);
+var n = unread[id] || 0;
+var badge = w.tab.querySelector('.badge');
+badge.textContent = n > 9 ? '9+' : String(n);
+badge.classList.toggle('hidden', !n);
+}
+function openIM(id, name, focus) {
+var w = ensureWin(id, name);
+w.minimized = false; w.el.classList.remove('hidden'); front(w.el);
+unread[id] = 0; renderPeople();
+updateTab(id);
+if (focus) w.ta.focus();
+return w;
+}
+function minimizeIM(id) {
+var w = wins[id]; if (!w) return;
+w.minimized = true; w.el.classList.add('hidden'); updateTab(id); msg.focus();
+}
+function destroyWin(id) {
+var w = wins[id]; if (!w) return;
+w.el.remove(); if (w.tab) w.tab.remove(); delete wins[id];
 }
 function front(el) { el.style.zIndex = ++zTop; }
 function imSys(id, text) { var w = wins[id]; if (!w) return; var d = document.createElement('div'); d.className = 'm sys'; d.textContent = text; w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; }
@@ -100,11 +138,15 @@ if (seen[m.id]) return; seen[m.id] = 1;
 var mine = m.sender_id === me.id;
 var otherId = mine ? m.recipient_id : m.sender_id;
 var otherName = mine ? (people[otherId] || m.recipient_name || 'unknown') : m.sender_name;
-var w = openIM(otherId, otherName, false);
+var w = ensureWin(otherId, otherName); // never pops the window open on its own — see note above
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them');
 d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span><b>' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight;
-if (!mine && document.activeElement !== w.ta) { unread[otherId] = (unread[otherId] || 0) + 1; renderPeople(); front(w.el); }
+if (!mine) {
+if (w.minimized || document.activeElement !== w.ta) { unread[otherId] = (unread[otherId] || 0) + 1; renderPeople(); updateTab(otherId); }
+if (!w.minimized) front(w.el);
+else if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
+}
 }
 async function sendIM(id) {
 var w = wins[id]; var t = w.ta.value.trim(); if (!t) return;
@@ -146,7 +188,7 @@ async function block(id, name) {
 var r = await sb.from('blocks').insert({ blocker_id: me.id, blocked_id: id, blocked_name: name });
 if (r.error) { addSys('Could not block: ' + r.error.message); return; }
 blocked[id] = name;
-if (wins[id]) { wins[id].el.remove(); delete wins[id]; }
+destroyWin(id);
 addSys('You have blocked ' + name + '. Their words no longer reach you.');
 renderPeople();
 }
@@ -177,7 +219,7 @@ delete bans[id]; addSys(name + ' may return.');
 function kicked(reason) {
 if (channel) { channel.unsubscribe(); channel = null; }
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
-Object.keys(wins).forEach(function (k) { wins[k].el.remove(); }); wins = {};
+Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
 $('login').classList.remove('hidden'); $('join').disabled = true;
 fail('You have been removed from the room.' + (reason ? ' Reason: ' + reason : ''));
 setStatus('Removed'); me = null;
