@@ -17,6 +17,7 @@ var tpNewImgBtn = $('tpNewImgBtn'), tpNewImgFile = $('tpNewImgFile'), tpNewGifBt
 var tpNewPreviewWrap = $('tpNewPreviewWrap'), tpNewPreviewImg = $('tpNewPreviewImg'), tpNewImgRemove = $('tpNewImgRemove');
 var tpReplyImgBtn = $('tpReplyImgBtn'), tpReplyImgFile = $('tpReplyImgFile'), tpReplyGifBtn = $('tpReplyGifBtn');
 var tpReplyPreviewWrap = $('tpReplyPreviewWrap'), tpReplyPreviewImg = $('tpReplyPreviewImg'), tpReplyImgRemove = $('tpReplyImgRemove');
+var adminToggle = $('adminToggle'), adminFields = $('adminFields'), adminEmail = $('adminEmail'), adminPassword = $('adminPassword');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
 
@@ -941,18 +942,41 @@ if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidd
 }
 
 /* ---------- sign on ---------- */
+var adminMode = false;
+if (adminToggle) {
+adminToggle.onclick = function () {
+adminMode = !adminMode;
+adminFields.classList.toggle('hidden', !adminMode);
+$('join').textContent = adminMode ? 'Login as Admin' : 'Enter the room';
+adminToggle.textContent = adminMode ? 'Use a character name instead' : 'Admin login';
+fail('');
+(adminMode ? adminEmail : $('sn')).focus();
+};
+}
 async function join() {
 var n = $('sn').value.trim(); fail('');
 if (!/^[\w .'-]{2,16}$/.test(n)) { fail('2–16 letters, numbers, spaces or . \' -'); return; }
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0) { fail('Backend not configured — edit js/config.js.'); return; }
 if (!window.supabase) { fail('Could not load the chat library. Check your connection.'); return; }
+var adminEmailVal, adminPasswordVal;
+if (adminMode) {
+adminEmailVal = adminEmail.value.trim(); adminPasswordVal = adminPassword.value;
+if (!adminEmailVal || !adminPasswordVal) { fail('Enter your admin email and password.'); return; }
+}
 ensureAudioCtx(); // warm up audio on this user gesture so later sounds aren't blocked by autoplay policy
 $('join').disabled = true; setStatus('Signing on...');
 try {
 sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+var user;
+if (adminMode) {
+var pw = await sb.auth.signInWithPassword({ email: adminEmailVal, password: adminPasswordVal });
+if (pw.error) throw pw.error;
+user = pw.data.user;
+} else {
 var s = await sb.auth.getSession();
-var user = s.data.session && s.data.session.user;
+user = s.data.session && s.data.session.user;
 if (!user) { var a = await sb.auth.signInAnonymously(); if (a.error) throw a.error; user = a.data.user; }
+}
 await sb.auth.updateUser({ data: { name: n } });
 await sb.auth.refreshSession(); // updateUser() above doesn't rotate the JWT; refresh so auth.jwt() carries the new name for RLS checks
 me = { id: user.id, name: n };
@@ -1033,6 +1057,8 @@ fail(e.message || String(e)); setStatus('Not signed on'); $('join').disabled = f
 }
 $('join').onclick = join;
 $('sn').onkeydown = function (e) { if (e.key === 'Enter') join(); };
+if (adminEmail) adminEmail.onkeydown = function (e) { if (e.key === 'Enter') join(); };
+if (adminPassword) adminPassword.onkeydown = function (e) { if (e.key === 'Enter') join(); };
 $('sn').focus();
 
 /* ---------- PWA service worker ---------- */
