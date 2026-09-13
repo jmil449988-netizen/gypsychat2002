@@ -5,7 +5,7 @@ body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-i
 :root{
 --stone:#141210; --stone-2:#1f1b17; --stone-3:#2b2521;
 --gold:#c9a24a; --gold-hi:#f1d98a; --gold-lo:#6e5323;
---bone:#d8c9a6; --ash:#8f8371; --blood:#b3261e; --ember:#e08a2c;
+--bone:#d8c9a6; --ash:#8f8371; --blood:#b3261e; --ember:#e08a2c; --leaf:#5aa15a;
 --me:#f1d98a; --them:#e6b25a; --sys:#8f8371;
 }
 *{box-sizing:border-box}
@@ -75,9 +75,12 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .list div.unread::before{background:#c9a3e6;box-shadow:0 0 6px rgba(200,150,255,.9)}
 .users .hd.frhd{border-top:1px solid var(--gold-lo)}
 .users .list div.f-online{color:var(--gold-hi);text-shadow:0 0 6px rgba(241,217,138,.6)}
-.users .list div.f-online::before{background:var(--gold-hi);box-shadow:0 0 6px rgba(241,217,138,.9)}
+.users .list div.f-online::before{background:var(--leaf);box-shadow:0 0 6px rgba(90,161,90,.9)}
 .users .list div.f-offline{color:#5f5648}
 .users .list div.f-offline::before{background:#3a3026;box-shadow:none}
+.users .list div.f-away::before{background:var(--gold);box-shadow:0 0 5px rgba(201,162,74,.7)}
+.users .list div.f-busy::before{background:var(--blood);box-shadow:0 0 5px rgba(179,38,30,.7)}
+.users .list div.f-idle::before{background:#5f6b7a;box-shadow:0 0 5px rgba(95,107,122,.6)}
 .users .list .off{font-size:10px;font-style:italic;color:#4a4238}
 .users .list .empty{color:#5f5648;font-style:italic;font-size:11px;cursor:default;white-space:normal;padding:2px}
 .users .list .empty::before{display:none}
@@ -92,6 +95,7 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .list div.f-idle{color:#7a8494}
 .status .statusbtn,.status .soundbtn,.status .dmbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
 .status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+.status .statusbtn[data-status="online"]{color:var(--leaf);border-color:#2f5a34}
 .status .statusbtn[data-status="away"]{color:var(--gold);border-color:var(--gold-lo)}
 .status .statusbtn[data-status="busy"]{color:#e07a7a;border-color:#7a2a2a}
 .status .statusbtn[data-status="idle"]{color:#7a8494;border-color:#3a4048}
@@ -137,8 +141,8 @@ box-shadow:0 0 0 1px #000,0 4px 14px #000}
 .im-tab.flash{animation:tabflash 1s ease-in-out 2}
 @keyframes tabflash{50%{box-shadow:0 0 0 1px #000,0 4px 14px #000,0 0 18px rgba(200,150,255,1)}}
 @media (max-width:430px){.im-tray{top:50px;right:6px;bottom:auto;flex-direction:column;max-height:50vh}}
-.users .list div::before{content:"";display:inline-block;width:7px;height:7px;transform:rotate(45deg);background:var(--ember);
-border:1px solid var(--gold-lo);margin-right:7px;vertical-align:0;box-shadow:0 0 5px rgba(224,138,44,.7)}
+.users .list div::before{content:"";display:inline-block;width:7px;height:7px;transform:rotate(45deg);background:var(--leaf);
+border:1px solid var(--gold-lo);margin-right:7px;vertical-align:0;box-shadow:0 0 5px rgba(90,161,90,.7)}
 .compose{grid-column:1 / -1;display:grid;grid-template-columns:auto auto 1fr auto;gap:6px;align-items:stretch;position:relative}
 .compose textarea{font:inherit;color:var(--bone);resize:none;height:60px;padding:6px 8px;outline:none;caret-color:var(--gold-hi)}
 .compose textarea::placeholder{color:#5f5648}
