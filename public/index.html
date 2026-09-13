@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=8">
+<link rel="stylesheet" href="./css/style.css?v=9">
 </head>
 <body>
 <div class="gc-root">
@@ -29,8 +29,15 @@
 <div class="tag">Stay awhile, and chat.</div>
 <label for="sn">Character name</label>
 <input id="sn" class="sunk" maxlength="16" autocomplete="off" placeholder="e.g. xXsk8rXx">
+<div class="admin-fields hidden" id="adminFields">
+<label for="adminEmail">Admin email</label>
+<input id="adminEmail" class="sunk" type="email" autocomplete="username">
+<label for="adminPassword">Admin password</label>
+<input id="adminPassword" class="sunk" type="password" autocomplete="current-password">
+</div>
 <div class="err" id="err"></div>
 <button class="btn" id="join" style="height:32px">Enter the room</button>
+<div class="admin-toggle-wrap"><button type="button" class="admin-toggle" id="adminToggle">Admin login</button></div>
 </div>
 
 <div class="log sunk hidden" id="log" aria-live="polite" aria-label="Chat messages"></div>
@@ -111,6 +118,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="./js/config.js?v=2"></script>
-<script src="./js/app.js?v=8"></script>
+<script src="./js/app.js?v=9"></script>
 </body>
 </html>
