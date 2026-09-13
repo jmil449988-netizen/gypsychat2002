@@ -122,12 +122,13 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
 .im .ilog .sys{color:var(--sys);font-style:italic}
 .im .ilog .t{color:#5a4f63;font-size:11px;margin-right:6px}
 .im .ilog .e{font-size:16px;vertical-align:-2px}
-.im .icomp{display:grid;grid-template-columns:1fr auto;gap:6px;padding:6px}
+.im .icomp{display:grid;grid-template-columns:auto 1fr auto;gap:6px;padding:6px}
 .im .icomp textarea{font:inherit;color:var(--bone);resize:none;height:44px;padding:5px 8px;outline:none;caret-color:#e2c4ff;
 background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-shadow:inset 0 0 16px #000}
 .im .icomp textarea:focus{box-shadow:inset 0 0 16px #000,0 0 0 1px #a67ad1}
 .im .icomp .btn{color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
 .im .icomp .btn:hover{box-shadow:inset 0 1px 0 rgba(241,217,138,.15),inset 0 -2px 4px #000,0 0 0 1px #000,0 0 10px rgba(166,122,209,.6)}
+.im .icomp .btn.img{font-size:15px;min-width:38px;padding:0 6px}
 @media (max-width:430px){.im{left:6px !important;right:6px;width:auto;bottom:6px;top:auto !important}.im .bar{cursor:default}}
 /* whisper tray — closed/minimized PMs sit here as small tabs instead of popping open */
 .im-tray{position:fixed;right:8px;bottom:8px;z-index:24;display:flex;flex-direction:column-reverse;gap:6px;max-height:70vh;overflow-y:auto;overflow-x:hidden}
