@@ -273,7 +273,7 @@ function renderRoom(m) {
 if (seen[m.id]) return; seen[m.id] = 1;
 var mine = m.sender_id === me.id;
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them');
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span><b>' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span><b class="who" data-id="' + esc(m.sender_id) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 log.appendChild(d); if (atBottom || mine) log.scrollTop = log.scrollHeight;
 if (!mine && document.hidden) bumpTitle();
@@ -458,6 +458,7 @@ items.push(['Report', function () { var rr = prompt('Report ' + name + ' for: (e
 items.push(friends[id] ? ['Remove Friend', function () { removeFriend(id, name); }] : ['Add Friend', function () { addFriend(id, name); }]);
 if (friends[id]) items.push(['Move to Group', function () { var g = prompt('Group name (blank for none):', friends[id].group || ''); if (g !== null) moveFriendGroup(id, g.trim()); }]);
 if (online && isAdmin && mutedUsers[id]) items.push(['Unmute', function () { unmute(id, name); }]);
+if (online && isAdmin && !mutedUsers[id]) items.push(['Mute', function () { muteUser(id, name); }, 'danger']);
 if (online && isAdmin) items.push(['Kick', function () { var r = prompt('Reason for kicking ' + name + '? (optional)'); if (r !== null) kick(id, name, r); }, 'danger']);
 menu.innerHTML = '<div class="hd">' + esc(name) + '</div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
 menu.querySelectorAll('button').forEach(function (b) { b.onclick = function () { closeMenu(); items[+b.dataset.i][1](); }; });
@@ -481,6 +482,17 @@ flist.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.pre
 }
 document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu(); });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+/* Click a name right in the chat log to bring up the same menu (Whisper/Block/Report/Friend, plus
+   Kick/Mute for admins) — no need to go hunting for them in the Present list first. Only works for
+   someone currently online (or a saved friend), same as clicking their name in the Present list. */
+log.onclick = function (e) {
+var b = e.target.closest('.who[data-id]'); if (!b || b.dataset.id === me.id) return;
+e.stopPropagation(); openMenu(b.dataset.id, b);
+};
+log.addEventListener('keydown', function (e) {
+if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.closest('.who[data-id]')) return;
+e.preventDefault(); log.onclick(e);
+});
 
 /* ---------- block / unblock (personal) ---------- */
 async function loadBlocks() {
@@ -556,6 +568,14 @@ var r = await sb.from('chat_moderation').update({ muted: false, muted_permanent:
 if (r.error) { addSys('Could not unmute: ' + r.error.message); return; }
 delete mutedUsers[id]; addSys(name + ' has been unmuted.');
 }
+/* ---------- mute (admins only) — muting someone who has never tripped the spam filter has no
+   row in chat_moderation yet, so this upserts one straight to muted=permanent. ---------- */
+async function muteUser(id, name) {
+var r = await sb.from('chat_moderation').upsert({ user_id: id, user_name: name, muted: true, muted_permanent: true, muted_at: new Date().toISOString() }, { onConflict: 'user_id' });
+if (r.error) { addSys('Could not mute: ' + r.error.message); return; }
+mutedUsers[id] = { user_id: id, user_name: name, muted: true, muted_permanent: true };
+addSys(name + ' has been muted. Only an admin can lift it.');
+}
 async function kick(id, name, reason) {
 var r = await sb.from('bans').upsert({ user_id: id, banned_name: name, reason: reason || null, banned_by: me.id });
 if (r.error) { addSys('Could not kick: ' + r.error.message); return; }
@@ -612,7 +632,7 @@ var cmd = m[1].toLowerCase(), arg = m[2], rest = m[3].trim(), id;
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /unmute name · /muted · /reports' : '') + '. Click your status pill (bottom bar) to go Away/Busy. The ⚡ in a whisper window sends a buzz.'); return true;
+case 'help': addSys('Commands: /w name msg · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports' : '') + '. Click a name in the chat log or Present list for options. Click your status pill (bottom bar) to go Away/Busy. The ⚡ in a whisper window sends a buzz.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
@@ -626,6 +646,7 @@ case 'report': id = findId(arg); if (!id) { addSys('No one here is named ' + arg
 case 'kick': if (!isAdmin) { addSys('Only an admin may kick.'); return true; } id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot kick yourself.'); return true; } kick(id, people[id].name, rest); return true;
 case 'unban': if (!isAdmin) { addSys('Only an admin may lift bans.'); return true; } id = Object.keys(bans).filter(function (k) { return (bans[k].banned_name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('No ban found for ' + arg + '.'); return true; } unban(id, arg); return true;
 case 'bans': if (!isAdmin) return true; var bn = Object.keys(bans).map(function (k) { return bans[k].banned_name || k; }); addSys(bn.length ? 'Banned: ' + bn.join(', ') : 'No one is banned.'); return true;
+case 'mute': if (!isAdmin) { addSys('Only an admin may mute.'); return true; } id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot mute yourself.'); return true; } muteUser(id, people[id].name); return true;
 case 'unmute': if (!isAdmin) { addSys('Only an admin may unmute.'); return true; } id = Object.keys(mutedUsers).filter(function (k) { return (mutedUsers[k].user_name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('No active mute found for ' + arg + '.'); return true; } unmute(id, mutedUsers[id].user_name || arg); return true;
 case 'muted': if (!isAdmin) return true; var mn = Object.keys(mutedUsers).map(function (k) { return mutedUsers[k].user_name || k; }); addSys(mn.length ? 'Muted: ' + mn.join(', ') : 'No one is muted.'); return true;
 case 'reports': if (!isAdmin) return true; var rp = await sb.from('reports').select('reporter_name, reported_name, reason, created_at').order('created_at', { ascending: false }).limit(10); if (rp.error) { addSys('Could not load reports: ' + rp.error.message); return true; } if (!rp.data.length) { addSys('No reports.'); return true; } rp.data.forEach(function (x) { addSys('[' + fmt(x.created_at) + '] ' + x.reporter_name + ' reported ' + x.reported_name + ': ' + x.reason); }); return true;
@@ -802,13 +823,54 @@ renderThreadList();
 function appendThreadPost(p, isOp) {
 if (threadPostsSeen[p.id]) return; threadPostsSeen[p.id] = 1;
 var d = document.createElement('div'); d.className = 'tp-post' + (isOp ? ' op' : '');
+d.dataset.postId = String(p.id);
 var html = '<span class="t">' + fmt(p.created_at) + '</span><b>' + esc(p.sender_name) + (isOp ? ' (OP)' : '') + ':</b> ';
 if (p.body) html += bodyHtml(p.body);
 if (p.image_url) html += (p.body ? '<br>' : '') + '<img class="tp-posted-img" src="' + esc(p.image_url) + '" alt="Image" loading="lazy">';
+if (isAdmin) html += ' <button type="button" class="tp-del" data-id="' + esc(String(p.id)) + '" data-op="' + (isOp ? '1' : '0') + '" data-thread="' + esc(String(p.thread_id)) + '" title="' + (isOp ? 'Delete thread' : 'Delete reply') + '" aria-label="' + (isOp ? 'Delete thread' : 'Delete reply') + '">🗑</button>';
 d.innerHTML = html;
 var atBottom = tpPosts.scrollHeight - tpPosts.scrollTop - tpPosts.clientHeight < 60;
 tpPosts.appendChild(d);
 if (atBottom) tpPosts.scrollTop = tpPosts.scrollHeight;
+}
+/* ---------- delete threads / replies (admins only) ---------- */
+function removeThreadLocally(id) {
+if (openThreadId === id) closeThread();
+if (!threadsCache[id]) return;
+delete threadsCache[id];
+var idx = threadsOrder.indexOf(id); if (idx > -1) threadsOrder.splice(idx, 1);
+renderThreadList();
+}
+function removeThreadPostLocally(postId, threadId) {
+var el = tpPosts.querySelector('.tp-post[data-post-id="' + postId + '"]');
+if (el) el.remove();
+if (threadId && threadsCache[threadId]) {
+threadsCache[threadId].reply_count = Math.max(0, (threadsCache[threadId].reply_count || 1) - 1);
+upsertThread(threadsCache[threadId]);
+}
+}
+async function deleteThread(id) {
+if (!confirm('Delete this thread and all its replies? This cannot be undone.')) return;
+var r = await sb.from('threads').delete().eq('id', id);
+if (r.error) { addSys('Could not delete thread: ' + r.error.message); return; }
+removeThreadLocally(id);
+addSys('Thread deleted.');
+}
+async function deleteThreadPost(postId, threadId) {
+if (!confirm('Delete this reply? This cannot be undone.')) return;
+var r = await sb.from('thread_posts').delete().eq('id', postId);
+if (r.error) { addSys('Could not delete reply: ' + r.error.message); return; }
+removeThreadPostLocally(postId, threadId);
+addSys('Reply deleted.');
+}
+if (tpPosts) {
+tpPosts.onclick = function (e) {
+var b = e.target.closest('.tp-del'); if (!b) return;
+e.stopPropagation();
+var tid = Number(b.dataset.thread);
+if (b.dataset.op === '1') deleteThread(tid);
+else deleteThreadPost(Number(b.dataset.id), tid);
+};
 }
 async function openThread(id) {
 if (!threadsCache[id]) return;
@@ -821,7 +883,7 @@ var t = threadsCache[id];
 var r = await sb.from('thread_posts').select('*').eq('thread_id', id).order('created_at', { ascending: true }).limit(500);
 if (openThreadId !== id) return; // closed/switched while the query was in flight
 tpPosts.innerHTML = '';
-appendThreadPost({ id: 'op-' + id, sender_name: t.op_name, body: t.body, image_url: t.image_url, created_at: t.created_at }, true);
+appendThreadPost({ id: 'op-' + id, sender_name: t.op_name, body: t.body, image_url: t.image_url, created_at: t.created_at, thread_id: id }, true);
 if (!r.error) r.data.forEach(function (p) { appendThreadPost(p, false); });
 tpPosts.scrollTop = tpPosts.scrollHeight;
 if (tpReplyBody) tpReplyBody.focus();
@@ -889,6 +951,8 @@ threadsChannel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table
 threadsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'thread_posts' }, function (p) {
 if (openThreadId === p.new.thread_id) appendThreadPost(p.new, false);
 });
+threadsChannel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'threads' }, function (p) { removeThreadLocally(p.old.id); });
+threadsChannel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'thread_posts' }, function (p) { removeThreadPostLocally(p.old.id, p.old.thread_id); });
 threadsChannel.subscribe();
 }
 function unsubscribeThreads() {
@@ -953,18 +1017,26 @@ fail('');
 (adminMode ? adminEmail : $('sn')).focus();
 };
 }
+/* Picks a random "AdjectiveNoun##" name for anyone who leaves the character-name field blank
+   (either sign-on path) — never derived from their email or anything else identifying. */
+function randomName() {
+var adjs = ['Shadow', 'Crimson', 'Silent', 'Rogue', 'Mystic', 'Iron', 'Velvet', 'Wild', 'Lucky', 'Dusky', 'Feral', 'Hollow', 'Ember', 'Frost', 'Wicked', 'Gilded', 'Rusty', 'Grim', 'Lone', 'Sly'];
+var nouns = ['Fox', 'Wolf', 'Raven', 'Ghost', 'Viper', 'Hawk', 'Panther', 'Crow', 'Lynx', 'Shark', 'Falcon', 'Cobra', 'Wraith', 'Tiger', 'Owl', 'Jackal', 'Badger', 'Moth', 'Wasp', 'Stag'];
+var a = adjs[Math.floor(Math.random() * adjs.length)];
+var b = nouns[Math.floor(Math.random() * nouns.length)];
+var num = Math.floor(Math.random() * 90) + 10;
+return (a + b + num).slice(0, 16);
+}
 async function join() {
 var n = $('sn').value.trim(); fail('');
+if (!n) n = randomName();
+if (!/^[\w .'-]{2,16}$/.test(n)) { fail('2–16 letters, numbers, spaces or . \' -'); return; }
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0) { fail('Backend not configured — edit js/config.js.'); return; }
 if (!window.supabase) { fail('Could not load the chat library. Check your connection.'); return; }
 var adminEmailVal, adminPasswordVal;
 if (adminMode) {
 adminEmailVal = adminEmail.value.trim(); adminPasswordVal = adminPassword.value;
 if (!adminEmailVal || !adminPasswordVal) { fail('Enter your admin email and password.'); return; }
-if (!n) { n = (adminEmailVal.split('@')[0] || '').replace(/[^\w .'-]/g, ''); if (n.length < 2) n = 'Admin'; n = n.slice(0, 16); }
-if (!/^[\w .'-]{2,16}$/.test(n)) { fail('Character name: 2–16 letters, numbers, spaces or . \' -'); return; }
-} else {
-if (!/^[\w .'-]{2,16}$/.test(n)) { fail('2–16 letters, numbers, spaces or . \' -'); return; }
 }
 ensureAudioCtx(); // warm up audio on this user gesture so later sounds aren't blocked by autoplay policy
 $('join').disabled = true; setStatus('Signing on...');
