@@ -44,6 +44,8 @@ transform:rotate(45deg);border:1px solid var(--gold-lo);box-shadow:0 0 8px rgba(
 .sunk{background:linear-gradient(180deg,#0f0d0b,#171310);border:1px solid var(--gold-lo);box-shadow:inset 0 0 18px #000,inset 0 0 0 1px #000,0 0 0 1px #2a2119}
 .log{height:420px;overflow-y:auto;padding:8px 10px;line-height:1.5;word-wrap:break-word;scrollbar-color:var(--gold-lo) #0f0d0b}
 .log .m b{font-weight:normal;font-family:Cinzel,Georgia,serif;font-size:12px;letter-spacing:.5px}
+.log .m b.who{cursor:pointer}
+.log .m b.who:hover,.log .m b.who:focus-visible{text-decoration:underline;outline:none}
 .log .me b{color:var(--me)} .log .them b{color:var(--them)}
 .log .sys{color:var(--sys);font-style:italic}
 
@@ -246,6 +248,8 @@ background:var(--blood);border:1px solid #000;border-radius:50%;cursor:pointer}
 .tp-posts .tp-post .t{color:#5f5648;font-size:11px;margin-right:6px}
 .tp-posts .tp-loading{color:#5f5648;font-style:italic;font-size:12px;padding:8px}
 .tp-posts img.gif,.tp-posts img.tp-posted-img{max-width:200px;max-height:200px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
+.tp-del{display:inline-block;margin-left:8px;font-size:10px;line-height:14px;color:#e07a7a;background:none;border:1px solid #7a2a2a;padding:0 4px;cursor:pointer;vertical-align:middle}
+.tp-del:hover,.tp-del:focus-visible{color:#ff9c9c;border-color:#b3261e;background:rgba(179,38,30,.15);outline:none}
 .tp-thumb{width:100%;max-height:120px;object-fit:cover;display:block;margin-top:4px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
 .tp-reply{display:flex;gap:6px;padding:8px;border-top:1px solid var(--gold-lo);flex:none;align-items:flex-end}
 .tp-reply-compose{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
