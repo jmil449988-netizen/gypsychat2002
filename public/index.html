@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=11">
+<link rel="stylesheet" href="./css/style.css?v=12">
 </head>
 <body>
 <div class="gc-root">
@@ -35,6 +35,7 @@
 <label for="adminPassword">Admin password</label>
 <input id="adminPassword" class="sunk" type="password" autocomplete="current-password">
 </div>
+<div class="turnstile-wrap" id="turnstileWrap"><div class="cf-turnstile" id="cfTurnstile" data-sitekey="0x4AAAAAAEyldNKwDh4-t-S5" data-theme="dark" data-callback="onTurnstileSuccess" data-expired-callback="onTurnstileExpired" data-error-callback="onTurnstileExpired"></div></div>
 <div class="err" id="err"></div>
 <button class="btn" id="join" style="height:32px">Enter the room</button>
 <div class="admin-toggle-wrap"><button type="button" class="admin-toggle" id="adminToggle">Admin login</button></div>
@@ -117,7 +118,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script src="./js/config.js?v=2"></script>
-<script src="./js/app.js?v=14"></script>
+<script src="./js/app.js?v=15"></script>
 </body>
 </html>
