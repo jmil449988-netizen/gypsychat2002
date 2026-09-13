@@ -88,12 +88,13 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .list div.f-away{color:var(--gold)}
 .users .list div.f-busy{color:#e07a7a}
 .users .list div.f-idle{color:#7a8494}
-.status .statusbtn,.status .soundbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
-.status .statusbtn:hover,.status .soundbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+.status .statusbtn,.status .soundbtn,.status .dmbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
+.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
 .status .statusbtn[data-status="away"]{color:var(--gold);border-color:var(--gold-lo)}
 .status .statusbtn[data-status="busy"]{color:#e07a7a;border-color:#7a2a2a}
 .status .statusbtn[data-status="idle"]{color:#7a8494;border-color:#3a4048}
-.status .soundbtn{padding:1px 6px}
+.status .soundbtn,.status .dmbtn{padding:1px 6px}
+.status .dmbtn[aria-pressed="true"]{color:#e07a7a;border-color:#7a2a2a;text-decoration:line-through}
 /* whisper windows */
 .im{position:fixed;width:340px;max-width:calc(100vw - 12px);z-index:20;display:flex;flex-direction:column;
 background:linear-gradient(180deg,#221a26,#120e14);border:3px double #7a4bb0;outline:1px solid #000;
@@ -233,3 +234,23 @@ font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-s
 .tp-posts img.gif{max-width:200px;max-height:200px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
 .tp-reply{display:flex;gap:6px;padding:8px;border-top:1px solid var(--gold-lo);flex:none}
 .tp-reply textarea{flex:1;height:44px}
+
+/* threads board — mobile toggle (no blank space on narrow viewports, so a floating button swaps
+   the whole screen between the chat window and the threads board instead of showing both) */
+.thread-toggle-fab{display:none;position:fixed;right:12px;bottom:78px;z-index:55;width:46px;height:46px;padding:0;
+border-radius:50%;align-items:center;justify-content:center;font-size:20px;cursor:pointer;color:var(--gold-hi);
+background:radial-gradient(circle at 35% 30%,#3a3026,#1a1511 70%);border:2px solid var(--gold-lo);
+box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 10px rgba(201,162,74,.35)}
+.thread-toggle-fab:hover,.thread-toggle-fab:focus-visible{border-color:var(--gold);box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 16px rgba(201,162,74,.7);outline:none}
+.thread-toggle-fab.open{color:#fff;border-color:var(--gold)}
+@media (max-width:1339px){
+  .thread-toggle-fab.ready{display:flex}
+  .gc-root.mobile-threads-open .win{display:none}
+  .gc-root.mobile-threads-open .threads-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
+  height:100%;border-width:0;border-radius:0;z-index:40;transition:none}
+}
+@media (max-width:430px){.thread-toggle-fab{bottom:70px;right:8px}}
+
+/* option to hide the whisper "tray" tabs (and any open whisper windows) entirely — a purely
+   client-side/visual toggle; whispers still arrive and are remembered, just not shown until re-enabled */
+.gc-root.no-dms .im-tray,.gc-root.no-dms .im{display:none !important}
