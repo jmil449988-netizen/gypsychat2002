@@ -273,7 +273,7 @@ function renderRoom(m) {
 if (seen[m.id]) return; seen[m.id] = 1;
 var mine = m.sender_id === me.id;
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them');
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span><b class="who" data-id="' + esc(m.sender_id) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span><b class="who" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 log.appendChild(d); if (atBottom || mine) log.scrollTop = log.scrollHeight;
 if (!mine && document.hidden) bumpTitle();
@@ -445,21 +445,21 @@ w.ta.focus();
 /* ---------- name menu: Get Info / Whisper / Block / Report / Friend / Kick ---------- */
 var menu = document.createElement('div'); menu.className = 'nmenu'; menu.setAttribute('role', 'menu'); document.body.appendChild(menu);
 function closeMenu() { menu.classList.remove('open'); }
-function openMenu(id, anchor) {
+function openMenu(id, anchor, fallbackName) {
 var online = !!people[id];
-var name = online ? people[id].name : (friends[id] && friends[id].name); if (!name) return;
+var name = (online && people[id].name) || (friends[id] && friends[id].name) || fallbackName; if (!name) return;
 var items = [];
 items.push(['Get Info', function () { showInfo(id, name); }]);
-if (online) {
-if (!blocked[id]) items.push(['Whisper', function () { unread[id] = 0; openIM(id, name, true); }]);
+if (online && !blocked[id]) items.push(['Whisper', function () { unread[id] = 0; openIM(id, name, true); }]);
 items.push(blocked[id] ? ['Unblock', function () { unblock(id); }] : ['Block', function () { block(id, name); }]);
 items.push(['Report', function () { var rr = prompt('Report ' + name + ' for: (e.g. spam, harassment)'); if (rr !== null && rr.trim()) report(id, name, rr.trim()); }]);
-}
 items.push(friends[id] ? ['Remove Friend', function () { removeFriend(id, name); }] : ['Add Friend', function () { addFriend(id, name); }]);
 if (friends[id]) items.push(['Move to Group', function () { var g = prompt('Group name (blank for none):', friends[id].group || ''); if (g !== null) moveFriendGroup(id, g.trim()); }]);
-if (online && isAdmin && mutedUsers[id]) items.push(['Unmute', function () { unmute(id, name); }]);
-if (online && isAdmin && !mutedUsers[id]) items.push(['Mute', function () { muteUser(id, name); }, 'danger']);
-if (online && isAdmin) items.push(['Kick', function () { var r = prompt('Reason for kicking ' + name + '? (optional)'); if (r !== null) kick(id, name, r); }, 'danger']);
+/* Kick/Mute/Unmute don't require the target to still be online — most of the time an admin is
+   acting on something said in the chat log by someone who has since left the room. */
+if (isAdmin && mutedUsers[id]) items.push(['Unmute', function () { unmute(id, name); }]);
+if (isAdmin && !mutedUsers[id]) items.push(['Mute', function () { muteUser(id, name); }, 'danger']);
+if (isAdmin) items.push(['Kick', function () { var r = prompt('Reason for kicking ' + name + '? (optional)'); if (r !== null) kick(id, name, r); }, 'danger']);
 menu.innerHTML = '<div class="hd">' + esc(name) + '</div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
 menu.querySelectorAll('button').forEach(function (b) { b.onclick = function () { closeMenu(); items[+b.dataset.i][1](); }; });
 menu.classList.add('open');
@@ -487,7 +487,7 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clos
    someone currently online (or a saved friend), same as clicking their name in the Present list. */
 log.onclick = function (e) {
 var b = e.target.closest('.who[data-id]'); if (!b || b.dataset.id === me.id) return;
-e.stopPropagation(); openMenu(b.dataset.id, b);
+e.stopPropagation(); openMenu(b.dataset.id, b, b.dataset.name);
 };
 log.addEventListener('keydown', function (e) {
 if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.closest('.who[data-id]')) return;
