@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=13">
+<link rel="stylesheet" href="./css/style.css?v=14">
 </head>
 <body>
 <div class="gc-root">
@@ -46,7 +46,6 @@
 <div class="users sunk hidden" id="users"><div class="hd">Online</div><div class="list" id="ulist"></div><div class="hd frhd">Friends</div><div class="list" id="flist"></div><div class="hint">Tap a name for options</div></div>
 
 <div class="compose hidden" id="compose">
-<div class="picker" id="picker" role="listbox" aria-label="Emoji"></div>
 <button class="btn emo" id="emoBtn" aria-label="Insert emoji" title="Emoji">😊</button>
 <button class="btn gif" id="gifBtn" aria-label="Search GIFs" title="GIF">GIF</button>
 <div class="cooldown hidden" id="cooldownMsg" role="status" aria-live="polite"></div>
@@ -59,6 +58,8 @@
 <div id="imTray" class="im-tray"></div>
 <div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status">● Online</button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds">🔊</button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs">💬</button><span class="cell" id="cnt">0 online</span></div>
 </div>
+
+<div class="picker" id="picker" role="listbox" aria-label="Emoji"></div>
 
 <div class="gifpicker" id="gifPicker" role="dialog" aria-label="Search GIFs">
 <div class="gsearch"><input id="gifQ" type="text" autocomplete="off" maxlength="60" placeholder="Search Giphy..."><button class="btn" type="button" id="gifGo">Go</button></div>
@@ -121,6 +122,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script src="./js/appconfig.js?v=1"></script>
-<script src="./js/app.js?v=19"></script>
+<script src="./js/app.js?v=20"></script>
 </body>
 </html>
