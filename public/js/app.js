@@ -730,17 +730,20 @@ gifResults.appendChild(b);
 if (!gifResults.children.length) gifResults.innerHTML = '<div class="gmsg">No results.</div>';
 }
 async function searchGifs(q) {
-if (!C.GIPHY_API_KEY) { gifResults.innerHTML = '<div class="gmsg">GIF search isn\'t configured yet — add GIPHY_API_KEY to js/config.js.</div>'; return; }
+// GIF search goes through the giphy-search edge function so the Giphy API key stays a
+// server-only secret and never ships to the browser — see supabase/functions/giphy-search.
 var seq = ++gifSeq;
 gifResults.innerHTML = '<div class="gmsg">Searching…</div>';
-var base = q ? 'https://api.giphy.com/v1/gifs/search?q=' + encodeURIComponent(q) : 'https://api.giphy.com/v1/gifs/trending?';
-var url = base + '&api_key=' + encodeURIComponent(C.GIPHY_API_KEY) + '&limit=18&rating=pg-13&lang=en';
 try {
-var res = await fetch(url);
-var data = await res.json();
+var res = await sb.functions.invoke('giphy-search', { body: { q: q } });
 if (seq !== gifSeq) return;
-if (!res.ok) { gifResults.innerHTML = '<div class="gmsg">' + esc((data.meta && data.meta.msg) || 'Giphy error.') + '</div>'; return; }
-renderGifResults(data.data || []);
+if (res.error || !res.data || res.data.ok === false) {
+var reason = res.data && res.data.reason;
+var m = reason === 'not_configured' ? 'GIF search isn\'t configured yet.' : ((res.data && res.data.message) || 'Could not reach Giphy.');
+gifResults.innerHTML = '<div class="gmsg">' + esc(m) + '</div>';
+return;
+}
+renderGifResults(res.data.data || []);
 } catch (e) {
 if (seq === gifSeq) gifResults.innerHTML = '<div class="gmsg">Could not reach Giphy.</div>';
 }
