@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=4">
+<link rel="stylesheet" href="./css/style.css?v=5">
 </head>
 <body>
 <div class="gc-root">
@@ -54,6 +54,23 @@
 <div id="imTray" class="im-tray"></div>
 <div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status">● Online</button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds">🔊</button><span class="cell" id="cnt">0 present</span></div>
 </div>
+
+<div class="threads-panel" id="threadsPanel" role="complementary" aria-label="Threads board">
+<div class="tp-list" id="tpList">
+<div class="tp-hd"><span>Threads</span></div>
+<div class="tp-newwrap"><button class="btn tp-new" type="button" id="tpNewBtn">+ New Thread</button></div>
+<div class="tp-newpost hidden" id="tpNewPost">
+<textarea id="tpNewBody" class="sunk" maxlength="500" placeholder="Post anything to start a thread..."></textarea>
+<div class="tp-newactions"><button class="btn" type="button" id="tpNewCancel">Cancel</button><button class="btn" type="button" id="tpNewSubmit">Post</button></div>
+</div>
+<div class="tp-items" id="tpItems"></div>
+</div>
+<div class="tp-detail hidden" id="tpDetail">
+<div class="tp-hd"><button class="tp-back" type="button" id="tpBack" aria-label="Back to threads">←</button><span>Thread</span></div>
+<div class="tp-posts" id="tpPosts"></div>
+<div class="tp-reply"><textarea id="tpReplyBody" class="sunk" maxlength="500" placeholder="Reply..."></textarea><button class="btn" type="button" id="tpReplySend">Reply</button></div>
+</div>
+</div>
 </div>
 
 <div class="modal-overlay hidden" id="warnOverlay">
@@ -74,6 +91,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="./js/config.js?v=2"></script>
-<script src="./js/app.js?v=5"></script>
+<script src="./js/app.js?v=6"></script>
 </body>
 </html>
