@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=2">
+<link rel="stylesheet" href="./css/style.css?v=3">
 </head>
 <body>
 <div class="gc-root">
@@ -52,7 +52,7 @@
 
 <div id="ims"></div>
 <div id="imTray" class="im-tray"></div>
-<div class="status"><span class="cell" id="st">Not signed on</span><span class="cell" id="cnt">0 present</span></div>
+<div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status">● Online</button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds">🔊</button><span class="cell" id="cnt">0 present</span></div>
 </div>
 </div>
 
@@ -64,8 +64,16 @@
 </div>
 </div>
 
+<div class="modal-overlay hidden" id="infoOverlay">
+<div class="modal" role="dialog" aria-modal="true" aria-label="Profile info">
+<div class="modal-hd" id="infoTitle">Name</div>
+<div class="modal-body" id="infoBody"></div>
+<button class="btn" type="button" id="infoOk">OK</button>
+</div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="./js/config.js?v=2"></script>
-<script src="./js/app.js?v=2"></script>
+<script src="./js/app.js?v=3"></script>
 </body>
 </html>
