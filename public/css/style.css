@@ -71,6 +71,14 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .hint{padding:4px 8px 6px;font-size:11px;color:#5f5648;font-style:italic;border-top:1px solid #2a2119}
 .users .list div.unread{color:#e2c4ff;text-shadow:0 0 6px rgba(200,150,255,.8)}
 .users .list div.unread::before{background:#c9a3e6;box-shadow:0 0 6px rgba(200,150,255,.9)}
+.users .hd.frhd{border-top:1px solid var(--gold-lo)}
+.users .list div.f-online{color:var(--gold-hi);text-shadow:0 0 6px rgba(241,217,138,.6)}
+.users .list div.f-online::before{background:var(--gold-hi);box-shadow:0 0 6px rgba(241,217,138,.9)}
+.users .list div.f-offline{color:#5f5648}
+.users .list div.f-offline::before{background:#3a3026;box-shadow:none}
+.users .list .off{font-size:10px;font-style:italic;color:#4a4238}
+.users .list .empty{color:#5f5648;font-style:italic;font-size:11px;cursor:default;white-space:normal;padding:2px}
+.users .list .empty::before{display:none}
 /* whisper windows */
 .im{position:fixed;width:340px;max-width:calc(100vw - 12px);z-index:20;display:flex;flex-direction:column;
 background:linear-gradient(180deg,#221a26,#120e14);border:3px double #7a4bb0;outline:1px solid #000;
