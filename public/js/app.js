@@ -715,7 +715,13 @@ if (!items.length) { gifResults.innerHTML = '<div class="gmsg">No results.</div>
 items.forEach(function (g) {
 var images = g.images || {};
 var thumb = (images.fixed_width_small || images.preview_gif || images.fixed_width || {}).url;
-var full = (images.fixed_height || images.original || images.fixed_width || {}).url;
+/* Giphy's images.*.url fields now embed a long tracking "cid" segment (v1.XXXX...), which
+   routinely pushes the URL past the 140-char cap on main-room messages (see post()) -- once
+   truncated it no longer ends in .gif, fails GIF_RE, and posts as a bare link instead of an
+   image. media.giphy.com/media/{id}/giphy.gif is Giphy's plain, stable direct link for the same
+   asset with no cid, so build from g.id first and only fall back to the longer form if it's
+   somehow missing. */
+var full = g.id ? ('https://media.giphy.com/media/' + g.id + '/giphy.gif') : (images.fixed_height || images.original || images.fixed_width || {}).url;
 if (!thumb || !full) return;
 var b = document.createElement('button'); b.type = 'button';
 b.innerHTML = '<img src="' + esc(thumb) + '" alt="' + esc(g.title || 'GIF') + '" loading="lazy">';
