@@ -121,7 +121,7 @@ window.addEventListener('focus', clearTitle);
    defense-in-depth strip of control characters from user text; it isn't what stops injection —
    never building raw SQL from user input is. */
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-function sanitizeInput(s) { return String(s || '').replace(/[ --]/g, ''); }
+function sanitizeInput(s) { return String(s || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); }
 function fmt(t) { var d = new Date(t); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
 function wrapEmoji(h) { return h.replace(/(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)/gu, '<span class="e">$1</span>'); }
 var URL_RE = /(https?:\/\/[^\s<]+)/g;
