@@ -1014,12 +1014,20 @@ if (adminToggle) {
 adminToggle.onclick = function () {
 adminMode = !adminMode;
 adminFields.classList.toggle('hidden', !adminMode);
+if ($('turnstileWrap')) $('turnstileWrap').classList.toggle('hidden', adminMode);
 $('join').textContent = adminMode ? 'Login as Admin' : 'Enter the room';
 adminToggle.textContent = adminMode ? 'Use a character name instead' : 'Admin login';
 fail('');
 (adminMode ? adminEmail : $('sn')).focus();
 };
 }
+/* Cloudflare Turnstile (join-screen human check): the widget calls these globally-named
+   callbacks itself, so they just track the current token in a plain variable for join() to
+   read. A verified human still gets muted server-side if the token fails verify-join's
+   server-side check -- this is only the client half. */
+var turnstileToken = null;
+function onTurnstileSuccess(token) { turnstileToken = token; }
+function onTurnstileExpired() { turnstileToken = null; }
 /* Picks a random "AdjectiveNoun##" name for anyone who leaves the character-name field blank
    (either sign-on path) — never derived from their email or anything else identifying. */
 function randomName() {
@@ -1040,6 +1048,8 @@ var adminEmailVal, adminPasswordVal;
 if (adminMode) {
 adminEmailVal = adminEmail.value.trim(); adminPasswordVal = adminPassword.value;
 if (!adminEmailVal || !adminPasswordVal) { fail('Enter your admin email and password.'); return; }
+} else if (window.turnstile && !turnstileToken) {
+fail('Please complete the verification check above.'); return;
 }
 ensureAudioCtx(); // warm up audio on this user gesture so later sounds aren't blocked by autoplay policy
 $('join').disabled = true; setStatus('Signing on...');
@@ -1057,6 +1067,22 @@ if (!user) { var a = await sb.auth.signInAnonymously(); if (a.error) throw a.err
 }
 await sb.auth.updateUser({ data: { name: n } });
 await sb.auth.refreshSession(); // updateUser() above doesn't rotate the JWT; refresh so auth.jwt() carries the new name for RLS checks
+if (!adminMode) {
+// Server-side half of the Turnstile check, plus IP-based fresh-identity churn tracking --
+// see supabase/join_ip_log_feature.sql and the verify-join edge function. Fails OPEN on
+// anything but an explicit "turnstile_failed" verdict: this is a hardening layer on top of
+// the real defense (mute/cooldown is enforced in RLS regardless), not something that should
+// lock genuine players out over a network hiccup or a cold-started function.
+try {
+var vj = await sb.functions.invoke('verify-join', { body: { turnstileToken: turnstileToken } });
+if (vj.data && vj.data.ok === false && vj.data.reason === 'turnstile_failed') {
+throw new Error('Verification failed. Please reload the page and try again.');
+}
+} catch (vjErr) {
+if (vjErr && vjErr.message && vjErr.message.indexOf('Verification failed') === 0) throw vjErr;
+console.warn('verify-join check did not complete:', vjErr);
+}
+}
 me = { id: user.id, name: n };
 manualStatus = 'online'; myAwayMsg = ''; autoIdle = false; awayReplied = {};
 
@@ -1134,6 +1160,8 @@ resetIdle();
 msg.focus();
 } catch (e) {
 fail(e.message || String(e)); setStatus('Not signed on'); $('join').disabled = false; me = null;
+if (window.turnstile) { try { turnstile.reset(); } catch (resetErr) {} }
+turnstileToken = null;
 }
 }
 $('join').onclick = join;
