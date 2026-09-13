@@ -12,6 +12,7 @@ var gcRoot = document.querySelector('.gc-root');
 var threadsPanel = $('threadsPanel'), tpList = $('tpList'), tpDetail = $('tpDetail'), tpItems = $('tpItems');
 var tpNewBtn = $('tpNewBtn'), tpNewPost = $('tpNewPost'), tpNewBody = $('tpNewBody'), tpNewCancel = $('tpNewCancel'), tpNewSubmit = $('tpNewSubmit');
 var tpBack = $('tpBack'), tpPosts = $('tpPosts'), tpReplyBody = $('tpReplyBody'), tpReplySend = $('tpReplySend');
+var threadToggleBtn = $('threadToggleBtn'), dmToggleBtn = $('dmToggleBtn');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
 
@@ -115,6 +116,28 @@ $('soundBtn').onclick = function () {
 soundMuted = !soundMuted;
 try { localStorage.setItem('gc_sound_muted', soundMuted ? '1' : '0'); } catch (e) {}
 updateSoundBtn();
+};
+}
+
+/* ---------- option to completely hide DM (whisper) tabs and windows ----------
+   Purely a client-side/visual toggle, same pattern as sound mute: whispers still arrive and are
+   remembered under the hood (unread counts, history) — they're just not shown on screen while
+   this is on, and everything reappears the moment it's switched back off. */
+var dmTabsOff = false;
+try { dmTabsOff = localStorage.getItem('gc_dm_tabs_off') === '1'; } catch (e) {}
+function updateDmToggleBtn() {
+if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff);
+if (!dmToggleBtn) return;
+dmToggleBtn.textContent = dmTabsOff ? '🚫' : '💬';
+dmToggleBtn.setAttribute('aria-pressed', dmTabsOff ? 'true' : 'false');
+dmToggleBtn.title = dmTabsOff ? 'DM tabs hidden — click to show them again' : 'Hide DM tabs';
+}
+if (dmToggleBtn) {
+updateDmToggleBtn();
+dmToggleBtn.onclick = function () {
+dmTabsOff = !dmTabsOff;
+try { localStorage.setItem('gc_dm_tabs_off', dmTabsOff ? '1' : '0'); } catch (e) {}
+updateDmToggleBtn();
 };
 }
 
@@ -540,7 +563,8 @@ function kicked(reason) {
 if (channel) { channel.unsubscribe(); channel = null; }
 unsubscribeThreads();
 if (threadsPanel) { threadsPanel.classList.remove('ready'); }
-if (gcRoot) gcRoot.classList.remove('thread-open');
+if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
+if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); }
 openThreadId = null;
 clearTimeout(idleTimer);
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
@@ -812,6 +836,17 @@ tpBack.onclick = closeThread;
 tpReplySend.onclick = submitReply;
 tpReplyBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitReply(); } };
 }
+/* mobile toggle: below the 1340px breakpoint there's no blank space for a persistent side panel,
+   so a floating button swaps the whole screen between the chat window and the threads board. */
+if (threadToggleBtn) {
+threadToggleBtn.onclick = function () {
+var open = gcRoot.classList.toggle('mobile-threads-open');
+threadToggleBtn.classList.toggle('open', open);
+threadToggleBtn.textContent = open ? '💬' : '🧵';
+threadToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Open threads board');
+if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidden'); }
+};
+}
 
 /* ---------- sign on ---------- */
 async function join() {
@@ -894,7 +929,9 @@ if (threadsPanel) {
 threadsPanel.classList.add('ready');
 loadThreads();
 subscribeThreads();
+if (threadToggleBtn) threadToggleBtn.classList.add('ready');
 if (window.matchMedia('(min-width:1340px)').matches) addSys('Tip: there\'s a Threads board to the right — general chat, no topics, post anything.');
+else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.');
 }
 resetIdle();
 msg.focus();
