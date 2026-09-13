@@ -237,7 +237,7 @@ font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-s
 
 /* threads board — mobile toggle (no blank space on narrow viewports, so a floating button swaps
    the whole screen between the chat window and the threads board instead of showing both) */
-.thread-toggle-fab{display:none;position:fixed;right:12px;bottom:78px;z-index:55;width:46px;height:46px;padding:0;
+.thread-toggle-fab{display:none;position:fixed;right:12px;bottom:104px;z-index:55;width:46px;height:46px;padding:0;
 border-radius:50%;align-items:center;justify-content:center;font-size:20px;cursor:pointer;color:var(--gold-hi);
 background:radial-gradient(circle at 35% 30%,#3a3026,#1a1511 70%);border:2px solid var(--gold-lo);
 box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 10px rgba(201,162,74,.35)}
@@ -249,7 +249,7 @@ box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 10px rgba(201,162,74,.35)}
   .gc-root.mobile-threads-open .threads-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
   height:100%;border-width:0;border-radius:0;z-index:40;transition:none}
 }
-@media (max-width:430px){.thread-toggle-fab{bottom:70px;right:8px}}
+@media (max-width:430px){.thread-toggle-fab{bottom:100px;right:8px}}
 
 /* option to hide the whisper "tray" tabs (and any open whisper windows) entirely — a purely
    client-side/visual toggle; whispers still arrive and are remembered, just not shown until re-enabled */
