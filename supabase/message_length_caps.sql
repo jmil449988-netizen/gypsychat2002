@@ -20,10 +20,13 @@ begin
   end if;
 end $$;
 
+-- "not valid" enforces the new cap for new/updated rows only, without validating it against
+-- existing historical rows. Without this, the migration fails on production data because some
+-- old messages (previously allowed up to 500 chars) are longer than 140 chars.
 alter table public.messages add constraint messages_body_check check (
   (recipient_id is null and char_length(body) between 1 and 140)
   or (recipient_id is not null and char_length(body) between 1 and 500)
-);
+) not valid;
 
 -- Thread posts/replies: raise the cap from 500 to 1000 characters. These constraint names are
 -- known (added in thread_images_feature.sql), so a plain drop/recreate is enough.
