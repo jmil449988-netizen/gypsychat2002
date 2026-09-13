@@ -285,7 +285,7 @@ function nameTaken(n) { return Object.keys(people).some(function (id) { return i
    action (tapping a name > Whisper, /w, or tapping its tray tab) opens it. */
 var zTop = 20, nWin = 0, lastBuzz = {};
 function ensureWin(id, name) {
-if (wins[id]) return wins[id];
+if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
 el.innerHTML = '<div class="bar"><span class="gem"></span><span class="nm"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" aria-label="Minimize">–</button></div>' +
 '<div class="ilog" aria-live="polite"></div><div class="icomp"><textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
@@ -319,6 +319,18 @@ b.setAttribute('aria-label', 'Open whisper with ' + w.name);
 b.onclick = function () { openIM(id, w.name, true); };
 tray.appendChild(b);
 w.tab = b;
+}
+/* Keeps a whisper window's title bar, tray tab, and aria-labels showing the name that user
+   currently has chosen — called whenever we learn a (possibly updated) name for an open
+   window, e.g. on every presence sync, so a rename shows up even if no new message arrives. */
+function renameWin(id, name) {
+var w = wins[id]; if (!w || !name || w.name === name) return;
+w.name = name;
+w.el.setAttribute('aria-label', 'Whisper with ' + name);
+w.el.querySelector('.nm').textContent = name;
+var buzzBtn = w.el.querySelector('.buzz'); if (buzzBtn) buzzBtn.setAttribute('aria-label', 'Buzz ' + name);
+w.ta.placeholder = 'Whisper to ' + name + '...';
+if (w.tab) { w.tab.querySelector('.nm').textContent = name; w.tab.setAttribute('aria-label', 'Open whisper with ' + name); }
 }
 function updateTab(id) {
 var w = wins[id]; if (!w || !w.tab) return;
@@ -667,6 +679,7 @@ channel = sb.channel('room:' + (C.ROOM || 'main'), { config: { presence: { key: 
 channel.on('presence', { event: 'sync' }, function () {
 var stt = channel.presenceState(); people = {};
 Object.keys(stt).forEach(function (k) { if (stt[k][0]) people[k] = stt[k][0]; });
+Object.keys(wins).forEach(function (id) { if (people[id]) renameWin(id, people[id].name); });
 renderPeople();
 });
 channel.on('presence', { event: 'join' }, function (p) {
