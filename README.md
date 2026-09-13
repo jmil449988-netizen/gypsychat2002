@@ -115,3 +115,7 @@ Things you'll want to add at that stage, all of which are Capacitor plugins that
 - **Moderation** is in (block and kick); consider adding a **report** button that writes to a `reports` table you can review.
 - **Retention**: the schema file includes a one-line `pg_cron` job to delete messages older than 30 days. Enable it under Database → Extensions → pg_cron, then run that line.
 - **Name of the app**: "Gypsy" is treated as a slur by many Roma people, and both app stores reject listings under offensive-content rules with some inconsistency. Decide early whether you'd rename if a store bounces it.
+
+
+<!-- redeploy trigger: Giphy key added -->
+
