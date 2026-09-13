@@ -192,6 +192,13 @@ text-shadow:0 0 14px rgba(201,162,74,.5),0 2px 0 #000}
 .login input{font:inherit;color:var(--bone);width:240px;padding:6px 8px;display:block;margin:0 auto 10px;outline:none}
 .login input:focus{box-shadow:inset 0 0 18px #000,0 0 0 1px var(--gold)}
 .login .err{color:var(--blood);min-height:16px;margin-bottom:6px}
+.admin-fields{margin:0 auto 4px;width:240px}
+.admin-fields label{display:block;margin:0 auto 6px;width:100%;text-align:left;font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold)}
+.admin-fields input{font:inherit;color:var(--bone);width:100%;padding:6px 8px;display:block;margin:0 auto 10px;outline:none}
+.admin-fields input:focus{box-shadow:inset 0 0 18px #000,0 0 0 1px var(--gold)}
+.admin-toggle-wrap{margin-top:10px}
+.admin-toggle{font:inherit;font-size:11px;font-style:italic;color:var(--ash);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline}
+.admin-toggle:hover,.admin-toggle:focus-visible{color:var(--gold-hi);outline:none}
 .hidden{display:none !important}
 @media (prefers-reduced-motion:no-preference){.title .gem{animation:pulse 3s ease-in-out infinite}}
 @keyframes pulse{50%{box-shadow:0 0 14px rgba(179,38,30,1)}}
