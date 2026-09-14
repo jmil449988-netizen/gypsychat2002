@@ -389,7 +389,7 @@ el.innerHTML = '<div class="bar"><span class="gem"></span><span class="wava" ari
 '<div class="ilog" aria-live="polite"></div><div class="icomp">' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
-'<input type="file" class="im-img-file hidden" accept="image/jpeg,image/png,image/gif,image/webp">' +
+'<input type="file" class="im-img-file hidden" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif">' +
 '<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>' +
 '<div class="rz rz-nw" data-dir="nw" aria-hidden="true"></div><div class="rz rz-ne" data-dir="ne" aria-hidden="true"></div>' +
 '<div class="rz rz-sw" data-dir="sw" aria-hidden="true"></div><div class="rz rz-se" data-dir="se" aria-hidden="true"></div>';
@@ -989,8 +989,33 @@ function clearPendingImage(which) {
 if (which === 'new') { tpNewImageUrl = null; tpNewPreviewImg.src = ''; tpNewPreviewWrap.classList.add('hidden'); tpNewImgFile.value = ''; }
 else { tpReplyImageUrl = null; tpReplyPreviewImg.src = ''; tpReplyPreviewWrap.classList.add('hidden'); tpReplyImgFile.value = ''; }
 }
+/* ---------- HEIC/HEIF photos (the default format iPhone cameras have saved in since iOS 11) ----------
+   No browser can decode HEIC inside an <img> or <canvas> -- not even Safari, despite iOS itself
+   supporting it natively in Photos -- so an unconverted HEIC upload can't be cropped/previewed and,
+   via ALLOWED_IMG_TYPES below, gets rejected outright before that. iOS Safari's own file picker
+   usually transcodes a HEIC photo to JPEG automatically when handing it to a web page, but that
+   doesn't happen in every browser/in-app webview or every iOS version, and some Android file
+   providers hand over HEIC files with an empty file.type -- so this checks the filename too, and
+   when it finds one, converts it to an ordinary JPEG right in the browser (via the heic2any library
+   loaded from index.html) before anything else touches the file. */
+var HEIC_NAME_RE = /\.hei[cf]$/i;
+function looksLikeHeic(file) {
+if (file.type === 'image/heic' || file.type === 'image/heif') return true;
+return !file.type && HEIC_NAME_RE.test(file.name || '');
+}
+async function normalizeImageFile(file) {
+if (!looksLikeHeic(file)) return file;
+if (typeof window.heic2any !== 'function') {
+throw new Error('That photo is in Apple’s HEIC format and this browser can’t convert it. Try turning on "Most Compatible" under Settings → Camera → Formats on your phone, or share the photo through Messages first.');
+}
+var out = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+var jpegBlob = Array.isArray(out) ? out[0] : out;
+var name = (file.name || 'photo').replace(/\.[^./\\]+$/, '') + '.jpg';
+return new File([jpegBlob], name, { type: 'image/jpeg' });
+}
 async function uploadImage(file) {
 if (!file) return null;
+try { file = await normalizeImageFile(file); } catch (e) { addSys(e.message || 'Could not read that photo.'); return null; }
 var ext = ALLOWED_IMG_TYPES[file.type];
 if (!ext) { addSys('Images must be JPG, PNG, GIF, or WEBP.'); return null; }
 if (file.size > MAX_IMG_BYTES) { addSys('Images must be 5MB or smaller.'); return null; }
@@ -1034,6 +1059,7 @@ thumb.innerHTML = (me && me.avatarUrl) ? '<img src="' + esc(me.avatarUrl) + '" a
 }
 async function uploadAvatar(file) {
 if (!file || !me) return;
+try { file = await normalizeImageFile(file); } catch (e) { addSys(e.message || 'Could not read that photo.'); return; }
 var ext = ALLOWED_IMG_TYPES[file.type];
 if (!ext) { addSys('Profile pictures must be JPG, PNG, GIF, or WEBP.'); return; }
 if (file.size > MAX_IMG_BYTES) { addSys('Profile pictures must be 5MB or smaller.'); return; }
