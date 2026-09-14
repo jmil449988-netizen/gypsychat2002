@@ -31,14 +31,20 @@ text-shadow:0 0 10px rgba(201,162,74,.55),0 2px 0 #000,0 -1px 0 #000}
 .title .lantern{width:15px;height:26px;flex:none;overflow:visible;
 /* two stacked shadows rather than one big blur: a wide purple haze for reach, and a tight pale
    one right against the glass so the lantern reads as lit rather than just outlined */
-filter:drop-shadow(0 0 12px rgba(178,92,255,.75)) drop-shadow(0 0 4px rgba(240,208,255,.45))}
+filter:drop-shadow(0 0 12px rgba(163,42,255,.8)) drop-shadow(0 0 4px rgba(214,80,255,.85))}
 .title .lantern .lt-hook{fill:none;stroke:var(--gold);stroke-width:1.1}
 .title .lantern .lt-cap{fill:var(--gold);stroke:var(--gold-lo);stroke-width:.6;stroke-linejoin:round}
-.title .lantern .lt-glass{fill:rgba(190,120,255,.2);stroke:none}
+.title .lantern .lt-glass{fill:rgba(186,70,255,.3);stroke:none}
 .title .lantern .lt-pane{fill:none;stroke:var(--gold);stroke-width:1.1}
 .title .lantern .lt-bars{fill:none;stroke:var(--gold-lo);stroke-width:.7}
-.title .lantern .lt-flame-out{fill:#a855f7}
-.title .lantern .lt-flame-in{fill:#f0d0ff}
+/* The flame is two stacked shapes filled from the shared radial gradients declared at the top
+   of the page, not from flat colour -- these two rules are only the fallback for a browser that
+   cannot resolve the url(#...) fill. The old flat pale-lilac core was what made the whole
+   lantern read as washed out: at this size the core is most of what you see, so a near-white
+   centre drained the colour out of the entire thing. The gradients put the strongest colour in
+   the middle of the flame and let it deepen towards the edge. */
+.title .lantern .lt-flame-out{fill:#c33cff}
+.title .lantern .lt-flame-in{fill:#e072ff}
 /* fill-box so the flame scales from the wick at its own base, not from the whole 18x30 viewBox */
 .title .lantern .lt-flame{transform-box:fill-box;transform-origin:50% 100%}
 .body{display:grid;grid-template-columns:1fr var(--users-w,160px);gap:10px;padding:12px}
@@ -251,16 +257,20 @@ text-shadow:0 0 14px rgba(201,162,74,.5),0 2px 0 #000}
    padding-right the width of the picture, so the whole column re-centres itself in what is left.
    She is absolutely positioned inside that reserved strip, which keeps her out of the flow --
    nothing below her can be pushed around if the form grows (an error line, the Turnstile box).
-   Hidden below 620px, where there is no dead space to fill and she would only crowd the form. */
-.login .gw{display:none}
+   Below 620px she stops being a side panel and becomes a footer instead: a portrait phone has
+   no horizontal dead space to fill, but it has plenty of vertical room under the button, and
+   empty space was the whole reason she was added. There she is static rather than absolute, so
+   she takes part in the flow and the panel grows to hold her. */
+.login .gw{display:block;position:static;width:min(62%,240px);height:auto;margin:14px auto 0;
+pointer-events:none;user-select:none;filter:brightness(1.3)}
 .login .madeby{margin-top:14px;font:11px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--ash)}
 @media (min-width:620px){
 .login{padding-right:280px}
 /* a notch smaller than the 30px default: the heading now has to fit beside the picture rather
    than across the whole window, and at 30px it is within a few pixels of wrapping */
 .login h1{font-size:27px}
-.login .gw{display:block;position:absolute;right:4px;top:50%;transform:translateY(-50%);
-width:280px;height:auto;pointer-events:none;user-select:none;filter:brightness(1.3)}
+/* wide enough now for her to leave the flow and stand beside the form instead */
+.login .gw{position:absolute;margin:0;right:4px;top:50%;transform:translateY(-50%);width:280px}
 }
 @media (min-width:760px){
 .login{padding-right:400px}
@@ -288,10 +298,10 @@ width:280px;height:auto;pointer-events:none;user-select:none;filter:brightness(1
 52%{transform:scale(1.12,.92);opacity:.97}
 66%{transform:scale(.85,1.18);opacity:.8}
 80%{transform:scale(1.08,.95);opacity:1}}
-@keyframes lt-glow{0%,100%{filter:drop-shadow(0 0 12px rgba(178,92,255,.75)) drop-shadow(0 0 4px rgba(240,208,255,.45))}
-22%{filter:drop-shadow(0 0 22px rgba(178,92,255,1)) drop-shadow(0 0 7px rgba(240,208,255,.75))}
-45%{filter:drop-shadow(0 0 14px rgba(178,92,255,.8)) drop-shadow(0 0 4px rgba(240,208,255,.5))}
-68%{filter:drop-shadow(0 0 24px rgba(178,92,255,1)) drop-shadow(0 0 8px rgba(240,208,255,.85))}}
+@keyframes lt-glow{0%,100%{filter:drop-shadow(0 0 12px rgba(163,42,255,.8)) drop-shadow(0 0 4px rgba(214,80,255,.85))}
+22%{filter:drop-shadow(0 0 22px rgba(163,42,255,1)) drop-shadow(0 0 7px rgba(224,114,255,1))}
+45%{filter:drop-shadow(0 0 14px rgba(163,42,255,.85)) drop-shadow(0 0 4px rgba(214,80,255,.9))}
+68%{filter:drop-shadow(0 0 24px rgba(163,42,255,1)) drop-shadow(0 0 9px rgba(224,114,255,1))}}
 @media (prefers-reduced-motion:no-preference){
 .title .lantern .lt-flame{animation:lt-flicker 1.1s ease-in-out infinite}
 .title .lantern{animation:lt-glow 2.3s ease-in-out infinite}
@@ -507,3 +517,41 @@ transition:opacity .15s ease,background .15s ease}
 .gc-root.users-resizing{cursor:col-resize;user-select:none}
 .gc-root.users-resizing .uz::after{opacity:1;background:var(--gold)}
 @media (max-width:430px){.users .uz{display:none}}
+
+/* Roulette bubble on the sign-on screen. Once you are in the room it is one of a pair, centred
+   as a unit with the threads bubble; before you sign on the threads bubble does not exist yet,
+   so the lone bubble sat oddly low against a screen whose content is all in the upper half.
+   .signed-on is added to .gc-root the moment the sign-on panel is swapped for the chat. */
+.gc-root:not(.signed-on) .roulette-toggle-fab{top:28%;transform:translateY(-50%)}
+
+/* ---------- Online/Friends panel on a phone: foldable, and draggable by its top edge ----------
+   Below 431px the panel is no longer a side column; it is a block between the chat log and the
+   composer, where every pixel it occupies is a pixel of conversation you cannot see. So there it
+   gets a fixed height you can drag, and a button that folds it down to just its "Online" bar --
+   the bar stays put rather than the panel vanishing, so there is always something to press to
+   bring it back. Both controls are phone-only: on a wider screen the panel is a column whose
+   height is set by the chat log beside it, and neither gesture would have anything to do. */
+.users .hd{position:relative}
+.users .umin{display:none;position:absolute;right:2px;top:50%;transform:translateY(-50%);
+width:26px;height:20px;padding:0;line-height:18px;font-size:10px;cursor:pointer;
+color:var(--gold);background:none;border:1px solid var(--gold-lo)}
+.users .umin:hover,.users .umin:focus-visible{color:var(--gold-hi);border-color:var(--gold);outline:none}
+.users .uzv{display:none;position:absolute;top:-10px;left:0;right:0;height:16px;z-index:6;
+cursor:row-resize;touch-action:none}
+.users .uzv::after{content:"";position:absolute;left:50%;top:6px;width:40px;height:3px;
+transform:translateX(-50%);border-radius:2px;background:var(--gold-lo);opacity:.55;
+transition:opacity .15s ease,background .15s ease}
+.users .uzv:hover::after,.users .uzv:focus-visible::after{opacity:1;background:var(--gold)}
+.users .uzv:focus-visible{outline:none}
+.gc-root.users-resizing-v{user-select:none}
+.gc-root.users-resizing-v .uzv::after{opacity:1;background:var(--gold)}
+@media (max-width:430px){
+  .users{height:var(--users-h,150px);min-height:0}
+  .users .umin,.users .uzv{display:block}
+  /* folded: the bar only. height:auto lets the grid row shrink to the header, and the lists,
+     the Friends heading and the hint all come out of the box rather than being clipped. */
+  .gc-root.users-folded .users{height:auto}
+  .gc-root.users-folded .users .list,
+  .gc-root.users-folded .users .frhd,
+  .gc-root.users-folded .users .hint{display:none}
+}
