@@ -331,3 +331,15 @@ text-shadow:0 0 12px rgba(201,162,74,.55),0 2px 0 #000,0 -1px 0 #000}
 display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:17px}
 @media (prefers-reduced-motion:no-preference){.rp-wheel{animation:rp-spin 14s linear infinite}}
 @keyframes rp-spin{to{transform:rotate(360deg)}}
+
+/* Gypsy-woman line art as a watermark in the chat log's dead space. Two background layers:
+   the artwork sits on top of .sunk's gradient, which has to be repeated here because a
+   background-image declaration would otherwise replace it (a gradient IS a background image).
+   It stays put while messages scroll over it -- background-attachment defaults to `scroll`,
+   which pins the background to the element's own box rather than to its scrolling content.
+   The gold tint and the opacity are baked into the PNG, since background-image takes no
+   CSS opacity of its own. */
+.log{background-image:url(../img/gypsy-woman.png),linear-gradient(180deg,#0f0d0b,#171310);
+background-repeat:no-repeat,no-repeat;background-position:center,center;
+background-size:230px auto,cover}
+@media (max-width:430px){.log{background-size:150px auto,cover}}
