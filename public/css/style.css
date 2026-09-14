@@ -48,7 +48,7 @@ filter:drop-shadow(0 0 12px rgba(163,42,255,.8)) drop-shadow(0 0 4px rgba(214,80
 /* fill-box so the flame scales from the wick at its own base, not from the whole 18x30 viewBox */
 .title .lantern .lt-flame{transform-box:fill-box;transform-origin:50% 100%}
 .body{display:grid;grid-template-columns:1fr var(--users-w,160px);gap:10px;padding:12px}
-@media (max-width:430px){
+@media (max-width:500px){
   .body{grid-template-columns:1fr}
   .users{display:none}
   .gc-root{padding:4px 0}
@@ -141,7 +141,7 @@ box-shadow:0 0 0 2px #a67ad1,0 0 0 3px #000,0 10px 30px #000,inset 0 0 30px #000
 .im .rz-ne{top:-4px;right:-4px;cursor:nesw-resize}
 .im .rz-sw{bottom:-4px;left:-4px;cursor:nesw-resize}
 .im .rz-se{bottom:-4px;right:-4px;cursor:nwse-resize}
-@media (max-width:430px){.im .rz{display:none}}
+@media (max-width:500px){.im .rz{display:none}}
 .im .bar{display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:move;user-select:none;touch-action:none;
 background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4bb0;box-shadow:0 2px 0 #000}
 .im .bar .gem{width:9px;height:9px;transform:rotate(45deg);background:radial-gradient(circle at 35% 35%,#e0b3ff,#7a4bb0 60%,#2a1638);border:1px solid #4d2f6b;flex:none}
@@ -165,7 +165,7 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
 .im .icomp .btn{color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
 .im .icomp .btn:hover{box-shadow:inset 0 1px 0 rgba(241,217,138,.15),inset 0 -2px 4px #000,0 0 0 1px #000,0 0 10px rgba(166,122,209,.6)}
 .im .icomp .btn.img,.im .icomp .btn.emo{font-size:15px;min-width:38px;padding:0 6px}
-@media (max-width:430px){.im{left:6px !important;right:6px;width:auto !important;height:60vh !important;bottom:6px;top:auto !important}.im .bar{cursor:default}}
+@media (max-width:500px){.im{left:6px !important;right:6px;width:auto !important;height:60vh !important;bottom:6px;top:auto !important}.im .bar{cursor:default}}
 /* whisper tray — closed/minimized PMs sit here as small tabs instead of popping open */
 .im-tray{position:fixed;right:8px;bottom:8px;z-index:24;display:flex;flex-direction:column-reverse;gap:6px;max-height:70vh;overflow-y:auto;overflow-x:hidden}
 .im-tab{display:flex;align-items:center;gap:6px;padding:6px 10px;cursor:pointer;user-select:none;font:700 12px Cinzel,Georgia,serif;letter-spacing:.5px;
@@ -177,7 +177,7 @@ box-shadow:0 0 0 1px #000,0 4px 14px #000}
 .im-tab .badge{flex:none;background:var(--blood);color:#fff;font:700 10px Georgia,serif;min-width:16px;height:16px;line-height:16px;text-align:center;border-radius:8px;padding:0 4px;box-shadow:0 0 0 1px #000}
 .im-tab.flash{animation:tabflash 1s ease-in-out 2}
 @keyframes tabflash{50%{box-shadow:0 0 0 1px #000,0 4px 14px #000,0 0 18px rgba(200,150,255,1)}}
-@media (max-width:430px){.im-tray{top:50px;right:6px;bottom:auto;flex-direction:column;max-height:50vh}}
+@media (max-width:500px){.im-tray{top:50px;right:6px;bottom:auto;flex-direction:column;max-height:50vh}}
 .users .list div::before{content:"";display:inline-block;width:7px;height:7px;transform:rotate(45deg);background:var(--leaf);
 border:1px solid var(--gold-lo);margin-right:7px;vertical-align:0;box-shadow:0 0 5px rgba(90,161,90,.7)}
 .compose{grid-column:1 / -1;display:grid;grid-template-columns:auto auto 1fr auto;gap:6px;align-items:stretch;position:relative}
@@ -373,7 +373,7 @@ box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 10px rgba(201,162,74,.35)}
   .gc-root.mobile-threads-open .threads-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
   height:100%;border-width:0;border-radius:0;z-index:40;transition:none}
 }
-@media (max-width:430px){.thread-toggle-fab{bottom:100px;right:8px}}
+@media (max-width:500px){.thread-toggle-fab{bottom:100px;right:8px}}
 
 /* option to hide the whisper "tray" tabs (and any open whisper windows) entirely — a purely
    client-side/visual toggle; whispers still arrive and are remembered, just not shown until re-enabled */
@@ -412,7 +412,7 @@ display:flex;align-items:center;justify-content:center;color:var(--gold);font-si
 .log{background-image:url(../img/gypsy-woman.png),linear-gradient(180deg,#0f0d0b,#171310);
 background-repeat:no-repeat,no-repeat;background-position:center,center;
 background-size:230px auto,cover}
-@media (max-width:430px){.log{background-size:150px auto,cover}}
+@media (max-width:500px){.log{background-size:150px auto,cover}}
 
 /* Pinned character name on the sign-on screen (see restoreIdentity() in app.js). The locked
    field is styled as a statement of who you already are rather than an input to fill in. */
@@ -464,7 +464,7 @@ box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 16px rgba(201,162,74,.7);outline:n
   height:100%;right:auto;border-width:0;z-index:40;transition:none}
   .gc-root.mobile-roulette-open .rp-back{display:inline-flex;align-items:center;justify-content:center}
 }
-@media (max-width:430px){.roulette-toggle-fab{bottom:154px;right:8px}}
+@media (max-width:500px){.roulette-toggle-fab{bottom:154px;right:8px}}
 
 /* "Signed on as ..." doubles as the rename control once you're in the room */
 .status #st.renamable{cursor:pointer;text-decoration:underline;text-decoration-color:var(--gold-lo);
@@ -477,7 +477,7 @@ text-underline-offset:3px}
    These come last on purpose, to override the bottom offsets set where each bubble is defined. */
 .thread-toggle-fab{top:50%;bottom:auto;transform:translateY(calc(-50% + 27px))}
 .roulette-toggle-fab{top:50%;bottom:auto;transform:translateY(calc(-50% - 27px))}
-@media (max-width:430px){
+@media (max-width:500px){
   .thread-toggle-fab{bottom:auto;right:8px}
   .roulette-toggle-fab{bottom:auto;right:8px}
 }
@@ -487,7 +487,7 @@ text-underline-offset:3px}
    squeezed one, and a fixed 300px simply ran off the right-hand edge there. A percentage scales
    with whatever the log actually is, so the figure always sits fully inside it. */
 .log{background-size:56% auto,cover;background-position:66% center,center}
-@media (max-width:430px){.log{background-size:52% auto,cover;background-position:64% center,center}}
+@media (max-width:500px){.log{background-size:52% auto,cover;background-position:64% center,center}}
 
 /* Admin names in deep red, wherever a name is drawn: the chat log, the Online list, the Friends
    list and the tap-a-name menu header. The colour is deliberately louder than the gold everyone
@@ -516,7 +516,7 @@ transition:opacity .15s ease,background .15s ease}
 .users .uz:focus-visible{outline:none}
 .gc-root.users-resizing{cursor:col-resize;user-select:none}
 .gc-root.users-resizing .uz::after{opacity:1;background:var(--gold)}
-@media (max-width:430px){.users .uz{display:none}}
+@media (max-width:500px){.users .uz{display:none}}
 
 /* Roulette bubble on the sign-on screen. Once you are in the room it is one of a pair, centred
    as a unit with the threads bubble; before you sign on the threads bubble does not exist yet,
@@ -545,13 +545,17 @@ transition:opacity .15s ease,background .15s ease}
 .users .uzv:focus-visible{outline:none}
 .gc-root.users-resizing-v{user-select:none}
 .gc-root.users-resizing-v .uzv::after{opacity:1;background:var(--gold)}
-@media (max-width:430px){
-  .users{height:var(--users-h,150px);min-height:0}
-  .users .umin,.users .uzv{display:block}
-  /* folded: the bar only. height:auto lets the grid row shrink to the header, and the lists,
-     the Friends heading and the hint all come out of the box rather than being clipped. */
-  .gc-root.users-folded .users{height:auto}
-  .gc-root.users-folded .users .list,
-  .gc-root.users-folded .users .frhd,
-  .gc-root.users-folded .users .hint{display:none}
-}
+/* These two controls appear whenever the panel is STACKED under the chat rather than standing
+   beside it -- .users-stacked is set by measuring where the panel actually landed (see app.js),
+   not by guessing a screen width. The first attempt keyed them off a 430px media query, which
+   is narrower than the newest large phones report, so on those the button and the grip were
+   never shown at all. Measuring the layout cannot drift out of step with it. */
+.gc-root.users-stacked .users{height:var(--users-h,150px);min-height:0}
+.gc-root.users-stacked .users .umin,.gc-root.users-stacked .users .uzv{display:block}
+.gc-root.users-stacked .users .uz{display:none} /* the sideways grip has no column to size */
+/* folded: the bar only. height:auto lets the grid row shrink to the header, and the lists, the
+   Friends heading and the hint all come out of the box rather than being clipped inside it. */
+.gc-root.users-stacked.users-folded .users{height:auto}
+.gc-root.users-stacked.users-folded .users .list,
+.gc-root.users-stacked.users-folded .users .frhd,
+.gc-root.users-stacked.users-folded .users .hint{display:none}
