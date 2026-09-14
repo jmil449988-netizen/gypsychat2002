@@ -112,3 +112,23 @@ create policy "reply as self" on public.thread_posts for insert to authenticated
     and (not is_banned(auth.uid()))
     and (not is_muted_or_cooling(auth.uid()))
   );
+
+-- 4. Pin search_path on every function in public ---------------------------------------------
+-- Separate advisor warning ("Function Search Path Mutable"), 9 functions. A SECURITY DEFINER
+-- function runs with the owner's privileges; without a pinned search_path it resolves
+-- unqualified names using the caller's, so a caller who can create a shadowing object gets the
+-- function to touch theirs with elevated rights. Not reachable here today -- anon and
+-- authenticated have no CREATE on public, and there is no way to run DDL through PostgREST --
+-- but it costs one line per function and stops a future grant from turning into a hole.
+do $do$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proconfig is null and p.prokind = 'f'
+  loop
+    execute 'alter function ' || r.sig || ' set search_path = public, pg_temp';
+  end loop;
+end
+$do$;
