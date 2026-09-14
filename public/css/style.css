@@ -411,3 +411,10 @@ text-underline-offset:3px}
   .thread-toggle-fab{bottom:auto;right:8px}
   .roulette-toggle-fab{bottom:auto;right:8px}
 }
+
+/* Watermark: a touch larger and nudged right of centre. Sized as a share of the log rather than
+   a fixed pixel width -- the log runs ~570px wide on a full desktop window but barely 260px in a
+   squeezed one, and a fixed 300px simply ran off the right-hand edge there. A percentage scales
+   with whatever the log actually is, so the figure always sits fully inside it. */
+.log{background-size:56% auto,cover;background-position:66% center,center}
+@media (max-width:430px){.log{background-size:52% auto,cover;background-position:64% center,center}}
