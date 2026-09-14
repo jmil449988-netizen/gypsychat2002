@@ -395,3 +395,8 @@ box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 16px rgba(201,162,74,.7);outline:n
   .gc-root.mobile-roulette-open .rp-back{display:inline-flex;align-items:center;justify-content:center}
 }
 @media (max-width:430px){.roulette-toggle-fab{bottom:154px;right:8px}}
+
+/* "Signed on as ..." doubles as the rename control once you're in the room */
+.status #st.renamable{cursor:pointer;text-decoration:underline;text-decoration-color:var(--gold-lo);
+text-underline-offset:3px}
+.status #st.renamable:hover{color:var(--gold-hi);text-decoration-color:var(--gold)}
