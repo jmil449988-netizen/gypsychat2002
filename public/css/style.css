@@ -25,7 +25,7 @@ background:linear-gradient(180deg,#2e261d,#1a1511);border-bottom:2px solid var(-
 text-shadow:0 0 10px rgba(201,162,74,.55),0 2px 0 #000,0 -1px 0 #000}
 .title .gem{width:12px;height:12px;background:radial-gradient(circle at 35% 35%,#ff6b5a,#8a0f0a 60%,#3a0402);
 transform:rotate(45deg);border:1px solid var(--gold-lo);box-shadow:0 0 8px rgba(179,38,30,.7);flex:none}
-.body{display:grid;grid-template-columns:1fr 160px;gap:10px;padding:12px}
+.body{display:grid;grid-template-columns:1fr var(--users-w,160px);gap:10px;padding:12px}
 @media (max-width:430px){
   .body{grid-template-columns:1fr}
   .users{display:none}
@@ -431,3 +431,19 @@ text-underline-offset:3px}
 .users .list div.self.admin,.users .list div.self.admin:hover{color:var(--admin)}
 .users .list div.blocked.admin{color:#5f5648;text-shadow:none}
 .nmenu .hd .hd-name.admin{color:var(--admin);text-shadow:0 0 8px rgba(209,59,47,.45)}
+/* Drag handle on the left edge of the Online/Friends panel -- horizontal only, by design: the
+   column's height is already tied to the chat log beside it, so a vertical drag would just
+   desynchronise the two. Width is driven by --users-w on .body rather than by an inline width,
+   so the grid track and the panel can never disagree about how wide the column is.
+   Hidden below 431px, where the panel itself is hidden and the layout is a single column. */
+.users{position:relative}
+.users .uz{position:absolute;top:0;bottom:0;left:-9px;width:12px;z-index:6;cursor:col-resize;
+touch-action:none}
+.users .uz::after{content:"";position:absolute;top:50%;left:4px;width:3px;height:34px;
+transform:translateY(-50%);border-radius:2px;background:var(--gold-lo);opacity:.55;
+transition:opacity .15s ease,background .15s ease}
+.users .uz:hover::after,.users .uz:focus-visible::after{opacity:1;background:var(--gold)}
+.users .uz:focus-visible{outline:none}
+.gc-root.users-resizing{cursor:col-resize;user-select:none}
+.gc-root.users-resizing .uz::after{opacity:1;background:var(--gold)}
+@media (max-width:430px){.users .uz{display:none}}
