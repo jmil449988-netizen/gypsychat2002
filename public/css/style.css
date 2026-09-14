@@ -343,3 +343,11 @@ display:flex;align-items:center;justify-content:center;color:var(--gold);font-si
 background-repeat:no-repeat,no-repeat;background-position:center,center;
 background-size:230px auto,cover}
 @media (max-width:430px){.log{background-size:150px auto,cover}}
+
+/* Pinned character name on the sign-on screen (see restoreIdentity() in app.js). The locked
+   field is styled as a statement of who you already are rather than an input to fill in. */
+#sn.locked{color:var(--gold-hi);cursor:default;font-family:Cinzel,Georgia,serif;letter-spacing:1px}
+#sn.locked:focus{outline:none}
+.sn-note{margin:4px 0 2px;font-size:11px;font-style:italic;color:var(--ash);text-align:center;line-height:1.5}
+.sn-reset{background:none;border:none;padding:0;font:inherit;color:var(--gold);text-decoration:underline;cursor:pointer}
+.sn-reset:hover,.sn-reset:focus-visible{color:var(--gold-hi);outline:none}
