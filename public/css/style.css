@@ -374,3 +374,24 @@ color:var(--gold);margin-bottom:6px}
 .privacy-note b{color:var(--bone)}
 .save-actions{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px 14px}
 .save-actions .btn{height:30px;padding:0 14px}
+
+/* Mobile bubble for the roulette teaser, twinned with the threads bubble. Below 1340px the
+   left gutter the panel normally lives in does not exist, so the panel becomes a full-screen
+   takeover reached from its own floating button -- exactly how the threads board behaves. */
+.roulette-toggle-fab{display:none;position:fixed;right:12px;bottom:158px;z-index:55;width:46px;height:46px;padding:0;
+align-items:center;justify-content:center;font:400 20px Cinzel,Georgia,serif;color:var(--gold);
+background:linear-gradient(180deg,#2e261d,#1a1511);border:2px solid var(--gold-lo);border-radius:50%;
+box-shadow:0 0 0 1px #000,0 4px 14px #000;cursor:pointer}
+.roulette-toggle-fab:hover,.roulette-toggle-fab:focus-visible{border-color:var(--gold);
+box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 16px rgba(201,162,74,.7);outline:none}
+.roulette-toggle-fab.open{color:#fff;border-color:var(--gold)}
+/* the "Back to chat" button only belongs to the full-screen mobile presentation */
+.rp-back{display:none;margin-top:22px;height:30px;padding:0 16px}
+@media (max-width:1339px){
+  .roulette-toggle-fab.ready{display:flex}
+  .gc-root.mobile-roulette-open .win{display:none}
+  .gc-root.mobile-roulette-open .roulette-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
+  height:100%;right:auto;border-width:0;z-index:40;transition:none}
+  .gc-root.mobile-roulette-open .rp-back{display:inline-flex;align-items:center;justify-content:center}
+}
+@media (max-width:430px){.roulette-toggle-fab{bottom:154px;right:8px}}
