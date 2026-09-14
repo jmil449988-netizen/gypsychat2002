@@ -65,7 +65,9 @@ border-bottom:1px solid var(--gold-lo);text-shadow:0 1px 0 #000}
 .nmenu{position:fixed;z-index:60;display:none;min-width:140px;padding:4px;
 background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double var(--gold-lo);box-shadow:0 0 0 1px #000,0 8px 24px #000}
 .nmenu.open{display:block}
-.nmenu .hd{font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);padding:4px 8px 5px;border-bottom:1px solid var(--gold-lo);margin-bottom:3px;text-align:center}
+.nmenu .hd{display:flex;align-items:center;justify-content:center;gap:8px;font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);padding:6px 10px 8px;border-bottom:1px solid var(--gold-lo);margin-bottom:3px;text-align:center}
+.nmenu .hd .hd-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nmenu .hd .ava-menu{width:30px;height:30px;font-size:14px;margin-right:0;flex:none;border-width:2px}
 .nmenu button{display:block;width:100%;text-align:left;font:inherit;color:var(--bone);background:none;border:1px solid transparent;padding:5px 8px;cursor:pointer}
 .nmenu button:hover,.nmenu button:focus-visible{color:var(--gold-hi);border-color:var(--gold-lo);background:rgba(201,162,74,.1);outline:none}
 .nmenu button.danger{color:#e07a7a}
