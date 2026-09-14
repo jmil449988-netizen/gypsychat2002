@@ -19,12 +19,26 @@ border:2px solid var(--gold-hi);}
 .win::after{top:-3px;right:-3px;border-left:none;border-bottom:none}
 .corner.bl{bottom:-3px;left:-3px;border-right:none;border-top:none}
 .corner.br{bottom:-3px;right:-3px;border-left:none;border-top:none}
-.title{display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 10px 6px;
+.title{display:flex;align-items:center;justify-content:center;gap:12px;padding:5px 10px 4px;
 background:linear-gradient(180deg,#2e261d,#1a1511);border-bottom:2px solid var(--gold-lo);box-shadow:0 2px 0 #000}
 .title .name{font:700 20px Cinzel,"Trajan Pro",Georgia,serif;letter-spacing:2px;color:var(--gold);
 text-shadow:0 0 10px rgba(201,162,74,.55),0 2px 0 #000,0 -1px 0 #000}
-.title .gem{width:12px;height:12px;background:radial-gradient(circle at 35% 35%,#ff6b5a,#8a0f0a 60%,#3a0402);
-transform:rotate(45deg);border:1px solid var(--gold-lo);box-shadow:0 0 8px rgba(179,38,30,.7);flex:none}
+/* The two hanging lanterns that flank the title. Drawn as inline SVG rather than a bitmap so they
+   stay crisp at any density and can be recoloured from the same gold variables as the rest of the
+   chrome -- and so the flame can be animated as its own element instead of as a sprite sheet.
+   The taller-than-wide box is why .title's vertical padding above is smaller than the old diamonds
+   needed: the lantern carries the bar's height now, so the header stays about where it was. */
+.title .lantern{width:15px;height:26px;flex:none;overflow:visible;
+filter:drop-shadow(0 0 9px rgba(178,92,255,.6))}
+.title .lantern .lt-hook{fill:none;stroke:var(--gold);stroke-width:1.1}
+.title .lantern .lt-cap{fill:var(--gold);stroke:var(--gold-lo);stroke-width:.6;stroke-linejoin:round}
+.title .lantern .lt-glass{fill:rgba(190,120,255,.2);stroke:none}
+.title .lantern .lt-pane{fill:none;stroke:var(--gold);stroke-width:1.1}
+.title .lantern .lt-bars{fill:none;stroke:var(--gold-lo);stroke-width:.7}
+.title .lantern .lt-flame-out{fill:#a855f7}
+.title .lantern .lt-flame-in{fill:#f0d0ff}
+/* fill-box so the flame scales from the wick at its own base, not from the whole 18x30 viewBox */
+.title .lantern .lt-flame{transform-box:fill-box;transform-origin:50% 100%}
 .body{display:grid;grid-template-columns:1fr var(--users-w,160px);gap:10px;padding:12px}
 @media (max-width:430px){
   .body{grid-template-columns:1fr}
@@ -236,8 +250,21 @@ text-shadow:0 0 14px rgba(201,162,74,.5),0 2px 0 #000}
 .admin-toggle{font:inherit;font-size:11px;font-style:italic;color:var(--ash);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline}
 .admin-toggle:hover,.admin-toggle:focus-visible{color:var(--gold-hi);outline:none}
 .hidden{display:none !important}
-@media (prefers-reduced-motion:no-preference){.title .gem{animation:pulse 3s ease-in-out infinite}}
-@keyframes pulse{50%{box-shadow:0 0 14px rgba(179,38,30,1)}}
+/* Flame: a squash-and-stretch flicker on the flame itself, plus a slower breath on the lantern's
+   outer glow. The two run at different, deliberately non-matching periods so the pair never settles
+   into a visible loop, and the right-hand lantern is offset again so the two don't flicker in step. */
+@keyframes lt-flicker{0%,100%{transform:scale(1,1);opacity:1}
+18%{transform:scale(.9,1.1);opacity:.9}
+36%{transform:scale(1.07,.94);opacity:1}
+54%{transform:scale(.95,1.05);opacity:.93}
+72%{transform:scale(1.04,.97);opacity:1}}
+@keyframes lt-glow{50%{filter:drop-shadow(0 0 15px rgba(178,92,255,1))}}
+@media (prefers-reduced-motion:no-preference){
+.title .lantern .lt-flame{animation:lt-flicker 1.6s ease-in-out infinite}
+.title .lantern{animation:lt-glow 3.1s ease-in-out infinite}
+.title .lantern:last-of-type .lt-flame{animation-duration:1.9s;animation-delay:-.7s}
+.title .lantern:last-of-type{animation-delay:-1.3s}
+}
 
 /* ---------- threads board (desktop-only side panel; blank space to the right of the room) ---------- */
 .threads-panel{position:fixed;top:6px;bottom:6px;left:calc(50% + 394px);width:260px;display:none;flex-direction:column;
