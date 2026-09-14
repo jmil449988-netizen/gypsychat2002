@@ -1306,13 +1306,72 @@ if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidd
 
 /* ---------- sign on ---------- */
 var adminMode = false;
+
+/* ---------- pinned identity for returning visitors ----------
+   The anonymous Supabase session is kept in localStorage, so closing the tab -- or the whole
+   browser -- does not end it: the same person comes back as the same account id, and the
+   server never times these sessions out. What used to drift was the NAME. The sign-on box let
+   you type a fresh one every visit and join() wrote it straight over the account's display
+   name, so one account could be "LoneBadger36" one night and "111" the next.
+
+   That is what broke friends lists. A friend is stored as an account id plus a snapshot of the
+   name at the moment they were added, and the list shows the person's CURRENT name when
+   they're online. So a regular who came back under a new name appeared in everyone's buddy
+   list as a stranger, and the person they'd added looked like they'd disappeared.
+
+   So: once this device holds a session with a claimed name, that name IS the identity. The
+   field is filled in and locked, and "Use a different name" is the deliberate way out.
+   (What this cannot fix is a different browser, a private window, or cleared site data --
+   there is no session to find there, so anonymous auth hands out a brand new account. Same
+   human, different id, and friendships genuinely don't carry across.) */
+var lockedName = null;
+
+function unlockName() {
+lockedName = null;
+var sn = $('sn');
+sn.readOnly = false; sn.value = ''; sn.classList.remove('locked');
+$('join').textContent = adminMode ? 'Login as Admin' : 'Enter the room';
+if ($('snNote')) $('snNote').classList.add('hidden');
+sn.focus();
+}
+
+async function restoreIdentity() {
+if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0 || !window.supabase) return;
+try {
+sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+var s = await sb.auth.getSession(); // reads localStorage only -- never creates an account
+var user = s.data.session && s.data.session.user;
+if (!user) return;
+var p = await sb.from('profiles').select('name').eq('user_id', user.id).maybeSingle();
+var n = p.data && p.data.name;
+if (!n) return;
+lockedName = n;
+var sn = $('sn');
+sn.value = n; sn.readOnly = true; sn.classList.add('locked');
+if (!adminMode) $('join').textContent = 'Enter as ' + n;
+if ($('snNote')) $('snNote').classList.remove('hidden');
+} catch (e) { /* first visit, or storage blocked -- fall through to the normal sign-on */ }
+}
+restoreIdentity();
+
+if ($('snReset')) {
+$('snReset').onclick = async function () {
+if (!confirm('Start over as a new character?\n\nYou will come back as a brand new person: your friends list and whispers on this device are left behind, and other people’s friends lists will no longer recognise you. "' + lockedName + '" stays yours for 30 days before anyone else can take it.')) return;
+try { if (sb) await sb.auth.signOut(); } catch (e) { /* local session is cleared either way */ }
+unlockName();
+};
+}
+
 if (adminToggle) {
 adminToggle.onclick = function () {
 adminMode = !adminMode;
 adminFields.classList.toggle('hidden', !adminMode);
 if ($('turnstileWrap')) $('turnstileWrap').classList.toggle('hidden', adminMode);
-$('join').textContent = adminMode ? 'Login as Admin' : 'Enter the room';
+$('join').textContent = adminMode ? 'Login as Admin' : (lockedName ? 'Enter as ' + lockedName : 'Enter the room');
 adminToggle.textContent = adminMode ? 'Use a character name instead' : 'Admin login';
+/* the pinned name belongs to the anonymous account, not to the admin login */
+$('sn').readOnly = !adminMode && !!lockedName;
+if ($('snNote')) $('snNote').classList.toggle('hidden', adminMode || !lockedName);
 fail('');
 (adminMode ? adminEmail : $('sn')).focus();
 };
@@ -1338,7 +1397,10 @@ var num = Math.floor(Math.random() * 90) + 10;
 return (a + b + num).slice(0, 16);
 }
 async function join() {
-var n = $('sn').value.trim(); fail('');
+/* A returning visitor re-enters under the name this device already holds -- see
+   restoreIdentity() below for why the name is pinned rather than re-typed each visit.
+   Admin sign-on is exempt: it authenticates as a different account entirely. */
+var n = (!adminMode && lockedName) ? lockedName : $('sn').value.trim(); fail('');
 if (!n) n = randomName();
 if (!/^[\w .'-]{2,16}$/.test(n)) { fail('2–16 letters, numbers, spaces or . \' -'); return; }
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0) { fail('Backend not configured — edit js/config.js.'); return; }
@@ -1378,6 +1440,9 @@ await sb.auth.refreshSession(); // updateUser() above doesn't rotate the JWT; re
 var claim = await sb.rpc('claim_name', { p_name: n });
 if (claim.error) throw claim.error;
 if (claim.data && claim.data.ok === false) {
+/* A pinned name can only fail here if it went stale (30 days away) and somebody else took it
+   in the meantime. Unlock the box rather than stranding them with a name they can't edit. */
+if (lockedName) unlockName();
 throw new Error(claim.data.reason === 'taken' ? 'That name is already taken.' : 'That name can’t be used. Try a different one.');
 }
 if (!adminMode) {
