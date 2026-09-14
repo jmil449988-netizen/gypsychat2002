@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=20">
+<link rel="stylesheet" href="./css/style.css?v=21">
 </head>
 <body>
 <div class="gc-root">
@@ -68,12 +68,13 @@
 <div class="gresults" id="gifResults"></div>
 </div>
 
-<aside class="roulette-panel" aria-label="Gypsy Roulette announcement">
+<aside class="roulette-panel" id="roulettePanel" aria-label="Gypsy Roulette announcement">
 <div class="rp-eyebrow">Coming Soon</div>
 <div class="rp-title">Gypsy<br>Roulette</div>
 <div class="rp-rule"></div>
 <div class="rp-blurb">Two minutes with a stranger.<br>Then the wheel turns again.</div>
 <div class="rp-wheel" aria-hidden="true"><span>✦</span></div>
+<button class="btn rp-back" type="button" id="rouletteBack">Back to chat</button>
 </aside>
 
 <div class="threads-panel" id="threadsPanel" role="complementary" aria-label="Threads board">
@@ -111,6 +112,7 @@
 </div>
 
 <button class="thread-toggle-fab" id="threadToggleBtn" type="button" aria-label="Open threads board">🧵</button>
+<button class="roulette-toggle-fab" id="rouletteToggleBtn" type="button" aria-label="Gypsy Roulette — coming soon">✦</button>
 </div>
 
 <div class="modal-overlay hidden" id="warnOverlay">
@@ -161,6 +163,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=1"></script>
-<script src="./js/app.js?v=26"></script>
+<script src="./js/app.js?v=27"></script>
 </body>
 </html>
