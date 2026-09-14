@@ -1365,7 +1365,21 @@ user = s.data.session && s.data.session.user;
 if (!user) { var a = await sb.auth.signInAnonymously(); if (a.error) throw a.error; user = a.data.user; }
 }
 await sb.auth.updateUser({ data: { name: n } });
-await sb.auth.refreshSession(); // updateUser() above doesn't rotate the JWT; refresh so auth.jwt() carries the new name for RLS checks
+await sb.auth.refreshSession(); // updateUser() above doesn't rotate the JWT; refresh so the session carries the new name
+/* Claim the name in the database. profiles.name -- NOT the JWT's user_metadata -- is what the
+   INSERT policies on messages/threads/thread_posts check. user_metadata is written by the user
+   (the updateUser call right above is all it takes), so anyone could set it to someone else's
+   name from the console and post as them; profiles rows are writable only by their owner and
+   carry a unique index on lower(name), so a name can be held by exactly one account. This also
+   makes the "name taken" check real -- it used to be browser-only. Claims go stale after 30
+   days of not signing on and are released automatically, so an abandoned anonymous session
+   can't squat a name forever. Fails CLOSED on purpose: without a claim, sending wouldn't work
+   anyway, so letting someone into the room would just strand them. */
+var claim = await sb.rpc('claim_name', { p_name: n });
+if (claim.error) throw claim.error;
+if (claim.data && claim.data.ok === false) {
+throw new Error(claim.data.reason === 'taken' ? 'That name is already taken.' : 'That name can’t be used. Try a different one.');
+}
 if (!adminMode) {
 // Server-side half of the Turnstile check, plus IP-based fresh-identity churn tracking --
 // see supabase/join_ip_log_feature.sql and the verify-join edge function. Fails OPEN on
