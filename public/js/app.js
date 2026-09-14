@@ -237,6 +237,23 @@ grip.addEventListener('dblclick', function () { usersW = USERS_W_DEFAULT; applyU
    Folding leaves the "Online" bar in place rather than hiding the panel outright, so there is
    always something to press to bring it back. Both the height and the folded state are
    remembered per browser, like the width above. */
+/* Is the panel stacked UNDER the chat log, or standing beside it as a column? The fold button
+   and the top-edge grip only make sense in the stacked layout, and the first version decided
+   that with a max-width:430px media query -- which the newest large phones sit just outside, so
+   on those neither control ever appeared. This measures the result instead of predicting it:
+   if the panel's top edge is at or below the log's bottom edge, they are stacked. That stays
+   correct whatever the breakpoint is, and through a rotation. */
+function updateUsersStacked() {
+var u = $('users');
+if (!gcRoot || !u || u.classList.contains('hidden')) return;
+var ur = u.getBoundingClientRect(), lr = log.getBoundingClientRect();
+if (!ur.width || !lr.width) return; // nothing laid out yet; leave the last answer alone
+gcRoot.classList.toggle('users-stacked', ur.top >= lr.bottom - 2);
+}
+window.addEventListener('resize', updateUsersStacked);
+/* iOS reports the new size a beat after orientationchange fires, so re-measure once it settles */
+window.addEventListener('orientationchange', function () { setTimeout(updateUsersStacked, 300); });
+
 var USERS_H_MIN = 84, USERS_H_DEFAULT = 150;
 var usersH = USERS_H_DEFAULT, usersFolded = false;
 function usersHMax() { return Math.max(USERS_H_MIN + 40, Math.round(window.innerHeight * 0.6)); }
@@ -1900,6 +1917,7 @@ Object.keys(wins).forEach(function (id) { updateTab(id); });
 
 $('login').classList.add('hidden'); log.classList.remove('hidden'); $('users').classList.remove('hidden'); $('compose').classList.remove('hidden');
 if (gcRoot) gcRoot.classList.add('signed-on');
+updateUsersStacked(); // the panel only has a size now that it is no longer hidden
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
 if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
 /* Anonymous accounts live in this browser's storage and nowhere else, so the 🔑 (and the nudge
