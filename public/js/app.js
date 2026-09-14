@@ -27,6 +27,12 @@ var wins = {}, unread = {}, seen = {};
 var blocked = {}; // user id -> name (people I've blocked)
 var friends = {}; // user id -> {name, group} (my buddy list; persists across sessions, independent of who's here now)
 var isAdmin = false, bans = {}, mutedUsers = {}; // bans/mutedUsers only loaded for admins
+/* Every admin's user id, so their names can be shown in red to everyone. Read from the admins
+   table rather than carried in presence on purpose: presence is written by each client, so a
+   self-reported "I'm an admin" flag could be faked from the console by anyone who wanted the
+   badge -- the same impersonation hole the name claim closed. The table is the authority. */
+var adminIds = {};
+function isAdminId(id) { return !!adminIds[id]; }
 var lastSend = 0;
 
 /* ---------- threads board state (a single flat "general" board, 4chan-style — no topics) ---------- */
@@ -359,7 +365,7 @@ if (seen[m.id]) return; seen[m.id] = 1;
 var mine = m.sender_id === me.id;
 var mentionsMe = !mine && bodyMentionsMe(m.body);
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them') + (mentionsMe ? ' mention-me' : '');
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + avatarHtml(m.sender_id, m.sender_name) + '<b class="who" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 log.appendChild(d); if (atBottom || mine) log.scrollTop = log.scrollHeight;
 if (!mine && document.hidden) bumpTitle();
@@ -374,6 +380,7 @@ ulist.innerHTML = ids.map(function (id) {
 var p = people[id], isSelf = id === me.id, status = p.status || 'online';
 var showStatus = !isSelf && !blocked[id] && status !== 'online';
 var classes = [isSelf ? 'self' : (blocked[id] ? 'blocked' : (unread[id] ? 'unread' : ''))];
+if (isAdminId(id)) classes.push('admin');
 if (showStatus) classes.push('st-' + status);
 var tag = showStatus ? ' <span class="stag">(' + status + ')</span>' : '';
 var title = (status === 'away' && p.awayMsg) ? ' title="' + esc(p.awayMsg) + '"' : '';
@@ -405,7 +412,7 @@ return na.localeCompare(nb);
 var rows = members.map(function (id) {
 var p = people[id], online = !!p, status = online ? (p.status || 'online') : null;
 var label = online ? p.name : friends[id].name;
-var cls = online ? ('f-' + status) : 'f-offline';
+var cls = (online ? ('f-' + status) : 'f-offline') + (isAdminId(id) ? ' admin' : '');
 var suffix = online ? (status !== 'online' ? ' <span class="off">(' + status + ')</span>' : '') : ' <span class="off">(offline)</span>';
 return '<div class="' + cls + '" tabindex="0" data-id="' + esc(id) + '">' + avatarHtml(id, label) + esc(label) + suffix + '</div>';
 }).join('');
@@ -618,7 +625,7 @@ if (friends[id]) items.push(['Move to Group', function () { var g = prompt('Grou
 if (isAdmin && mutedUsers[id]) items.push(['Unmute', function () { unmute(id, name); }]);
 if (isAdmin && !mutedUsers[id]) items.push(['Mute', function () { muteUser(id, name); }, 'danger']);
 if (isAdmin) items.push(['Kick', function () { var r = prompt('Reason for kicking ' + name + '? (optional)'); if (r !== null) kick(id, name, r); }, 'danger']);
-menu.innerHTML = '<div class="hd">' + avatarHtml(id, name, 'ava-menu') + '<span class="hd-name">' + esc(name) + '</span></div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
+menu.innerHTML = '<div class="hd">' + avatarHtml(id, name, 'ava-menu') + '<span class="hd-name' + (isAdminId(id) ? ' admin' : '') + '">' + esc(name) + '</span></div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
 menu.querySelectorAll('button').forEach(function (b) { b.onclick = function () { closeMenu(); items[+b.dataset.i][1](); }; });
 menu.classList.add('open');
 var r = anchor.getBoundingClientRect();
@@ -702,8 +709,10 @@ friends[id].group = g; addSys(friends[id].name + ' moved to ' + (g || 'Friends')
 
 /* ---------- kick (admins only; a kick is a ban) ---------- */
 async function loadAdmin() {
-var a = await sb.from('admins').select('user_id').eq('user_id', me.id).maybeSingle();
-isAdmin = !!(a.data && !a.error);
+var a = await sb.from('admins').select('user_id');
+adminIds = {};
+if (!a.error && a.data) a.data.forEach(function (x) { adminIds[x.user_id] = true; });
+isAdmin = isAdminId(me.id);
 if (isAdmin) {
 var b = await sb.from('bans').select('user_id, banned_name, expires_at'); if (!b.error) b.data.forEach(function (x) { bans[x.user_id] = x; });
 var mu = await sb.from('chat_moderation').select('user_id, user_name, muted, muted_permanent, offense_count').eq('muted', true);
