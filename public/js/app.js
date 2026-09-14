@@ -1475,7 +1475,12 @@ adminFields.classList.toggle('hidden', !emailMode);
 if ($('turnstileWrap')) $('turnstileWrap').classList.toggle('hidden', emailMode);
 $('join').textContent = emailMode ? 'Sign in' : (lockedName ? 'Enter as ' + lockedName : 'Enter the room');
 adminToggle.textContent = emailMode ? 'Use a character name instead' : 'Sign in with email';
-/* the pinned name belongs to the anonymous account, not to the admin login */
+/* Hide the character-name box entirely when signing in with email: that account already has a
+   name and it wins after authenticating, so leaving the box on screen (still showing whatever
+   this device's anonymous character is called) only suggests you're about to enter as someone
+   you're not. This is also the admin route -- admin rights come from the admins table, not from
+   which form you used -- so an admin signing in keeps whatever character their account holds. */
+if ($('nameFields')) $('nameFields').classList.toggle('hidden', emailMode);
 $('sn').readOnly = !emailMode && !!lockedName;
 if ($('snNote')) $('snNote').classList.toggle('hidden', emailMode || !lockedName);
 fail('');
