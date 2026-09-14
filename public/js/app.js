@@ -303,11 +303,12 @@ function avatarUrlFor(id) {
   if (me && id === me.id) return me.avatarUrl || null;
   return (people[id] && people[id].avatarUrl) || null;
 }
-function avatarHtml(id, name) {
+function avatarHtml(id, name, extraClass) {
   var url = avatarUrlFor(id);
-  if (url) return '<img class="ava" src="' + esc(url) + '" alt="" loading="lazy">';
+  var cls = extraClass ? ' ' + extraClass : '';
+  if (url) return '<img class="ava' + cls + '" src="' + esc(url) + '" alt="" loading="lazy">';
   var initial = String(name || '?').trim().charAt(0).toUpperCase() || '?';
-  return '<span class="ava-fallback" aria-hidden="true">' + esc(initial) + '</span>';
+  return '<span class="ava-fallback' + cls + '" aria-hidden="true">' + esc(initial) + '</span>';
 }
 
 /* ---------- main room log ---------- */
@@ -580,7 +581,7 @@ if (friends[id]) items.push(['Move to Group', function () { var g = prompt('Grou
 if (isAdmin && mutedUsers[id]) items.push(['Unmute', function () { unmute(id, name); }]);
 if (isAdmin && !mutedUsers[id]) items.push(['Mute', function () { muteUser(id, name); }, 'danger']);
 if (isAdmin) items.push(['Kick', function () { var r = prompt('Reason for kicking ' + name + '? (optional)'); if (r !== null) kick(id, name, r); }, 'danger']);
-menu.innerHTML = '<div class="hd">' + esc(name) + '</div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
+menu.innerHTML = '<div class="hd">' + avatarHtml(id, name, 'ava-menu') + '<span class="hd-name">' + esc(name) + '</span></div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
 menu.querySelectorAll('button').forEach(function (b) { b.onclick = function () { closeMenu(); items[+b.dataset.i][1](); }; });
 menu.classList.add('open');
 var r = anchor.getBoundingClientRect();
