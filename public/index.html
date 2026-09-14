@@ -56,7 +56,7 @@
 
 <div id="ims"></div>
 <div id="imTray" class="im-tray"></div>
-<div class="status"><span class="cell" id="st">Not signed on</span><button class="cell avabtn hidden" id="avaBtn" type="button" title="Set your profile picture" aria-label="Set your profile picture"><span class="ava-thumb" id="avaThumb">＋</span></button><input type="file" id="avaFile" class="hidden" accept="image/jpeg,image/png,image/gif,image/webp"><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status">● Online</button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds">🔊</button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs">💬</button><span class="cell" id="cnt">0 online</span></div>
+<div class="status"><span class="cell" id="st">Not signed on</span><button class="cell avabtn hidden" id="avaBtn" type="button" title="Set your profile picture" aria-label="Set your profile picture"><span class="ava-thumb" id="avaThumb">＋</span></button><input type="file" id="avaFile" class="hidden" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status">● Online</button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds">🔊</button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs">💬</button><span class="cell" id="cnt">0 online</span></div>
 </div>
 
 <div class="picker" id="picker" role="listbox" aria-label="Emoji"></div>
@@ -76,7 +76,7 @@
 <div class="tp-composebar">
 <button class="btn tp-img" type="button" id="tpNewImgBtn" title="Attach image">🖼️ Image</button>
 <button class="btn tp-img" type="button" id="tpNewGifBtn" title="Search GIFs">GIF</button>
-<input type="file" id="tpNewImgFile" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden">
+<input type="file" id="tpNewImgFile" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif" class="hidden">
 </div>
 <div class="tp-newactions"><button class="btn" type="button" id="tpNewCancel">Cancel</button><button class="btn" type="button" id="tpNewSubmit">Post</button></div>
 </div>
@@ -92,7 +92,7 @@
 <div class="tp-composebar">
 <button class="btn tp-img" type="button" id="tpReplyImgBtn" title="Attach image">🖼️</button>
 <button class="btn tp-img" type="button" id="tpReplyGifBtn" title="Search GIFs">GIF</button>
-<input type="file" id="tpReplyImgFile" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden">
+<input type="file" id="tpReplyImgFile" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif" class="hidden">
 </div>
 </div>
 <button class="btn" type="button" id="tpReplySend">Reply</button>
@@ -121,7 +121,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<!-- Converts iPhone HEIC/HEIF photos to JPEG in the browser before upload -- no browser can decode
+     HEIC itself in an <img>/<canvas>, so without this, photos straight from an iPhone camera roll
+     (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=1"></script>
-<script src="./js/app.js?v=21"></script>
+<script src="./js/app.js?v=22"></script>
 </body>
 </html>
