@@ -24,6 +24,22 @@ var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','�
 var sb = null, me = null, channel = null;
 var people = {}; // user id -> presence object {name, status, awayMsg} (from presence)
 var wins = {}, unread = {}, seen = {};
+/* Per-conversation "last read" marks. Sign-on replays your recent whispers through the very
+   same renderIM() that handles live ones, so every whisper you had already read came back as a
+   fresh red badge (and a fresh ding). These marks are what tell the two apart.
+   Stored in this browser for now. When read receipts land they move into a table, so the mark
+   follows you between devices instead of starting over on each one. */
+var dmRead = {};
+try { dmRead = JSON.parse(localStorage.getItem('gc_dm_read') || '{}') || {}; } catch (e) { dmRead = {}; }
+function saveDmRead() { try { localStorage.setItem('gc_dm_read', JSON.stringify(dmRead)); } catch (e) {} }
+function markDmRead(id, when) {
+var t = when ? new Date(when).getTime() : Date.now();
+if (!(dmRead[id] >= t)) { dmRead[id] = t; saveDmRead(); }
+}
+function alreadyRead(id, created) { return !!dmRead[id] && new Date(created).getTime() <= dmRead[id]; }
+/* True only while the sign-on history is being poured into the log, so the arrival reactions
+   (ding, flashing tab, raising the window, the away auto-reply) fire for live messages only. */
+var replayingHistory = false;
 var blocked = {}; // user id -> name (people I've blocked)
 var friends = {}; // user id -> {name, group} (my buddy list; persists across sessions, independent of who's here now)
 var isAdmin = false, bans = {}, mutedUsers = {}; // bans/mutedUsers only loaded for admins
@@ -213,6 +229,83 @@ e.preventDefault(); applyUsersWidth(); saveW();
 grip.addEventListener('dblclick', function () { usersW = USERS_W_DEFAULT; applyUsersWidth(); saveW(); });
 })();
 
+/* ---------- height of the Online/Friends panel, on a phone ----------
+   Below 431px the layout collapses to one column and the panel stops being a side column: it
+   becomes a block sitting between the chat log and the composer, where every pixel it takes is
+   a pixel of conversation you cannot see. So on that layout it gets the opposite control from
+   the desktop one -- a vertical drag on its top edge, and a button to fold it away entirely.
+   Folding leaves the "Online" bar in place rather than hiding the panel outright, so there is
+   always something to press to bring it back. Both the height and the folded state are
+   remembered per browser, like the width above. */
+var USERS_H_MIN = 84, USERS_H_DEFAULT = 150;
+var usersH = USERS_H_DEFAULT, usersFolded = false;
+function usersHMax() { return Math.max(USERS_H_MIN + 40, Math.round(window.innerHeight * 0.6)); }
+function applyUsersHeight() {
+var bodyEl = document.querySelector('.body');
+if (bodyEl) bodyEl.style.setProperty('--users-h', usersH + 'px');
+}
+function applyUsersFold() {
+if (gcRoot) gcRoot.classList.toggle('users-folded', usersFolded);
+var b = $('usersMin');
+if (!b) return;
+b.textContent = usersFolded ? '▲' : '▼';
+b.setAttribute('aria-expanded', usersFolded ? 'false' : 'true');
+b.title = usersFolded ? 'Show the online and friends list' : 'Hide the online and friends list';
+b.setAttribute('aria-label', b.title);
+}
+try {
+var savedH = parseInt(localStorage.getItem('gc_users_h'), 10);
+if (savedH >= USERS_H_MIN) usersH = savedH;
+usersFolded = localStorage.getItem('gc_users_folded') === '1';
+} catch (e) {}
+applyUsersHeight(); applyUsersFold();
+
+(function () {
+var btn = $('usersMin');
+if (btn) btn.onclick = function () {
+usersFolded = !usersFolded;
+try { localStorage.setItem('gc_users_folded', usersFolded ? '1' : '0'); } catch (e) {}
+applyUsersFold();
+};
+var grip = $('usersResizeV');
+if (!grip) return;
+var startY = 0, startH = 0, dragging = false;
+function clampH(h) { return Math.max(USERS_H_MIN, Math.min(usersHMax(), Math.round(h))); }
+grip.addEventListener('pointerdown', function (e) {
+/* dragging the folded panel open is the same gesture as resizing it, so unfold first rather
+   than making people press the button before they can drag */
+if (usersFolded) { usersFolded = false; try { localStorage.setItem('gc_users_folded', '0'); } catch (err) {} applyUsersFold(); }
+dragging = true; startY = e.clientY; startH = usersH;
+try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+if (gcRoot) gcRoot.classList.add('users-resizing-v');
+e.preventDefault();
+});
+grip.addEventListener('pointermove', function (e) {
+if (!dragging) return;
+/* the grip is on the panel's TOP edge, so dragging up (negative dy) makes it taller */
+usersH = clampH(startH - (e.clientY - startY));
+applyUsersHeight();
+});
+function endDragV(e) {
+if (!dragging) return;
+dragging = false;
+try { grip.releasePointerCapture(e.pointerId); } catch (err) {}
+if (gcRoot) gcRoot.classList.remove('users-resizing-v');
+try { localStorage.setItem('gc_users_h', String(usersH)); } catch (err) {}
+}
+grip.addEventListener('pointerup', endDragV);
+grip.addEventListener('pointercancel', endDragV);
+grip.addEventListener('keydown', function (e) {
+var step = e.shiftKey ? 40 : 16;
+if (e.key === 'ArrowUp') usersH = clampH(usersH + step);
+else if (e.key === 'ArrowDown') usersH = clampH(usersH - step);
+else if (e.key === 'Home') usersH = USERS_H_DEFAULT;
+else return;
+e.preventDefault(); applyUsersHeight();
+try { localStorage.setItem('gc_users_h', String(usersH)); } catch (err) {}
+});
+})();
+
 /* ---------- tab title flash for unseen activity while the tab isn't focused ---------- */
 var BASE_TITLE = document.title, unreadTitle = 0;
 function bumpTitle() { unreadTitle++; document.title = '(' + unreadTitle + ') ' + BASE_TITLE; }
@@ -393,6 +486,30 @@ function bodyHtml(body) {
   return highlightMentions(linkify(wrapEmoji(esc(body))));
 }
 
+/* A GIF or photo arrives as an <img> with no width or height yet. The browser lays it out at
+   zero height, we scroll to the bottom, and only THEN does the picture load -- growing the log
+   underneath us and pushing the newest message back up out of view. So whenever a message
+   carries images, re-stick to the bottom as each one finishes loading.
+   The guard matters: someone may have scrolled up to read back while the picture was still
+   downloading, and yanking them to the bottom then would be worse than the original bug. Only
+   re-stick if they are still within roughly that image's own height of the bottom, which is
+   true exactly when the loading image is what pushed them away. */
+function stickImages(container, el) {
+var imgs = el.querySelectorAll ? el.querySelectorAll('img') : null;
+if (!imgs || !imgs.length) return;
+for (var i = 0; i < imgs.length; i++) {
+(function (im) {
+if (im.complete) return;
+var after = function () {
+var gap = container.scrollHeight - container.scrollTop - container.clientHeight;
+if (gap <= (im.offsetHeight || 0) + 60) container.scrollTop = container.scrollHeight;
+};
+im.addEventListener('load', after);
+im.addEventListener('error', after);
+})(imgs[i]);
+}
+}
+
 /* ---------- profile pictures (small, persistent avatars) ----------
    The URL lives in two places: profiles.avatar_url (loaded on join, so it survives across
    sessions) and, for whoever is currently in the room, presence (so everyone sees a change live
@@ -425,9 +542,10 @@ var mentionsMe = !mine && bodyMentionsMe(m.body);
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them') + (mentionsMe ? ' mention-me' : '');
 d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-log.appendChild(d); if (atBottom || mine) log.scrollTop = log.scrollHeight;
-if (!mine && document.hidden) bumpTitle();
-if (mentionsMe) playSound('ding');
+log.appendChild(d);
+if (atBottom || mine) { log.scrollTop = log.scrollHeight; stickImages(log, d); }
+if (!mine && document.hidden && !replayingHistory) bumpTitle();
+if (mentionsMe && !replayingHistory) playSound('ding');
 }
 function handleMessage(m) { if (blocked[m.sender_id]) return; if (m.recipient_id) renderIM(m); else renderRoom(m); }
 
@@ -602,9 +720,14 @@ badge.classList.toggle('hidden', !n);
 function openIM(id, name, focus) {
 var w = ensureWin(id, name);
 w.minimized = false; w.el.classList.remove('hidden'); front(w.el);
-unread[id] = 0; renderPeople();
+unread[id] = 0; markDmRead(id); renderPeople();
 updateTab(id);
 if (focus) w.ta.focus();
+/* A hidden element has no layout, so while the window sat minimised the browser had nowhere to
+   keep its scroll offset and clamped it to zero -- reopening a whisper dropped you at the OLDEST
+   message in the conversation. Put it back on the newest, a frame later so the window has been
+   laid out again by then. */
+requestAnimationFrame(function () { w.log.scrollTop = w.log.scrollHeight; });
 return w;
 }
 function minimizeIM(id) {
@@ -632,9 +755,12 @@ var otherName = mine ? ((people[otherId] && people[otherId].name) || m.recipient
 var w = ensureWin(otherId, otherName); // never pops the window open on its own — see note above
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them');
 d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + avatarHtml(m.sender_id, m.sender_name) + '<b>' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
-w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight;
-if (!mine) {
-if (w.minimized || document.activeElement !== w.ta) { unread[otherId] = (unread[otherId] || 0) + 1; renderPeople(); updateTab(otherId); }
+w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
+if (!mine && !alreadyRead(otherId, m.created_at)) {
+if (w.minimized || document.activeElement !== w.ta) { unread[otherId] = (unread[otherId] || 0) + 1; if (!replayingHistory) { renderPeople(); updateTab(otherId); } }
+else markDmRead(otherId, m.created_at); // you are sitting in the window with the cursor in it
+}
+if (!mine && !replayingHistory) {
 if (!w.minimized) front(w.el);
 else if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
 playSound('ding');
@@ -816,7 +942,7 @@ if (channel) { channel.unsubscribe(); channel = null; }
 unsubscribeThreads();
 if (threadsPanel) { threadsPanel.classList.remove('ready'); }
 if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
-if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); }
+if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('signed-on'); }
 openThreadId = null;
 clearTimeout(idleTimer);
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
@@ -1237,7 +1363,7 @@ if (isAdmin) html += ' <button type="button" class="tp-del" data-id="' + esc(Str
 d.innerHTML = html;
 var atBottom = tpPosts.scrollHeight - tpPosts.scrollTop - tpPosts.clientHeight < 60;
 tpPosts.appendChild(d);
-if (atBottom) tpPosts.scrollTop = tpPosts.scrollHeight;
+if (atBottom) { tpPosts.scrollTop = tpPosts.scrollHeight; stickImages(tpPosts, d); }
 }
 /* ---------- delete threads / replies (admins only) ---------- */
 function removeThreadLocally(id) {
@@ -1400,19 +1526,39 @@ tpReplyGifBtn.onclick = function () { openGifPicker('', 'thread-reply', tpReplyG
 }
 /* mobile toggle: below the 1340px breakpoint there's no blank space for a persistent side panel,
    so a floating button swaps the whole screen between the chat window and the threads board. */
-/* Coming back from a full-screen panel used to dump you at the very top of the chat window.
-   The panel hides .win outright, so the browser has no scroll position left to restore and
-   resets to 0 -- on a phone that means staring at the title bar with the composer and the
-   friends list somewhere below the fold. Put the view back at the bottom instead, which is
-   where everything you actually reach for lives. Two frames: one for the browser to lay .win
-   out again, one for the scroll to stick on iOS Safari. */
-function returnToChatBottom() {
-if (!window.matchMedia('(max-width:1339px)').matches) return;
+/* Opening a full-screen panel hides .win outright, so the browser has no scroll position left
+   to restore and resets everything to 0 -- coming back used to dump you at the very top of the
+   chat window, staring at the title bar. Jumping to the bottom instead fixed that but threw
+   away your place just as rudely if you were reading back through the log.
+   So: take a note of where you were on the way out, and put you back there on the way in.
+   The one deliberate exception is the bottom -- if you left while pinned to the newest message,
+   you come back pinned to the newest message, including whatever arrived while you were away,
+   rather than to the older message that happened to be at that pixel offset.
+   Two frames on the way back: one for the browser to lay .win out again, one for the scroll to
+   actually stick on iOS Safari. */
+var chatScroll = null;
+function isNarrow() { return window.matchMedia('(max-width:1339px)').matches; }
+function logVisible() { return log && !log.classList.contains('hidden'); }
+function rememberChatScroll() {
+if (!isNarrow()) return;
+chatScroll = {
+page: window.scrollY || document.documentElement.scrollTop || 0,
+log: logVisible() ? log.scrollTop : null,
+atBottom: logVisible() ? (log.scrollHeight - log.scrollTop - log.clientHeight < 40) : true
+};
+}
+function returnToChat() {
+if (!isNarrow()) return;
+var st = chatScroll;
 requestAnimationFrame(function () {
 requestAnimationFrame(function () {
-var h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-window.scrollTo(0, h);
-if (log && !log.classList.contains('hidden')) log.scrollTop = log.scrollHeight;
+if (!st) { // never saw the way out (e.g. rotated into this width) -- the bottom is the safe guess
+window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+if (logVisible()) log.scrollTop = log.scrollHeight;
+return;
+}
+window.scrollTo(0, st.page);
+if (logVisible() && st.log !== null) log.scrollTop = st.atBottom ? log.scrollHeight : st.log;
 });
 });
 }
@@ -1425,8 +1571,8 @@ var open = gcRoot.classList.toggle('mobile-threads-open');
 threadToggleBtn.classList.toggle('open', open);
 threadToggleBtn.textContent = open ? '💬' : '🧵';
 threadToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Open threads board');
-if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidden'); }
-else returnToChatBottom();
+if (open) { rememberChatScroll(); renderThreadList(); if (!openThreadId) tpList.classList.remove('hidden'); }
+else returnToChat();
 };
 }
 
@@ -1446,10 +1592,10 @@ if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
 var open = gcRoot.classList.toggle('mobile-roulette-open');
 rouletteToggleBtn.classList.toggle('open', open);
 rouletteToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Gypsy Roulette — coming soon');
-if (!open) returnToChatBottom();
+if (open) rememberChatScroll(); else returnToChat();
 };
 }
-if ($('rouletteBack')) $('rouletteBack').onclick = function () { closeMobileRoulette(); returnToChatBottom(); };
+if ($('rouletteBack')) $('rouletteBack').onclick = function () { closeMobileRoulette(); returnToChat(); };
 /* unlike the threads bubble this one needs no account, so it is live from the sign-on screen --
    the same as the side panel, which visitors already see before they enter */
 if (rouletteToggleBtn) rouletteToggleBtn.classList.add('ready');
@@ -1744,9 +1890,16 @@ await channel.track({ name: n, status: 'online', awayMsg: '', avatarUrl: me.avat
 // history: recent room messages plus my recent whispers (RLS makes the server only return what I may see)
 var h = await sb.from('messages').select('*').eq('room', C.ROOM || 'main').order('created_at', { ascending: false }).limit(C.HISTORY || 200);
 if (h.error) throw h.error;
+replayingHistory = true;
 h.data.reverse().forEach(handleMessage);
+replayingHistory = false;
+/* Badges were accumulated silently during the replay above; paint them once, now, rather than
+   re-rendering the whole people list on every one of up to 200 historical messages. */
+renderPeople();
+Object.keys(wins).forEach(function (id) { updateTab(id); });
 
 $('login').classList.add('hidden'); log.classList.remove('hidden'); $('users').classList.remove('hidden'); $('compose').classList.remove('hidden');
+if (gcRoot) gcRoot.classList.add('signed-on');
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
 if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
 /* Anonymous accounts live in this browser's storage and nowhere else, so the 🔑 (and the nudge
