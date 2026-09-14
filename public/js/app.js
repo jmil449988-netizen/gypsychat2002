@@ -527,6 +527,30 @@ im.addEventListener('error', after);
 }
 }
 
+/* Landing on the newest message at sign-on is harder than one scrollTop assignment, because the
+   log keeps growing for a second or two AFTER the history is in it: avatars and GIFs finish
+   downloading, and the two webfonts arrive and re-flow every line. Each of those pushes the
+   bottom further down, leaving you parked short of it.
+   So hold the bottom for a short settling window rather than jumping once -- on each image that
+   loads inside the log, and once the fonts report ready. It lets go the moment you scroll away
+   yourself, so it can never fight someone who has started reading back through the backlog. */
+function pinLogBottom(ms) {
+var released = false;
+function jump() { if (!released) log.scrollTop = log.scrollHeight; }
+function onScroll() { if (log.scrollHeight - log.scrollTop - log.clientHeight > 80) release(); }
+function release() {
+if (released) return;
+released = true;
+log.removeEventListener('scroll', onScroll);
+log.removeEventListener('load', jump, true);
+}
+log.addEventListener('scroll', onScroll, { passive: true });
+log.addEventListener('load', jump, true); // capture: 'load' from an <img> does not bubble
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(jump);
+requestAnimationFrame(function () { requestAnimationFrame(jump); });
+setTimeout(release, ms || 4000);
+}
+
 /* ---------- profile pictures (small, persistent avatars) ----------
    The URL lives in two places: profiles.avatar_url (loaded on join, so it survives across
    sessions) and, for whoever is currently in the room, presence (so everyone sees a change live
@@ -1907,6 +1931,11 @@ await channel.track({ name: n, status: 'online', awayMsg: '', avatarUrl: me.avat
 // history: recent room messages plus my recent whispers (RLS makes the server only return what I may see)
 var h = await sb.from('messages').select('*').eq('room', C.ROOM || 'main').order('created_at', { ascending: false }).limit(C.HISTORY || 200);
 if (h.error) throw h.error;
+/* Show the room BEFORE the history goes into it. This used to be the other way round, and a
+   hidden element has no layout: every "scroll to the bottom" during the replay was setting
+   scrollTop on a box whose scrollHeight was 0, so all of it was silently discarded and the log
+   was revealed sitting at the very top, on the oldest message in the backlog. */
+$('login').classList.add('hidden'); log.classList.remove('hidden'); $('users').classList.remove('hidden'); $('compose').classList.remove('hidden');
 replayingHistory = true;
 h.data.reverse().forEach(handleMessage);
 replayingHistory = false;
@@ -1914,8 +1943,6 @@ replayingHistory = false;
    re-rendering the whole people list on every one of up to 200 historical messages. */
 renderPeople();
 Object.keys(wins).forEach(function (id) { updateTab(id); });
-
-$('login').classList.add('hidden'); log.classList.remove('hidden'); $('users').classList.remove('hidden'); $('compose').classList.remove('hidden');
 if (gcRoot) gcRoot.classList.add('signed-on');
 updateUsersStacked(); // the panel only has a size now that it is no longer hidden
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
@@ -1936,6 +1963,7 @@ if (threadToggleBtn) threadToggleBtn.classList.add('ready');
 if (window.matchMedia('(min-width:1340px)').matches) addSys('Tip: there\'s a Threads board to the right — general chat, no topics, post anything.');
 else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.');
 }
+pinLogBottom();
 resetIdle();
 msg.focus();
 } catch (e) {
