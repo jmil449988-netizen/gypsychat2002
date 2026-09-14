@@ -418,3 +418,16 @@ text-underline-offset:3px}
    with whatever the log actually is, so the figure always sits fully inside it. */
 .log{background-size:56% auto,cover;background-position:66% center,center}
 @media (max-width:430px){.log{background-size:52% auto,cover;background-position:64% center,center}}
+
+/* Admin names in deep red, wherever a name is drawn: the chat log, the Online list, the Friends
+   list and the tap-a-name menu header. The colour is deliberately louder than the gold everyone
+   else wears, with a faint glow so it still reads against the near-black panels. Which names get
+   it comes from the admins table, never from presence -- see isAdminId() in app.js. */
+:root{--admin:#d13b2f}
+.log .m b.who.admin{color:var(--admin);text-shadow:0 0 8px rgba(209,59,47,.45)}
+.log .me b.who.admin,.log .them b.who.admin{color:var(--admin)}
+.users .list div.admin{color:var(--admin);text-shadow:0 0 7px rgba(209,59,47,.4)}
+.users .list div.admin:hover,.users .list div.admin:focus-visible{color:#ef6a5c}
+.users .list div.self.admin,.users .list div.self.admin:hover{color:var(--admin)}
+.users .list div.blocked.admin{color:#5f5648;text-shadow:none}
+.nmenu .hd .hd-name.admin{color:var(--admin);text-shadow:0 0 8px rgba(209,59,47,.45)}
