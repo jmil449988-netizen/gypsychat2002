@@ -400,3 +400,14 @@ box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 16px rgba(201,162,74,.7);outline:n
 .status #st.renamable{cursor:pointer;text-decoration:underline;text-decoration-color:var(--gold-lo);
 text-underline-offset:3px}
 .status #st.renamable:hover{color:var(--gold-hi);text-decoration-color:var(--gold)}
+
+/* Float the two bubbles at the vertical middle of the screen rather than down by the composer:
+   easier to reach one-handed mid-scroll, and clear of the Send button and the iOS home bar.
+   The pair is centred as a unit -- 46px buttons with an 8px gap puts each 27px off centre.
+   These come last on purpose, to override the bottom offsets set where each bubble is defined. */
+.thread-toggle-fab{top:50%;bottom:auto;transform:translateY(calc(-50% + 27px))}
+.roulette-toggle-fab{top:50%;bottom:auto;transform:translateY(calc(-50% - 27px))}
+@media (max-width:430px){
+  .thread-toggle-fab{bottom:auto;right:8px}
+  .roulette-toggle-fab{bottom:auto;right:8px}
+}
