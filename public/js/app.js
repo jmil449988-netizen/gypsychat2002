@@ -180,6 +180,42 @@ return '<a href="' + u + '" target="_blank" rel="noopener noreferrer nofollow">'
 });
 }
 function setStatus(t) { st.textContent = t; }
+
+/* ---------- changing your character name ----------
+   Renaming keeps the account: same id, so the friends list, whispers and saved email all stay
+   put, and anyone who has added you sees the new name appear the moment presence updates.
+   profiles.name is the single source of truth the INSERT policies check, so it is written
+   FIRST via claim_name (which enforces the unique index and rejects a name someone else holds)
+   and only then mirrored into me.name and presence. Messages already in the log keep the name
+   you wore when you sent them -- sender_name is a snapshot on each row, not a live lookup. */
+async function renameCharacter(raw) {
+var n = (raw || '').trim();
+if (!me || !sb) return;
+if (!n) { addSys('Usage: /nick YourNewName'); return; }
+if (n === me.name) { addSys('That is already your name.'); return; }
+if (!/^[\w .'-]{2,16}$/.test(n)) { addSys('A name is 2–16 letters, numbers, spaces or . \' -'); return; }
+var r = await sb.rpc('claim_name', { p_name: n });
+if (r.error) { addSys('Could not change your name: ' + r.error.message); return; }
+if (r.data && r.data.ok === false) {
+addSys(r.data.reason === 'taken' ? 'Someone else is using the name ' + n + '.' : 'That name can’t be used.');
+return;
+}
+var was = me.name;
+me.name = n;
+lockedName = n; // so the sign-on screen offers the new name next time
+try { await sb.auth.updateUser({ data: { name: n } }); await sb.auth.refreshSession(); } catch (e) { /* display-only mirror */ }
+updateMyPresence();
+renderPeople();
+setStatus('Signed on as ' + me.name + (isAdmin ? ' (admin)' : ''));
+addSys('You are now known as ' + n + '. (Previously ' + was + '.)');
+}
+
+function promptRename() {
+if (!me) return;
+var n = prompt('Change your character name:', me.name);
+if (n !== null) renameCharacter(n);
+}
+if (st) st.onclick = function () { if (me) promptRename(); };
 function fail(t) { $('err').textContent = t; }
 
 /* ---------- spam cooldown / mute ----------
@@ -720,6 +756,7 @@ log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').cl
 if ($('statusBtn')) $('statusBtn').classList.add('hidden');
 if ($('avaBtn')) $('avaBtn').classList.add('hidden');
 if ($('saveBtn')) $('saveBtn').classList.add('hidden');
+if (st) st.classList.remove('renamable');
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
 $('login').classList.remove('hidden'); $('join').disabled = true;
 fail('You have been removed from the room.' + (reason ? ' Reason: ' + reason : ''));
@@ -756,7 +793,7 @@ var cmd = m[1].toLowerCase(), arg = m[2], rest = m[3].trim(), id;
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports' : '') + '. Click a name in the chat log or Online list for options. Click your status pill (bottom bar) to go Away/Busy. The ⚡ in a whisper window sends a buzz.'); return true;
+case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports' : '') + '. Click a name in the chat log or Online list for options. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
@@ -765,6 +802,7 @@ case 'addfriend': id = findId(arg); if (!id) { addSys('No one here is named ' + 
 case 'removefriend': id = Object.keys(friends).filter(function (k) { return (friends[k].name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not added a friend named ' + arg + '.'); return true; } removeFriend(id, friends[id].name); return true;
 case 'movegroup': id = Object.keys(friends).filter(function (k) { return (friends[k].name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not added a friend named ' + arg + '.'); return true; } moveFriendGroup(id, rest); return true;
 case 'friends': var fl = Object.keys(friends).map(function (k) { return friends[k].name + (people[k] ? ' (online)' : ' (offline)') + (friends[k].group ? ' [' + friends[k].group + ']' : ''); }); addSys(fl.length ? 'Friends: ' + fl.join(', ') : 'You have no friends added yet.'); return true;
+case 'nick': case 'name': await renameCharacter(rest ? (arg + ' ' + rest) : arg); return true;
 case 'setbio': case 'bio': var bioText = rest ? (arg + ' ' + rest) : arg; if (!bioText) { addSys('Usage: /setbio your text here'); return true; } var rb = await sb.from('profiles').upsert({ user_id: me.id, bio: sanitizeInput(bioText).slice(0, 300), updated_at: new Date().toISOString() }); if (rb.error) { addSys('Could not save your info: ' + rb.error.message); return true; } addSys('Your profile info has been updated.'); return true;
 case 'report': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot report yourself.'); return true; } if (!rest) { addSys('Usage: /report name reason'); return true; } report(id, people[id].name, rest); return true;
 case 'kick': if (!isAdmin) { addSys('Only an admin may kick.'); return true; } id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot kick yourself.'); return true; } kick(id, people[id].name, rest); return true;
@@ -1649,6 +1687,7 @@ if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
 isAnonAccount = user.is_anonymous !== false && !user.email;
 if ($('saveBtn')) $('saveBtn').classList.toggle('hidden', !isAnonAccount);
 setStatus('Signed on as ' + me.name + (isAdmin ? ' (admin)' : ''));
+if (st) st.classList.add('renamable');
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
 if (isAnonAccount) addSys('Heads up: ' + me.name + ' and your friends list are saved in this browser only. Tap the 🔑 below to add an email and keep them on any device.');
 if (threadsPanel) {
