@@ -713,7 +713,7 @@ if (channel) { channel.unsubscribe(); channel = null; }
 unsubscribeThreads();
 if (threadsPanel) { threadsPanel.classList.remove('ready'); }
 if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
-if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); }
+if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); }
 openThreadId = null;
 clearTimeout(idleTimer);
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
@@ -1295,16 +1295,59 @@ tpReplyGifBtn.onclick = function () { openGifPicker('', 'thread-reply', tpReplyG
 }
 /* mobile toggle: below the 1340px breakpoint there's no blank space for a persistent side panel,
    so a floating button swaps the whole screen between the chat window and the threads board. */
+/* Coming back from a full-screen panel used to dump you at the very top of the chat window.
+   The panel hides .win outright, so the browser has no scroll position left to restore and
+   resets to 0 -- on a phone that means staring at the title bar with the composer and the
+   friends list somewhere below the fold. Put the view back at the bottom instead, which is
+   where everything you actually reach for lives. Two frames: one for the browser to lay .win
+   out again, one for the scroll to stick on iOS Safari. */
+function returnToChatBottom() {
+if (!window.matchMedia('(max-width:1339px)').matches) return;
+requestAnimationFrame(function () {
+requestAnimationFrame(function () {
+var h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+window.scrollTo(0, h);
+if (log && !log.classList.contains('hidden')) log.scrollTop = log.scrollHeight;
+});
+});
+}
+
 if (threadToggleBtn) {
 threadToggleBtn.onclick = function () {
 closeGif();
+if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
 var open = gcRoot.classList.toggle('mobile-threads-open');
 threadToggleBtn.classList.toggle('open', open);
 threadToggleBtn.textContent = open ? '💬' : '🧵';
 threadToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Open threads board');
 if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidden'); }
+else returnToChatBottom();
 };
 }
+
+/* ---------- roulette teaser: same full-screen treatment on mobile as the threads board ---------- */
+var rouletteToggleBtn = $('rouletteToggleBtn');
+function closeMobileRoulette() {
+gcRoot.classList.remove('mobile-roulette-open');
+if (rouletteToggleBtn) {
+rouletteToggleBtn.classList.remove('open');
+rouletteToggleBtn.setAttribute('aria-label', 'Gypsy Roulette — coming soon');
+}
+}
+if (rouletteToggleBtn) {
+rouletteToggleBtn.onclick = function () {
+closeGif();
+if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
+var open = gcRoot.classList.toggle('mobile-roulette-open');
+rouletteToggleBtn.classList.toggle('open', open);
+rouletteToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Gypsy Roulette — coming soon');
+if (!open) returnToChatBottom();
+};
+}
+if ($('rouletteBack')) $('rouletteBack').onclick = function () { closeMobileRoulette(); returnToChatBottom(); };
+/* unlike the threads bubble this one needs no account, so it is live from the sign-on screen --
+   the same as the side panel, which visitors already see before they enter */
+if (rouletteToggleBtn) rouletteToggleBtn.classList.add('ready');
 
 /* ---------- saving an anonymous character with an email ----------
    An anonymous account is only ever as durable as this browser's localStorage: a different
