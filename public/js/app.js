@@ -155,6 +155,64 @@ updateDmToggleBtn();
 };
 }
 
+/* ---------- width of the Online/Friends panel ----------
+   Horizontal only, deliberately: the panel is a grid cell whose height already tracks the chat
+   log beside it, so there is nothing sensible for a vertical drag to do. The width lives in a
+   CSS variable on .body rather than as an inline width on the panel itself, so the grid track
+   and the panel can never disagree about how wide the column is -- one value moves both.
+   Remembered per browser, like the sound and DM-tab preferences above. */
+var USERS_W_MIN = 120, USERS_W_MAX = 380, USERS_W_DEFAULT = 160;
+var usersW = USERS_W_DEFAULT;
+function applyUsersWidth() {
+var bodyEl = document.querySelector('.body');
+if (bodyEl) bodyEl.style.setProperty('--users-w', usersW + 'px');
+}
+try {
+var savedW = parseInt(localStorage.getItem('gc_users_w'), 10);
+if (savedW >= USERS_W_MIN && savedW <= USERS_W_MAX) usersW = savedW;
+} catch (e) {}
+applyUsersWidth();
+
+(function () {
+var grip = $('usersResize');
+if (!grip) return;
+var startX = 0, startW = 0, dragging = false;
+function clampW(w) { return Math.max(USERS_W_MIN, Math.min(USERS_W_MAX, Math.round(w))); }
+function saveW() { try { localStorage.setItem('gc_users_w', String(usersW)); } catch (e) {} }
+grip.addEventListener('pointerdown', function (e) {
+if (window.matchMedia('(max-width:430px)').matches) return; // no side panel to size on a phone
+dragging = true; startX = e.clientX; startW = usersW;
+try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+if (gcRoot) gcRoot.classList.add('users-resizing');
+e.preventDefault();
+});
+grip.addEventListener('pointermove', function (e) {
+if (!dragging) return;
+/* the grip sits on the panel's LEFT edge, so dragging left (negative dx) widens it */
+usersW = clampW(startW - (e.clientX - startX));
+applyUsersWidth();
+});
+function endDrag(e) {
+if (!dragging) return;
+dragging = false;
+try { grip.releasePointerCapture(e.pointerId); } catch (err) {}
+if (gcRoot) gcRoot.classList.remove('users-resizing');
+saveW();
+}
+grip.addEventListener('pointerup', endDrag);
+grip.addEventListener('pointercancel', endDrag);
+/* keyboard parity, since the grip is focusable; double-click restores the default width */
+grip.addEventListener('keydown', function (e) {
+var step = e.shiftKey ? 24 : 8;
+if (e.key === 'ArrowLeft') usersW = clampW(usersW + step);
+else if (e.key === 'ArrowRight') usersW = clampW(usersW - step);
+else if (e.key === 'Home') usersW = USERS_W_DEFAULT;
+else return;
+e.preventDefault(); applyUsersWidth(); saveW();
+});
+grip.addEventListener('dblclick', function () { usersW = USERS_W_DEFAULT; applyUsersWidth(); saveW(); });
+})();
+
 /* ---------- tab title flash for unseen activity while the tab isn't focused ---------- */
 var BASE_TITLE = document.title, unreadTitle = 0;
 function bumpTitle() { unreadTitle++; document.title = '(' + unreadTitle + ') ' + BASE_TITLE; }
