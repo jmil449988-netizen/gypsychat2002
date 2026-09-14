@@ -255,6 +255,7 @@ document.addEventListener('keydown', function (e) {
 if (e.key !== 'Escape') return;
 if (!$('warnOverlay').classList.contains('hidden')) $('warnOk').click();
 if (!$('infoOverlay').classList.contains('hidden')) $('infoOk').click();
+if ($('saveOverlay') && !$('saveOverlay').classList.contains('hidden')) $('saveOverlay').classList.add('hidden');
 });
 
 /* Giphy CDN links, or our own "thread-images" Storage bucket (see uploadImage below), only —
@@ -718,6 +719,7 @@ clearTimeout(idleTimer);
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
 if ($('statusBtn')) $('statusBtn').classList.add('hidden');
 if ($('avaBtn')) $('avaBtn').classList.add('hidden');
+if ($('saveBtn')) $('saveBtn').classList.add('hidden');
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
 $('login').classList.remove('hidden'); $('join').disabled = true;
 fail('You have been removed from the room.' + (reason ? ' Reason: ' + reason : ''));
@@ -1304,8 +1306,69 @@ if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidd
 };
 }
 
+/* ---------- saving an anonymous character with an email ----------
+   An anonymous account is only ever as durable as this browser's localStorage: a different
+   device, a private window, or a cleared history means a brand new account id, which is why
+   friends and names appeared to evaporate. Supabase can upgrade an anonymous user in place --
+   the id, the claimed name, the friends rows and the whisper history all stay exactly as they
+   are, and an email plus password gets bolted on so the same account can be reached from
+   anywhere. Nothing is migrated or copied; it is the same row in auth.users.
+
+   The email is only ever a way back in. It is not written to profiles, not put into presence,
+   and not attached to messages, so no other player can see it or look it up. */
+var isAnonAccount = false;
+
+function saveErr(t) { var e = $('saveErr'); if (e) { e.textContent = t || ''; e.classList.toggle('shown', !!t); } }
+
+function openSaveAccount() {
+if (!me || !sb) return;
+var nm = $('saveName'); if (nm) nm.textContent = me.name;
+$('saveEmail').value = ''; $('savePassword').value = ''; $('savePassword2').value = '';
+saveErr('');
+$('saveOverlay').classList.remove('hidden');
+$('saveEmail').focus();
+}
+function closeSaveAccount() { $('saveOverlay').classList.add('hidden'); }
+
+async function doSaveAccount() {
+var email = $('saveEmail').value.trim();
+var pw = $('savePassword').value, pw2 = $('savePassword2').value;
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { saveErr('That does not look like an email address.'); return; }
+if (pw.length < 6) { saveErr('Use a password of at least 6 characters.'); return; }
+if (pw !== pw2) { saveErr('The two passwords do not match.'); return; }
+var btn = $('saveGo'); btn.disabled = true; saveErr('');
+try {
+var r = await sb.auth.updateUser({ email: email, password: pw });
+if (r.error) throw r.error;
+/* With "Confirm email" on, Supabase holds the address in new_email and only attaches it once
+   the link is clicked; the password is set either way. Report whichever actually happened
+   rather than promising a confirmation mail that may not be on. */
+var u = r.data && r.data.user;
+var pending = !!(u && u.new_email) && !(u && u.email);
+closeSaveAccount();
+if (pending) {
+addSys('Almost there — check ' + email + ' and click the confirmation link. Until you do, ' + me.name + ' still lives only in this browser.');
+} else {
+addSys('Saved. ' + me.name + ' is yours for good now — sign in with ' + email + ' on any device to come back as yourself, friends list and all.');
+isAnonAccount = false;
+if ($('saveBtn')) $('saveBtn').classList.add('hidden');
+}
+} catch (e) {
+var m = (e && e.message) || 'Could not save your character.';
+if (/rate limit|too many|429/i.test(m)) m = 'The confirmation mailer is busy right now — wait a few minutes and try again.';
+else if (/already been registered|already registered|already exists/i.test(m)) m = 'That email is already attached to another character. Sign in with it instead.';
+saveErr(m);
+} finally { btn.disabled = false; }
+}
+
+if ($('saveBtn')) $('saveBtn').onclick = openSaveAccount;
+if ($('saveCancel')) $('saveCancel').onclick = closeSaveAccount;
+if ($('saveGo')) $('saveGo').onclick = doSaveAccount;
+if ($('saveOverlay')) $('saveOverlay').onclick = function (e) { if (e.target === $('saveOverlay')) closeSaveAccount(); };
+if ($('savePassword2')) $('savePassword2').onkeydown = function (e) { if (e.key === 'Enter') doSaveAccount(); };
+
 /* ---------- sign on ---------- */
-var adminMode = false;
+var emailMode = false;
 
 /* ---------- pinned identity for returning visitors ----------
    The anonymous Supabase session is kept in localStorage, so closing the tab -- or the whole
@@ -1330,7 +1393,7 @@ function unlockName() {
 lockedName = null;
 var sn = $('sn');
 sn.readOnly = false; sn.value = ''; sn.classList.remove('locked');
-$('join').textContent = adminMode ? 'Login as Admin' : 'Enter the room';
+$('join').textContent = emailMode ? 'Sign in' : 'Enter the room';
 if ($('snNote')) $('snNote').classList.add('hidden');
 sn.focus();
 }
@@ -1348,7 +1411,7 @@ if (!n) return;
 lockedName = n;
 var sn = $('sn');
 sn.value = n; sn.readOnly = true; sn.classList.add('locked');
-if (!adminMode) $('join').textContent = 'Enter as ' + n;
+if (!emailMode) $('join').textContent = 'Enter as ' + n;
 if ($('snNote')) $('snNote').classList.remove('hidden');
 } catch (e) { /* first visit, or storage blocked -- fall through to the normal sign-on */ }
 }
@@ -1364,16 +1427,16 @@ unlockName();
 
 if (adminToggle) {
 adminToggle.onclick = function () {
-adminMode = !adminMode;
-adminFields.classList.toggle('hidden', !adminMode);
-if ($('turnstileWrap')) $('turnstileWrap').classList.toggle('hidden', adminMode);
-$('join').textContent = adminMode ? 'Login as Admin' : (lockedName ? 'Enter as ' + lockedName : 'Enter the room');
-adminToggle.textContent = adminMode ? 'Use a character name instead' : 'Admin login';
+emailMode = !emailMode;
+adminFields.classList.toggle('hidden', !emailMode);
+if ($('turnstileWrap')) $('turnstileWrap').classList.toggle('hidden', emailMode);
+$('join').textContent = emailMode ? 'Sign in' : (lockedName ? 'Enter as ' + lockedName : 'Enter the room');
+adminToggle.textContent = emailMode ? 'Use a character name instead' : 'Sign in with email';
 /* the pinned name belongs to the anonymous account, not to the admin login */
-$('sn').readOnly = !adminMode && !!lockedName;
-if ($('snNote')) $('snNote').classList.toggle('hidden', adminMode || !lockedName);
+$('sn').readOnly = !emailMode && !!lockedName;
+if ($('snNote')) $('snNote').classList.toggle('hidden', emailMode || !lockedName);
 fail('');
-(adminMode ? adminEmail : $('sn')).focus();
+(emailMode ? adminEmail : $('sn')).focus();
 };
 }
 /* Cloudflare Turnstile (join-screen human check): the widget calls these globally-named
@@ -1399,16 +1462,16 @@ return (a + b + num).slice(0, 16);
 async function join() {
 /* A returning visitor re-enters under the name this device already holds -- see
    restoreIdentity() below for why the name is pinned rather than re-typed each visit.
-   Admin sign-on is exempt: it authenticates as a different account entirely. */
-var n = (!adminMode && lockedName) ? lockedName : $('sn').value.trim(); fail('');
+   Email sign-on is exempt: that account's real name is looked up after authenticating. */
+var n = (!emailMode && lockedName) ? lockedName : $('sn').value.trim(); fail('');
 if (!n) n = randomName();
 if (!/^[\w .'-]{2,16}$/.test(n)) { fail('2–16 letters, numbers, spaces or . \' -'); return; }
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0) { fail('Backend not configured — edit js/config.js.'); return; }
 if (!window.supabase) { fail('Could not load the chat library. Check your connection.'); return; }
 var adminEmailVal, adminPasswordVal;
-if (adminMode) {
+if (emailMode) {
 adminEmailVal = adminEmail.value.trim(); adminPasswordVal = adminPassword.value;
-if (!adminEmailVal || !adminPasswordVal) { fail('Enter your admin email and password.'); return; }
+if (!adminEmailVal || !adminPasswordVal) { fail('Enter your email and password.'); return; }
 } else if (window.turnstile && !turnstileToken) {
 fail('Please complete the verification check above.'); return;
 }
@@ -1417,7 +1480,7 @@ $('join').disabled = true; setStatus('Signing on...');
 try {
 sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
 var user;
-if (adminMode) {
+if (emailMode) {
 var pw = await sb.auth.signInWithPassword({ email: adminEmailVal, password: adminPasswordVal });
 if (pw.error) throw pw.error;
 user = pw.data.user;
@@ -1426,6 +1489,12 @@ var s = await sb.auth.getSession();
 user = s.data.session && s.data.session.user;
 if (!user) { var a = await sb.auth.signInAnonymously(); if (a.error) throw a.error; user = a.data.user; }
 }
+/* Whatever the sign-on route, the account's claimed name is the authority on who this is.
+   It matters most for email sign-in on a fresh device: there is no local session there, so the
+   name box is empty and would otherwise hand this account a random new name -- renaming the
+   very character they signed in to recover. */
+var claimed = await sb.from('profiles').select('name').eq('user_id', user.id).maybeSingle();
+if (!claimed.error && claimed.data && claimed.data.name) n = claimed.data.name;
 await sb.auth.updateUser({ data: { name: n } });
 await sb.auth.refreshSession(); // updateUser() above doesn't rotate the JWT; refresh so the session carries the new name
 /* Claim the name in the database. profiles.name -- NOT the JWT's user_metadata -- is what the
@@ -1445,7 +1514,7 @@ if (claim.data && claim.data.ok === false) {
 if (lockedName) unlockName();
 throw new Error(claim.data.reason === 'taken' ? 'That name is already taken.' : 'That name can’t be used. Try a different one.');
 }
-if (!adminMode) {
+if (!emailMode) {
 // Server-side half of the Turnstile check, plus IP-based fresh-identity churn tracking --
 // see supabase/join_ip_log_feature.sql and the verify-join edge function. Fails OPEN on
 // anything but an explicit "turnstile_failed" verdict: this is a hardening layer on top of
@@ -1527,8 +1596,13 @@ h.data.reverse().forEach(handleMessage);
 $('login').classList.add('hidden'); log.classList.remove('hidden'); $('users').classList.remove('hidden'); $('compose').classList.remove('hidden');
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
 if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
+/* Anonymous accounts live in this browser's storage and nowhere else, so the 🔑 (and the nudge
+   below) are only offered to them -- an account with an email attached is already portable. */
+isAnonAccount = user.is_anonymous !== false && !user.email;
+if ($('saveBtn')) $('saveBtn').classList.toggle('hidden', !isAnonAccount);
 setStatus('Signed on as ' + me.name + (isAdmin ? ' (admin)' : ''));
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
+if (isAnonAccount) addSys('Heads up: ' + me.name + ' and your friends list are saved in this browser only. Tap the 🔑 below to add an email and keep them on any device.');
 if (threadsPanel) {
 threadsPanel.classList.add('ready');
 loadThreads();
