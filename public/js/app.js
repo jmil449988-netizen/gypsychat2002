@@ -48,7 +48,7 @@ var manualStatus = 'online', myAwayMsg = '', autoIdle = false, awayReplied = {};
 function effectiveStatus() { return (manualStatus === 'online' && autoIdle) ? 'idle' : manualStatus; }
 function updateMyPresence() {
 if (!channel || !me) return;
-channel.track({ name: me.name, status: effectiveStatus(), awayMsg: manualStatus === 'away' ? myAwayMsg : '' });
+channel.track({ name: me.name, status: effectiveStatus(), awayMsg: manualStatus === 'away' ? myAwayMsg : '', avatarUrl: me.avatarUrl || '' });
 }
 function updateStatusBtn() {
 var b = $('statusBtn'); if (!b) return;
@@ -265,10 +265,49 @@ if (!$('infoOverlay').classList.contains('hidden')) $('infoOk').click();
    (and a thread image) show up as an embedded picture instead of a bare link. */
 var GIF_RE = /^https:\/\/(?:media\d{0,3}\.giphy\.com|i\.giphy\.com)\/media\/[^\s"'<>]+\.gif(?:\?[^\s"'<>]*)?$/i;
 var OWN_IMG_RE = C.SUPABASE_URL ? new RegExp('^' + C.SUPABASE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/storage/v1/object/public/thread-images/[^\\s"\'<>]+$', 'i') : null;
+function escRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+/* @mentions: names aren't restricted to word-characters (a name can have spaces, punctuation,
+   emoji...), so there's no context-free regex for "a mention" -- instead we match against the
+   names of people actually in the room right now, longest name first so e.g. "@Jo" can't eat the
+   front of "@John" (the trailing (?![\w-]) guard on every match does the same job the other way:
+   it keeps "@Jo" from matching the "Jo" inside "@John"). Only online people can be @mentioned
+   (same rule the whisper picker already uses for who you can talk to). */
+function mentionableNames() {
+  return Object.keys(people).map(function (id) { return people[id].name; }).filter(Boolean).sort(function (a, b) { return b.length - a.length; });
+}
+function highlightMentions(html) {
+  mentionableNames().forEach(function (n) {
+    var re = new RegExp('@' + escRe(esc(n)) + '(?![\\w-])', 'g');
+    html = html.replace(re, '<span class="mention">@' + esc(n) + '</span>');
+  });
+  return html;
+}
+function bodyMentionsMe(body) {
+  if (!me) return false;
+  return new RegExp('@' + escRe(me.name) + '(?![\\w-])', 'i').test(String(body || ''));
+}
 function bodyHtml(body) {
   var t = String(body || '').trim();
   if (GIF_RE.test(t) || (OWN_IMG_RE && OWN_IMG_RE.test(t))) return '<img class="gif" src="' + esc(t) + '" alt="Image" loading="lazy">';
-  return linkify(wrapEmoji(esc(body)));
+  return highlightMentions(linkify(wrapEmoji(esc(body))));
+}
+
+/* ---------- profile pictures (small, persistent avatars) ----------
+   The URL lives in two places: profiles.avatar_url (loaded on join, so it survives across
+   sessions) and, for whoever is currently in the room, presence (so everyone sees a change live
+   without a page reload -- same trick already used for name/status/awayMsg). Someone who has left
+   the room has no presence entry, so their avatar only shows up where we already have a cached
+   people[] record for them (e.g. an open whisper window); otherwise we fall back to a plain
+   initial-letter badge rather than making an extra query per name. */
+function avatarUrlFor(id) {
+  if (me && id === me.id) return me.avatarUrl || null;
+  return (people[id] && people[id].avatarUrl) || null;
+}
+function avatarHtml(id, name) {
+  var url = avatarUrlFor(id);
+  if (url) return '<img class="ava" src="' + esc(url) + '" alt="" loading="lazy">';
+  var initial = String(name || '?').trim().charAt(0).toUpperCase() || '?';
+  return '<span class="ava-fallback" aria-hidden="true">' + esc(initial) + '</span>';
 }
 
 /* ---------- main room log ---------- */
@@ -280,11 +319,13 @@ log.appendChild(d); log.scrollTop = log.scrollHeight;
 function renderRoom(m) {
 if (seen[m.id]) return; seen[m.id] = 1;
 var mine = m.sender_id === me.id;
-var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them');
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span><b class="who" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+var mentionsMe = !mine && bodyMentionsMe(m.body);
+var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them') + (mentionsMe ? ' mention-me' : '');
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + avatarHtml(m.sender_id, m.sender_name) + '<b class="who" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 log.appendChild(d); if (atBottom || mine) log.scrollTop = log.scrollHeight;
 if (!mine && document.hidden) bumpTitle();
+if (mentionsMe) playSound('ding');
 }
 function handleMessage(m) { if (blocked[m.sender_id]) return; if (m.recipient_id) renderIM(m); else renderRoom(m); }
 
@@ -298,7 +339,7 @@ var classes = [isSelf ? 'self' : (blocked[id] ? 'blocked' : (unread[id] ? 'unrea
 if (showStatus) classes.push('st-' + status);
 var tag = showStatus ? ' <span class="stag">(' + status + ')</span>' : '';
 var title = (status === 'away' && p.awayMsg) ? ' title="' + esc(p.awayMsg) + '"' : '';
-return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + esc(p.name) + tag + '</div>';
+return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + esc(p.name) + tag + '</div>';
 }).join('');
 cnt.textContent = ids.length + ' online';
 Object.keys(wins).forEach(function (id) {
@@ -328,7 +369,7 @@ var p = people[id], online = !!p, status = online ? (p.status || 'online') : nul
 var label = online ? p.name : friends[id].name;
 var cls = online ? ('f-' + status) : 'f-offline';
 var suffix = online ? (status !== 'online' ? ' <span class="off">(' + status + ')</span>' : '') : ' <span class="off">(offline)</span>';
-return '<div class="' + cls + '" tabindex="0" data-id="' + esc(id) + '">' + esc(label) + suffix + '</div>';
+return '<div class="' + cls + '" tabindex="0" data-id="' + esc(id) + '">' + avatarHtml(id, label) + esc(label) + suffix + '</div>';
 }).join('');
 return '<div class="fg-hd">' + esc(g) + '</div>' + rows;
 }).join('');
@@ -344,12 +385,14 @@ var zTop = 20, nWin = 0, lastBuzz = {};
 function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
-el.innerHTML = '<div class="bar"><span class="gem"></span><span class="nm"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" aria-label="Minimize">–</button></div>' +
+el.innerHTML = '<div class="bar"><span class="gem"></span><span class="wava" aria-hidden="true"></span><span class="nm"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" aria-label="Minimize">–</button></div>' +
 '<div class="ilog" aria-live="polite"></div><div class="icomp">' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
 '<input type="file" class="im-img-file hidden" accept="image/jpeg,image/png,image/gif,image/webp">' +
-'<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
+'<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>' +
+'<div class="rz rz-nw" data-dir="nw" aria-hidden="true"></div><div class="rz rz-ne" data-dir="ne" aria-hidden="true"></div>' +
+'<div class="rz rz-sw" data-dir="sw" aria-hidden="true"></div><div class="rz rz-se" data-dir="se" aria-hidden="true"></div>';
 el.querySelector('.nm').textContent = name;
 var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), gone: !people[id], name: name, minimized: true, tab: null };
 win.ta.placeholder = 'Whisper to ' + name + '...';
@@ -375,9 +418,46 @@ function mv(ev) { el.style.left = Math.max(0, Math.min(window.innerWidth - 60, e
 function up() { bar.removeEventListener('pointermove', mv); bar.removeEventListener('pointerup', up); }
 bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up);
 });
+makeResizable(el);
 $('ims').appendChild(el); wins[id] = win;
-makeTab(id); updateTab(id); // tab starts visible (win starts minimized) regardless of who the first message is from
+makeTab(id); updateTab(id); updateWinAvatar(id); // tab starts visible (win starts minimized) regardless of who the first message is from
 return win;
+}
+/* ---------- whisper window resizing ----------
+   Four corner handles, dragged like the title bar already is (setPointerCapture on the handle
+   itself). Each corner keeps the OPPOSITE edge fixed while it moves, so clamping to the min/max
+   size never makes the window jump -- e.g. dragging the top-left corner keeps the bottom-right
+   corner planted and just grows/shrinks toward it. Disabled on the mobile layout (see the
+   max-width:430px rule for .im .rz), where whisper windows are already full-width/fixed-height. */
+var RZ_MIN_W = 260, RZ_MIN_H = 200, RZ_MAX_W = 640, RZ_MAX_H = 720;
+function makeResizable(el) {
+Array.prototype.forEach.call(el.querySelectorAll('.rz'), function (h) {
+h.addEventListener('pointerdown', function (e) {
+if (window.innerWidth <= 430) return;
+e.preventDefault(); e.stopPropagation();
+front(el);
+var dir = h.dataset.dir;
+var r = el.getBoundingClientRect();
+var startX = e.clientX, startY = e.clientY;
+var startW = r.width, startH = r.height, startLeft = r.left, startTop = r.top;
+var rightEdge = startLeft + startW, bottomEdge = startTop + startH;
+h.setPointerCapture(e.pointerId);
+function mv(ev) {
+var dx = ev.clientX - startX, dy = ev.clientY - startY;
+var w = startW, ht = startH, left = startLeft, top = startTop;
+if (dir === 'se' || dir === 'ne') w = startW + dx; else w = startW - dx;
+if (dir === 'se' || dir === 'sw') ht = startH + dy; else ht = startH - dy;
+w = Math.max(RZ_MIN_W, Math.min(RZ_MAX_W, Math.min(w, window.innerWidth - 6)));
+ht = Math.max(RZ_MIN_H, Math.min(RZ_MAX_H, Math.min(ht, window.innerHeight - 6)));
+if (dir === 'sw' || dir === 'nw') left = rightEdge - w;
+if (dir === 'ne' || dir === 'nw') top = bottomEdge - ht;
+el.style.width = w + 'px'; el.style.height = ht + 'px';
+el.style.left = Math.max(0, left) + 'px'; el.style.top = Math.max(0, top) + 'px';
+}
+function up() { h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); }
+h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
+});
+});
 }
 function makeTab(id) {
 var w = wins[id];
@@ -400,6 +480,13 @@ w.el.querySelector('.nm').textContent = name;
 var buzzBtn = w.el.querySelector('.buzz'); if (buzzBtn) buzzBtn.setAttribute('aria-label', 'Buzz ' + name);
 w.ta.placeholder = 'Whisper to ' + name + '...';
 if (w.tab) { w.tab.querySelector('.nm').textContent = name; w.tab.setAttribute('aria-label', 'Open whisper with ' + name); }
+}
+/* Keeps a whisper window's title-bar avatar in sync with presence -- called once when the window
+   is created and again on every presence sync (a person can change their picture mid-conversation). */
+function updateWinAvatar(id) {
+var w = wins[id]; if (!w) return;
+var span = w.el.querySelector('.wava'); if (!span) return;
+span.innerHTML = avatarHtml(id, w.name);
 }
 function updateTab(id) {
 var w = wins[id]; if (!w || !w.tab) return;
@@ -441,7 +528,7 @@ var otherId = mine ? m.recipient_id : m.sender_id;
 var otherName = mine ? ((people[otherId] && people[otherId].name) || m.recipient_name || 'unknown') : m.sender_name;
 var w = ensureWin(otherId, otherName); // never pops the window open on its own — see note above
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them');
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span><b>' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + avatarHtml(m.sender_id, m.sender_name) + '<b>' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight;
 if (!mine) {
 if (w.minimized || document.activeElement !== w.ta) { unread[otherId] = (unread[otherId] || 0) + 1; renderPeople(); updateTab(otherId); }
@@ -629,6 +716,7 @@ openThreadId = null;
 clearTimeout(idleTimer);
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
 if ($('statusBtn')) $('statusBtn').classList.add('hidden');
+if ($('avaBtn')) $('avaBtn').classList.add('hidden');
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
 $('login').classList.remove('hidden'); $('join').disabled = true;
 fail('You have been removed from the room.' + (reason ? ' Reason: ' + reason : ''));
@@ -688,21 +776,84 @@ default: addSys('Unknown command. Type /help.'); return true;
 }
 async function send() {
 var t = msg.value.trim(); if (!t || !me) return;
-if (t[0] === '/' && !/^\/w(hisper)?\s/i.test(t)) { msg.value = ''; await command(t); return; }
+if (t[0] === '/' && !/^\/w(hisper)?\s/i.test(t)) { msg.value = ''; closeMention(); await command(t); return; }
 var w = t.match(/^\/w(?:hisper)?\s+(\S+)\s*([\s\S]*)$/i);
 if (w) {
 var id = Object.keys(people).filter(function (k) { return people[k].name.toLowerCase() === w[1].toLowerCase(); })[0];
 if (!id) { addSys('No one here is named ' + w[1] + '.'); return; }
 if (id === me.id) { addSys('You cannot whisper to yourself.'); return; }
 if (blocked[id]) { addSys('You have blocked ' + people[id].name + '. Unblock them first.'); return; }
-msg.value = ''; var win = openIM(id, people[id].name, true);
+msg.value = ''; closeMention(); var win = openIM(id, people[id].name, true);
 if (w[2].trim()) { win.ta.value = w[2].trim(); sendIM(id); }
 return;
 }
-msg.value = ''; await post(t); msg.focus();
+msg.value = ''; closeMention(); await post(t); msg.focus();
 }
 $('send').onclick = send;
-msg.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+msg.onkeydown = function (e) {
+if (mentionMenu.classList.contains('open')) {
+if (e.key === 'ArrowDown') { e.preventDefault(); mentionIndex = (mentionIndex + 1) % mentionItems.length; renderMentionMenu(); return; }
+if (e.key === 'ArrowUp') { e.preventDefault(); mentionIndex = (mentionIndex - 1 + mentionItems.length) % mentionItems.length; renderMentionMenu(); return; }
+if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(mentionItems[mentionIndex]); return; }
+if (e.key === 'Escape') { e.preventDefault(); closeMention(); return; }
+}
+if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+};
+
+/* ---------- @mention autocomplete (main chat only) ----------
+   One dropdown, shared the same way the emoji/GIF pickers are: created once, repositioned to the
+   textarea via positionPicker(). Matches against people currently in the room -- same scope the
+   whisper picker already limits you to, and it means the suggestion list is never stale. */
+var mentionMenu = document.createElement('div'); mentionMenu.className = 'mention-menu'; mentionMenu.setAttribute('role', 'listbox'); document.body.appendChild(mentionMenu);
+var mentionStart = -1, mentionItems = [], mentionIndex = 0;
+function closeMention() { mentionMenu.classList.remove('open'); mentionItems = []; mentionStart = -1; }
+function currentMentionToken() {
+var s = msg.selectionStart, e = msg.selectionEnd;
+if (s !== e) return null;
+var v = msg.value;
+var at = v.lastIndexOf('@', s - 1);
+if (at === -1) return null;
+if (at > 0 && !/\s/.test(v[at - 1])) return null; // must start a word, not be mid-token (e.g. an email-like string)
+var between = v.slice(at + 1, s);
+if (/\s/.test(between)) return null; // the @token ended before the cursor
+return { start: at, query: between };
+}
+function renderMentionMenu() {
+mentionMenu.innerHTML = mentionItems.map(function (n, i) {
+return '<button type="button" role="option" aria-selected="' + (i === mentionIndex) + '" class="' + (i === mentionIndex ? 'active' : '') + '" data-i="' + i + '">' + esc(n) + '</button>';
+}).join('');
+mentionMenu.querySelectorAll('button').forEach(function (b) {
+b.onmousedown = function (e) { e.preventDefault(); selectMention(mentionItems[+b.dataset.i]); };
+});
+}
+function updateMentionMenu() {
+var tok = currentMentionToken();
+if (!tok || !me) { closeMention(); return; }
+var q = tok.query.toLowerCase();
+var items = Object.keys(people).filter(function (id) { return id !== me.id; }).map(function (id) { return people[id].name; })
+.filter(function (n) { return n.toLowerCase().indexOf(q) !== -1; })
+.sort(function (a, b) {
+var ap = a.toLowerCase().indexOf(q) === 0, bp = b.toLowerCase().indexOf(q) === 0;
+if (ap !== bp) return ap ? -1 : 1;
+return a.localeCompare(b);
+}).slice(0, 8);
+if (!items.length) { closeMention(); return; }
+mentionStart = tok.start; mentionItems = items; mentionIndex = 0;
+renderMentionMenu();
+mentionMenu.classList.add('open');
+positionPicker(mentionMenu, msg);
+}
+function selectMention(name) {
+var end = msg.selectionStart;
+var v = msg.value;
+msg.value = v.slice(0, mentionStart) + '@' + name + ' ' + v.slice(end);
+var newPos = mentionStart + name.length + 2;
+closeMention();
+msg.focus(); msg.selectionStart = msg.selectionEnd = newPos;
+}
+msg.addEventListener('input', updateMentionMenu);
+msg.addEventListener('click', updateMentionMenu);
+document.addEventListener('click', function (e) { if (!mentionMenu.contains(e.target) && e.target !== msg) closeMention(); });
 
 /* ---------- emoji picker ----------
    Shared by the main chat compose box and every whisper window's compose bar (one picker element,
@@ -848,6 +999,71 @@ var up = await sb.storage.from('thread-images').upload(path, file, { contentType
 if (up.error) { addSys('Image upload failed: ' + up.error.message); return null; }
 var pub = sb.storage.from('thread-images').getPublicUrl(path);
 return (pub.data && pub.data.publicUrl) || null;
+}
+
+/* ---------- profile picture upload ----------
+   A picture is cropped to a square and downscaled on a <canvas> before it ever leaves the browser,
+   so "small" is enforced client-side rather than trusting whatever size someone picked -- and
+   because every user always uploads to the exact same path (their own id + "/avatar.png", with
+   upsert:true), there's only ever one file per account: a new upload simply replaces the old one,
+   which is what "persistent until changed again" means here. A "?v=" cache-buster is appended to
+   the stored URL each time so the new picture shows up immediately instead of the old one lingering
+   in the browser's image cache. */
+var AVATAR_SIZE = 96;
+function downscaleImageToBlob(file, size) {
+return new Promise(function (resolve, reject) {
+var url = URL.createObjectURL(file);
+var img = new Image();
+img.onload = function () {
+URL.revokeObjectURL(url);
+var side = Math.min(img.naturalWidth, img.naturalHeight);
+if (!side) { reject(new Error('Could not read that image.')); return; }
+var sx = (img.naturalWidth - side) / 2, sy = (img.naturalHeight - side) / 2;
+var canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+var ctx = canvas.getContext('2d');
+ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+canvas.toBlob(function (blob) { if (blob) resolve(blob); else reject(new Error('Could not process that image.')); }, 'image/png', 0.92);
+};
+img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Could not read that image.')); };
+img.src = url;
+});
+}
+function updateAvaBtn() {
+var thumb = $('avaThumb'); if (!thumb) return;
+thumb.innerHTML = (me && me.avatarUrl) ? '<img src="' + esc(me.avatarUrl) + '" alt="">' : '＋';
+}
+async function uploadAvatar(file) {
+if (!file || !me) return;
+var ext = ALLOWED_IMG_TYPES[file.type];
+if (!ext) { addSys('Profile pictures must be JPG, PNG, GIF, or WEBP.'); return; }
+if (file.size > MAX_IMG_BYTES) { addSys('Profile pictures must be 5MB or smaller.'); return; }
+var btn = $('avaBtn'); if (btn) btn.disabled = true;
+try {
+var blob = await downscaleImageToBlob(file, AVATAR_SIZE);
+var path = me.id + '/avatar.png';
+var up = await sb.storage.from('avatars').upload(path, blob, { contentType: 'image/png', upsert: true });
+if (up.error) { addSys('Profile picture upload failed: ' + up.error.message); return; }
+var pub = sb.storage.from('avatars').getPublicUrl(path);
+var url = pub.data && pub.data.publicUrl;
+if (!url) { addSys('Profile picture upload failed.'); return; }
+url += '?v=' + Date.now();
+var rp = await sb.from('profiles').upsert({ user_id: me.id, avatar_url: url, updated_at: new Date().toISOString() });
+if (rp.error) { addSys('Could not save your profile picture: ' + rp.error.message); return; }
+me.avatarUrl = url;
+updateAvaBtn(); updateMyPresence(); renderPeople();
+addSys('Your profile picture has been updated.');
+} catch (e) {
+addSys((e && e.message) || 'Could not process that image.');
+} finally {
+if (btn) btn.disabled = false;
+}
+}
+if ($('avaBtn')) {
+$('avaBtn').onclick = function () { $('avaFile').click(); };
+$('avaFile').onchange = function () {
+var f = $('avaFile').files && $('avaFile').files[0]; $('avaFile').value = '';
+if (f) uploadAvatar(f);
+};
 }
 function renderThreadList() {
 if (!tpItems) return;
@@ -1139,14 +1355,16 @@ if (vjErr && vjErr.message && vjErr.message.indexOf('Verification failed') === 0
 console.warn('verify-join check did not complete:', vjErr);
 }
 }
-me = { id: user.id, name: n };
+me = { id: user.id, name: n, avatarUrl: null };
 manualStatus = 'online'; myAwayMsg = ''; autoIdle = false; awayReplied = {};
+var myProf = await sb.from('profiles').select('avatar_url').eq('user_id', me.id).maybeSingle();
+if (!myProf.error && myProf.data && myProf.data.avatar_url) me.avatarUrl = myProf.data.avatar_url;
 
 channel = sb.channel('room:' + (C.ROOM || 'main'), { config: { presence: { key: me.id } } });
 channel.on('presence', { event: 'sync' }, function () {
 var stt = channel.presenceState(); people = {};
 Object.keys(stt).forEach(function (k) { if (stt[k][0]) people[k] = stt[k][0]; });
-Object.keys(wins).forEach(function (id) { if (people[id]) renameWin(id, people[id].name); });
+Object.keys(wins).forEach(function (id) { if (people[id]) { renameWin(id, people[id].name); updateWinAvatar(id); } });
 renderPeople();
 });
 channel.on('presence', { event: 'join' }, function (p) {
@@ -1193,7 +1411,7 @@ if (nameTaken(n)) { await channel.unsubscribe(); channel = null; throw new Error
 var ban = await sb.from('bans').select('reason, expires_at').eq('user_id', me.id).maybeSingle();
 if (ban.data && (!ban.data.expires_at || new Date(ban.data.expires_at) > new Date())) { await channel.unsubscribe(); channel = null; throw new Error('You have been removed from this room.' + (ban.data.reason ? ' Reason: ' + ban.data.reason : '')); }
 await loadBlocks(); await loadAdmin(); await loadMyModeration(); await loadFriends();
-await channel.track({ name: n, status: 'online', awayMsg: '' });
+await channel.track({ name: n, status: 'online', awayMsg: '', avatarUrl: me.avatarUrl || '' });
 
 // history: recent room messages plus my recent whispers (RLS makes the server only return what I may see)
 var h = await sb.from('messages').select('*').eq('room', C.ROOM || 'main').order('created_at', { ascending: false }).limit(C.HISTORY || 200);
@@ -1202,6 +1420,7 @@ h.data.reverse().forEach(handleMessage);
 
 $('login').classList.add('hidden'); log.classList.remove('hidden'); $('users').classList.remove('hidden'); $('compose').classList.remove('hidden');
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
+if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
 setStatus('Signed on as ' + me.name + (isAdmin ? ' (admin)' : ''));
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
 if (threadsPanel) {
