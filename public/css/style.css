@@ -308,3 +308,26 @@ box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 10px rgba(201,162,74,.35)}
 /* option to hide the whisper "tray" tabs (and any open whisper windows) entirely — a purely
    client-side/visual toggle; whispers still arrive and are remembered, just not shown until re-enabled */
 .gc-root.no-dms .im-tray,.gc-root.no-dms .im{display:none !important}
+
+/* "Gypsy Roulette — coming soon" teaser. Fills the empty gutter to the LEFT of the window,
+   mirroring the threads board on the right: same fixed offset from centre (394px = half the
+   760px window + its border/glow), same width, same frame treatment. It only appears at the
+   width where that gutter actually exists (1340px, the same breakpoint the threads panel uses)
+   -- below that the window fills the viewport and there is no dead space to fill. */
+.roulette-panel{position:fixed;top:6px;bottom:6px;right:calc(50% + 394px);width:260px;display:none;
+flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 20px;
+background:linear-gradient(180deg,var(--stone-2),var(--stone));border:3px double var(--gold-lo);outline:1px solid #000;
+box-shadow:0 0 0 2px var(--gold-lo),0 0 0 3px #000,0 0 24px #000,inset 0 0 30px #000;overflow:hidden;z-index:8}
+@media (min-width:1340px){.roulette-panel{display:flex}}
+/* dim it along with the main window when the threads board is expanded, so focus stays there */
+.roulette-panel{transition:opacity .22s ease,filter .22s ease}
+.gc-root.thread-open .roulette-panel{opacity:.28;filter:saturate(.4)}
+.rp-eyebrow{font:700 10px Cinzel,Georgia,serif;letter-spacing:3px;text-transform:uppercase;color:var(--ash);margin-bottom:12px}
+.rp-title{font:700 26px Cinzel,"Trajan Pro",Georgia,serif;letter-spacing:2px;line-height:1.15;color:var(--gold);
+text-shadow:0 0 12px rgba(201,162,74,.55),0 2px 0 #000,0 -1px 0 #000}
+.rp-rule{width:70%;height:1px;margin:16px 0;background:linear-gradient(90deg,transparent,var(--gold-lo),transparent)}
+.rp-blurb{font-size:13px;line-height:1.7;color:var(--bone);opacity:.8}
+.rp-wheel{margin-top:22px;width:56px;height:56px;border:2px dashed var(--gold-lo);border-radius:50%;
+display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:17px}
+@media (prefers-reduced-motion:no-preference){.rp-wheel{animation:rp-spin 14s linear infinite}}
+@keyframes rp-spin{to{transform:rotate(360deg)}}
