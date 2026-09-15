@@ -314,6 +314,61 @@ document.addEventListener('touchend', unlockAudioOnce, { passive: true });
 document.addEventListener('click', unlockAudioOnce, { passive: true });
 })();
 
+/* ---------- desktop/OS notifications (Notification API) ----------
+   Fires for whispers and @mentions when the person isn't actually looking at this tab -- switched
+   to another tab/app, or the window just isn't focused even if this tab is the visible one (hence
+   checking both document.hidden and document.hasFocus() at the call site below). This is the
+   "while the site is open somewhere" tier: it does NOT reach someone once they've closed the tab
+   or browser, which would need a real Push subscription and a server to send from -- out of scope
+   here. notifEnabled is the user's own on/off choice, remembered like the sound-mute toggle above;
+   Notification.permission is the browser's separate, one-way (except via site settings) grant. */
+var notifBtn = $('notifBtn');
+var notifEnabled = false;
+try { notifEnabled = localStorage.getItem('gc_notif_enabled') === '1'; } catch (e) {}
+function updateNotifBtn() {
+if (!notifBtn) return;
+var supported = 'Notification' in window;
+var icon = notifBtn.querySelector('.btn-icon');
+var on = supported && notifEnabled && Notification.permission === 'granted';
+if (icon) icon.textContent = on ? '🔔' : '🔕'; else notifBtn.textContent = on ? '🔔' : '🔕';
+notifBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+notifBtn.title = !supported ? 'Notifications are not supported in this browser' :
+Notification.permission === 'denied' ? 'Notifications are blocked — allow them in your browser’s site settings to turn this on' :
+on ? 'Notifications on for whispers & mentions — click to turn off' : 'Turn on notifications for whispers & mentions';
+}
+if (notifBtn) {
+updateNotifBtn();
+notifBtn.onclick = async function () {
+if (!('Notification' in window)) { addSys('Your browser does not support notifications.'); return; }
+if (Notification.permission === 'denied') { addSys('Notifications are blocked for this site — allow them in your browser’s site settings to turn this on.'); return; }
+if (Notification.permission === 'default') {
+var perm = await Notification.requestPermission(); // must run inside this click handler, not after any await before it, or some browsers silently ignore the prompt
+notifEnabled = perm === 'granted';
+} else {
+notifEnabled = !notifEnabled; // already granted -- this button is just the user's own mute switch from here on
+}
+try { localStorage.setItem('gc_notif_enabled', notifEnabled ? '1' : '0'); } catch (e) {}
+updateNotifBtn();
+};
+}
+/* Shows a real OS notification, only when on, granted, and the person genuinely isn't looking at
+   this tab right now -- never while they're sitting right here (that's what the in-page ding/badge
+   is for). tag lets a burst of whispers from the same person, or repeated mentions, update one
+   notification in place instead of piling up a stack of them. */
+function notifyDesktop(title, body, tag, onClick) {
+if (!notifEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+if (!(document.hidden || !document.hasFocus())) return;
+try {
+var n = new Notification(title, { body: body, icon: './icons/icon-192.png', tag: tag });
+n.onclick = function () { window.focus(); if (onClick) onClick(); n.close(); };
+} catch (e) {}
+}
+function notifPreview(body) {
+var t = String(body || '').trim();
+if (GIF_RE.test(t) || (OWN_IMG_RE && OWN_IMG_RE.test(t))) return '📷 sent an image';
+return t.length > 140 ? t.slice(0, 140) + '…' : t;
+}
+
 /* ---------- option to completely hide DM (whisper) tabs and windows ----------
    Purely a client-side/visual toggle, same pattern as sound mute: whispers still arrive and are
    remembered under the hood (unread counts, history) — they're just not shown on screen while
@@ -869,7 +924,7 @@ var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 log.appendChild(d);
 if (atBottom || mine) { log.scrollTop = log.scrollHeight; stickImages(log, d); }
 if (!mine && document.hidden && !replayingHistory) bumpTitle();
-if (mentionsMe && !replayingHistory) playSound('ding');
+if (mentionsMe && !replayingHistory) { playSound('ding'); notifyDesktop(m.sender_name + ' mentioned you', notifPreview(m.body), 'gc-mention'); }
 }
 function handleMessage(m) { if (blocked[m.sender_id]) return; if (m.recipient_id) renderIM(m); else renderRoom(m); }
 
@@ -1400,6 +1455,7 @@ if (!w.minimized) front(w.el);
 else if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
 playSound('ding');
 if (document.hidden) bumpTitle();
+notifyDesktop(otherName, notifPreview(m.body), 'gc-whisper-' + otherId, function () { openIM(otherId, otherName, true); });
 if (manualStatus === 'away' && !awayReplied[otherId]) {
 awayReplied[otherId] = true;
 post('[Away] ' + (myAwayMsg || (me.name + ' is currently away.')), otherId, otherName);
