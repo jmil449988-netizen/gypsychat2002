@@ -215,6 +215,12 @@ outline:1px solid #000;box-shadow:0 0 0 2px var(--gold),0 0 0 3px #000,0 0 28px 
 .modal-hd{font:700 16px Cinzel,"Trajan Pro",Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-shadow:0 0 10px rgba(201,162,74,.55);margin-bottom:8px}
 .modal-body{font:14px "IM Fell English",Georgia,serif;color:var(--bone);line-height:1.5;margin-bottom:14px}
 .modal .btn{min-width:90px}
+/* Prompt modal (Away message, Move to Group, ...) -- same input look as the save-your-character
+   form, just without a <label> above it since the modal title already says what's being asked. */
+.prompt-modal{text-align:left}
+.prompt-modal input{width:100%;padding:6px 8px;font:14px "IM Fell English",Georgia,serif;color:var(--bone);
+background:linear-gradient(180deg,#0f0d0b,#171310)}
+.prompt-modal .modal-body{font-size:12px;color:var(--ash);margin-bottom:8px}
 /* Image lightbox -- reuses .modal-overlay for the full-screen dark backdrop and centering, but
    skips the .modal card: just the picture at (almost) full size, tap/click-outside or ✕ to close. */
 .lightbox-overlay{z-index:90;background:rgba(0,0,0,.88);padding:40px 16px}
