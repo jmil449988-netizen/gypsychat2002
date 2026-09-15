@@ -42,15 +42,11 @@
 <div class="rule"></div>
 <div class="tag">Stay awhile, and chat.</div>
 
+<div id="joinFields">
 <div id="gateFields">
-<label for="accessCode">Access code</label>
-<input id="accessCode" class="sunk" autocomplete="off" maxlength="40" placeholder="Enter your invite code">
-<div class="err" id="gateErr"></div>
-<button class="btn" id="gateGo" style="height:32px">Continue</button>
-<div class="madeby">Testing is invite-only right now. No code? Ask whoever sent you here.</div>
+<label for="accessCode">Enter key here</label>
+<input id="accessCode" class="sunk" autocomplete="off" maxlength="40" placeholder="Your invite key">
 </div>
-
-<div id="joinFields" class="hidden">
 <div id="nameFields">
 <label for="sn">Character name</label>
 <input id="sn" class="sunk" maxlength="16" autocomplete="off" placeholder="e.g. xXsk8rXx">
@@ -67,6 +63,7 @@
 <div class="err" id="err"></div>
 <button class="btn" id="join" style="height:32px">Enter the room</button>
 <div class="admin-toggle-wrap"><button type="button" class="admin-toggle" id="adminToggle">Sign in with email</button></div>
+<div class="madeby" id="gateNote">Testing is invite-only right now. No key? Ask whoever sent you here.</div>
 <div class="madeby">created by Yogg Squad © 2027</div>
 </div>
 <img class="gw" src="./img/gypsy-woman.png" alt="" aria-hidden="true">
@@ -201,6 +198,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=1"></script>
-<script src="./js/app.js?v=38"></script>
+<script src="./js/app.js?v=39"></script>
 </body>
 </html>
