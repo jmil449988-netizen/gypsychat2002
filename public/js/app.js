@@ -151,6 +151,14 @@ var isAdmin = false, bans = {}, mutedUsers = {}; // bans/mutedUsers only loaded 
    badge -- the same impersonation hole the name claim closed. The table is the authority. */
 var adminIds = {};
 function isAdminId(id) { return !!adminIds[id]; }
+
+/* Levels: public.user_stats.level is a generated column derived purely from reactions_received
+   (see reactions_and_levels_feature.sql), so this cache only ever needs to mirror that one row
+   per user -- nothing computed or reconciled on the client. Absence from this map means "never
+   reacted to" rather than "level 0" (level is generated as 1 at zero reactions), which is what
+   lets levelBadgeHtml skip the badge entirely for someone nobody's ever reacted to instead of
+   showing "Lv1" on literally everyone. */
+var userStats = {};
 var lastSend = 0;
 
 /* ---------- threads board state (a single flat "general" board, 4chan-style — no topics) ---------- */
@@ -832,7 +840,7 @@ msgCache[m.id] = { senderId: m.sender_id, senderName: m.sender_name, body: m.bod
 var mentionsMe = !mine && bodyMentionsMe(m.body);
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them') + (mentionsMe ? ' mention-me' : ''); d.dataset.mid = m.id;
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + levelBadgeHtml(m.sender_id) + ':</b> ' + bodyHtml(m.body) + reactionsHtml('message', m.id);
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 log.appendChild(d);
 if (atBottom || mine) { log.scrollTop = log.scrollHeight; stickImages(log, d); }
@@ -840,6 +848,105 @@ if (!mine && document.hidden && !replayingHistory) bumpTitle();
 if (mentionsMe && !replayingHistory) playSound('ding');
 }
 function handleMessage(m) { if (blocked[m.sender_id]) return; if (m.recipient_id) renderIM(m); else renderRoom(m); }
+
+/* ---------- reactions (main room messages + thread posts -- never whispers, see
+   reactions_and_levels_feature.sql's header note on why) ----------
+   reactions[type+':'+id] = { emoji -> Set<userId> }. Populated in bulk right after history/a
+   thread loads (loadReactionsFor), then kept live purely by patching in place -- applyReactionRow
+   updates the cache and re-renders just the one .reactions element for that target, never the
+   whole message, whether the change came from this tab's own click or the realtime feed. */
+var REACTION_SET = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '💯'];
+var reactions = {};
+function reactKey(type, id) { return type + ':' + id; }
+function reactionCell(type, id) { var k = reactKey(type, id); return reactions[k] || (reactions[k] = {}); }
+function applyReactionRow(row, added) {
+var cell = reactionCell(row.target_type, row.target_id);
+var set = cell[row.emoji] || (cell[row.emoji] = new Set());
+if (added) set.add(row.user_id); else { set.delete(row.user_id); if (!set.size) delete cell[row.emoji]; }
+paintReactions(row.target_type, row.target_id);
+}
+function reactionsHtml(type, id) {
+var cell = reactions[reactKey(type, id)] || {};
+var pills = Object.keys(cell).map(function (e) {
+var set = cell[e], mine = !!(me && set.has(me.id));
+return '<button type="button" class="react-pill' + (mine ? ' mine' : '') + '" data-emoji="' + esc(e) + '" title="' + set.size + ' reaction' + (set.size === 1 ? '' : 's') + '">' + e + ' <span>' + set.size + '</span></button>';
+}).join('');
+return '<span class="reactions" data-rtype="' + esc(type) + '" data-rid="' + id + '">' + pills + '<button type="button" class="react-add" title="Add reaction" aria-label="Add reaction">+</button></span>';
+}
+/* Every rendered .reactions span for this target gets replaced in one pass -- normally there's
+   only ever one on screen at a time, but this stays correct even if that ever changes (e.g. the
+   same thread post rendered in two places). */
+function paintReactions(type, id) {
+document.querySelectorAll('.reactions[data-rtype="' + type + '"][data-rid="' + id + '"]').forEach(function (el) { el.outerHTML = reactionsHtml(type, id); });
+}
+async function loadReactionsFor(type, ids) {
+if (!ids || !ids.length) return;
+var r = await sb.from('reactions').select('target_type, target_id, user_id, emoji').eq('target_type', type).in('target_id', ids);
+if (r.error || !r.data) return;
+r.data.forEach(function (row) { applyReactionRow(row, true); });
+}
+async function toggleReaction(type, id, emoji) {
+var cell = reactionCell(type, id);
+var mine = !!(cell[emoji] && me && cell[emoji].has(me.id));
+if (mine) {
+var del = await sb.from('reactions').delete().eq('target_type', type).eq('target_id', id).eq('user_id', me.id).eq('emoji', emoji);
+if (!del.error) applyReactionRow({ target_type: type, target_id: id, user_id: me.id, emoji: emoji }, false);
+} else {
+var ins = await sb.from('reactions').insert({ target_type: type, target_id: id, user_id: me.id, emoji: emoji });
+/* A duplicate-key error here just means another tab/click already landed the same reaction a
+   moment ago -- the realtime INSERT event will paint it, so this isn't a real failure. */
+if (!ins.error) applyReactionRow({ target_type: type, target_id: id, user_id: me.id, emoji: emoji }, true);
+else if (!/duplicate|unique/i.test(ins.error.message || '')) addSys('Could not react: ' + ins.error.message);
+}
+}
+/* Quick-pick popup -- same detached-div-appended-to-body, position-near-anchor pattern as .nmenu
+   (openMenu) and the emoji/GIF pickers (positionPicker), just with its own small fixed emoji set
+   rather than the full compose-box EMOJI list, since a reaction is a much quicker, lower-stakes
+   pick than composing a message. */
+var reactPicker = document.createElement('div'); reactPicker.className = 'rpicker'; document.body.appendChild(reactPicker);
+var reactPickerTarget = null;
+REACTION_SET.forEach(function (e) {
+var b = document.createElement('button'); b.type = 'button'; b.textContent = e;
+b.onclick = function () { var t = reactPickerTarget; closeReactPicker(); if (t) toggleReaction(t.type, t.id, e); };
+reactPicker.appendChild(b);
+});
+function closeReactPicker() { reactPicker.classList.remove('open'); reactPickerTarget = null; }
+function openReactPicker(type, id, anchorEl) {
+var opening = !reactPicker.classList.contains('open') || !reactPickerTarget || reactPickerTarget.type !== type || reactPickerTarget.id !== id;
+if (!opening) { closeReactPicker(); return; }
+reactPickerTarget = { type: type, id: id };
+reactPicker.classList.add('open');
+positionPicker(reactPicker, anchorEl);
+}
+document.addEventListener('click', function (e) { if (reactPicker.contains(e.target) || e.target.closest('.react-add')) return; closeReactPicker(); });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeReactPicker(); });
+
+/* ---------- level badges ----------
+   userStats is only ever written wholesale on join (loadUserStats) and patched per-user by the
+   'user_stats' realtime subscription (see joinRoom) -- refreshLevelBadges finds every badge for
+   that one user id (room log, thread posts, the online list) and updates it in place rather than
+   re-rendering anything wholesale. The badge element is always emitted (see levelBadgeHtml) even
+   for someone with no row yet, just left [hidden], so there's a stable node to reveal the moment
+   their first reaction lands instead of having to splice new markup into an existing message. */
+function levelBadgeHtml(id) {
+var s = userStats[id];
+var title = s ? ('Level ' + s.level + ' — ' + s.reactions_received + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ' received') : '';
+return '<span class="lvl" data-lvl-for="' + esc(id) + '"' + (s ? '' : ' hidden') + ' title="' + esc(title) + '">' + (s ? ('Lv' + s.level) : '') + '</span>';
+}
+function refreshLevelBadges(id) {
+var s = userStats[id];
+document.querySelectorAll('[data-lvl-for="' + id + '"]').forEach(function (el) {
+if (s) { el.hidden = false; el.textContent = 'Lv' + s.level; el.title = 'Level ' + s.level + ' — ' + s.reactions_received + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ' received'; }
+else { el.hidden = true; el.textContent = ''; el.title = ''; }
+});
+renderPeople();
+}
+async function loadUserStats() {
+var r = await sb.from('user_stats').select('user_id, reactions_received, level');
+if (r.error || !r.data) return;
+userStats = {};
+r.data.forEach(function (x) { userStats[x.user_id] = x; });
+}
 
 /* ---------- presence list ---------- */
 function renderPeople() {
@@ -852,7 +959,7 @@ if (isAdminId(id)) classes.push('admin');
 if (showStatus) classes.push('st-' + status);
 var tag = showStatus ? ' <span class="stag">(' + status + ')</span>' : '';
 var title = (status === 'away' && p.awayMsg) ? ' title="' + esc(p.awayMsg) + '"' : '';
-return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + esc(p.name) + tag + '</div>';
+return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + esc(p.name) + levelBadgeHtml(id) + tag + '</div>';
 }).join('');
 /* The online count used to live in the icon-heavy status bar up top; it now lives in the main
    chat's own footer line (directly below that bar), alongside the watermark -- threads and
@@ -1217,6 +1324,8 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clos
 log.onclick = function (e) {
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
 var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { e.stopPropagation(); reportMessage(rpt.dataset.mid); return; }
+var radd = e.target.closest('.react-add'); if (radd) { e.stopPropagation(); var rc = radd.closest('.reactions'); openReactPicker(rc.dataset.rtype, Number(rc.dataset.rid), radd); return; }
+var rpill = e.target.closest('.react-pill'); if (rpill) { e.stopPropagation(); var rc2 = rpill.closest('.reactions'); toggleReaction(rc2.dataset.rtype, Number(rc2.dataset.rid), rpill.dataset.emoji); return; }
 var b = e.target.closest('.who[data-id]'); if (!b || b.dataset.id === me.id) return;
 e.stopPropagation(); openMenu(b.dataset.id, b, b.dataset.name);
 };
@@ -1668,6 +1777,10 @@ if (threadsPanel) { threadsPanel.classList.remove('ready'); }
 if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
 if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('signed-on'); }
 openThreadId = null;
+/* Reaction/level caches are keyed off ids that only mean something while this particular room
+   channel is live -- a stale "mine" flag surviving a kick/reconnect into a fresh join would show
+   someone's OWN reaction state on whatever new message happens to reuse a cached target id. */
+reactions = {}; userStats = {}; closeReactPicker();
 clearTimeout(idleTimer);
 clearTimeout(idleDisconnectTimer);
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
@@ -2223,10 +2336,17 @@ if (threadPostsSeen[p.id]) return; threadPostsSeen[p.id] = 1;
 var postIsAdmin = isAdminId(p.sender_id);
 var d = document.createElement('div'); d.className = 'tp-post' + (isOp ? ' op' : '') + (postIsAdmin ? ' admin' : '');
 d.dataset.postId = String(p.id);
-var html = '<span class="t">' + fmt(p.created_at) + '</span><b>' + esc(p.sender_name) + (isOp ? ' (OP)' : '') + ':</b> ';
+/* A thread's opening post lives as a row in public.threads, not thread_posts -- appendThreadPost
+   gets handed a synthetic { id: 'op-'+id, ... } for it (see openThread), but that pseudo-object
+   still carries a real thread_id, so reactions on an OP target 'thread'/thread_id while replies
+   target 'thread_post'/their own real id. */
+var reactType = isOp ? 'thread' : 'thread_post';
+var reactId = isOp ? p.thread_id : p.id;
+var html = '<span class="t">' + fmt(p.created_at) + '</span><b data-id="' + esc(p.sender_id) + '">' + esc(p.sender_name) + levelBadgeHtml(p.sender_id) + (isOp ? ' (OP)' : '') + ':</b> ';
 if (p.body) html += bodyHtml(p.body);
 if (p.image_url) html += (p.body ? '<br>' : '') + '<img class="tp-posted-img" src="' + esc(p.image_url) + '" alt="Image" loading="lazy">';
 if (isAdmin) html += ' <button type="button" class="tp-del" data-id="' + esc(String(p.id)) + '" data-op="' + (isOp ? '1' : '0') + '" data-thread="' + esc(String(p.thread_id)) + '" title="' + (isOp ? 'Delete thread' : 'Delete reply') + '" aria-label="' + (isOp ? 'Delete thread' : 'Delete reply') + '">🗑</button>';
+html += reactionsHtml(reactType, reactId);
 d.innerHTML = html;
 var atBottom = tpPosts.scrollHeight - tpPosts.scrollTop - tpPosts.clientHeight < 60;
 /* Admin posts are pinned as a block at the top of the thread (in chronological order among
@@ -2273,6 +2393,8 @@ addSys('Reply deleted.');
 if (tpPosts) {
 tpPosts.onclick = function (e) {
 var img = e.target.closest('img.gif, img.tp-posted-img'); if (img) { openLightbox(img.src); return; }
+var radd = e.target.closest('.react-add'); if (radd) { e.stopPropagation(); var rc = radd.closest('.reactions'); openReactPicker(rc.dataset.rtype, Number(rc.dataset.rid), radd); return; }
+var rpill = e.target.closest('.react-pill'); if (rpill) { e.stopPropagation(); var rc2 = rpill.closest('.reactions'); toggleReaction(rc2.dataset.rtype, Number(rc2.dataset.rid), rpill.dataset.emoji); return; }
 var b = e.target.closest('.tp-del'); if (!b) return;
 e.stopPropagation();
 var tid = Number(b.dataset.thread);
@@ -2301,6 +2423,8 @@ appendThreadPost({ id: 'op-' + id, sender_id: t.op_id, sender_name: t.op_name, b
 if (!r.error) r.data.forEach(function (p) { appendThreadPost(p, false); });
 tpPosts.scrollTop = tpPosts.scrollHeight;
 if (tpReplyBody) tpReplyBody.focus();
+loadReactionsFor('thread', [id]);
+loadReactionsFor('thread_post', r.data ? r.data.map(function (p) { return p.id; }) : []);
 }
 function closeThread() {
 openThreadId = null;
@@ -2998,6 +3122,15 @@ delete msgCache[mid];
    rows this client has no use for. */
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dm_reads', filter: 'peer_id=eq.' + me.id }, function (p) { handleDmRead(p.new); });
 channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'dm_reads', filter: 'peer_id=eq.' + me.id }, function (p) { handleDmRead(p.new); });
+/* Reactions and levels aren't scoped to this room server-side (reactions targets threads and
+   thread posts too, which have no room column to filter on), so these two are unfiltered and the
+   client just ignores anything for a target it isn't currently showing -- cheap at this app's
+   scale, and it's the same channel that already tears down in leaveRoom(), so nothing extra to
+   clean up. */
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reactions' }, function (p) { applyReactionRow(p.new, true); });
+channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reactions' }, function (p) { applyReactionRow(p.old, false); });
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_stats' }, function (p) { userStats[p.new.user_id] = p.new; refreshLevelBadges(p.new.user_id); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_stats' }, function (p) { userStats[p.new.user_id] = p.new; refreshLevelBadges(p.new.user_id); });
 
 var firstSub = true;
 await new Promise(function (res, rej) {
@@ -3012,7 +3145,7 @@ await new Promise(function (r) { setTimeout(r, 400); }); // let presence sync so
 if (nameTaken(n)) { await channel.unsubscribe(); channel = null; throw new Error('That name is already taken.'); }
 var ban = await sb.from('bans').select('reason, expires_at').eq('user_id', me.id).maybeSingle();
 if (ban.data && (!ban.data.expires_at || new Date(ban.data.expires_at) > new Date())) { await channel.unsubscribe(); channel = null; throw new Error('You have been removed from this room.' + (ban.data.reason ? ' Reason: ' + ban.data.reason : '')); }
-await loadBlocks(); await loadAdmin(); await loadMyModeration(); await loadFriends(); await loadDmReads();
+await loadBlocks(); await loadAdmin(); await loadMyModeration(); await loadFriends(); await loadDmReads(); await loadUserStats();
 await channel.track({ name: n, status: 'online', awayMsg: '', avatarUrl: me.avatarUrl || '' });
 
 // history: recent room messages plus my recent whispers (RLS makes the server only return what I may see)
@@ -3030,6 +3163,10 @@ replayingHistory = false;
 /* Badges were accumulated silently during the replay above; paint them once, now, rather than
    re-rendering the whole people list on every one of up to 200 historical messages. */
 renderPeople();
+/* Reactions aren't part of the message row itself, so they need their own pass once the room
+   messages they belong to actually exist in the DOM to be painted onto -- whispers are excluded,
+   same as everywhere else reactions touch messages. */
+loadReactionsFor('message', h.data.filter(function (x) { return !x.recipient_id; }).map(function (x) { return x.id; }));
 Object.keys(wins).forEach(function (id) { updateTab(id); });
 if (gcRoot) gcRoot.classList.add('signed-on');
 updateUsersStacked(); // the panel only has a size now that it is no longer hidden
