@@ -867,7 +867,7 @@ el.innerHTML = '<div class="bar"><span class="gem"></span><span class="wava" ari
 '<div class="ilog" aria-live="polite"></div><div class="icomp">' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
-'<input type="file" class="im-img-file hidden" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif">' +
+'<input type="file" class="im-img-file hidden" accept="image/*,.heic,.heif">' +
 '<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>' +
 '<div class="rz rz-nw" data-dir="nw" aria-hidden="true"></div><div class="rz rz-ne" data-dir="ne" aria-hidden="true"></div>' +
 '<div class="rz rz-sw" data-dir="sw" aria-hidden="true"></div><div class="rz rz-se" data-dir="se" aria-hidden="true"></div>';
@@ -1711,13 +1711,13 @@ else { tpReplyImageUrl = null; tpReplyPreviewImg.src = ''; tpReplyPreviewWrap.cl
 }
 /* ---------- HEIC/HEIF photos (the default format iPhone cameras have saved in since iOS 11) ----------
    No browser can decode HEIC inside an <img> or <canvas> -- not even Safari, despite iOS itself
-   supporting it natively in Photos -- so an unconverted HEIC upload can't be cropped/previewed and,
-   via ALLOWED_IMG_TYPES below, gets rejected outright before that. iOS Safari's own file picker
-   usually transcodes a HEIC photo to JPEG automatically when handing it to a web page, but that
-   doesn't happen in every browser/in-app webview or every iOS version, and some Android file
-   providers hand over HEIC files with an empty file.type -- so this checks the filename too, and
-   when it finds one, converts it to an ordinary JPEG right in the browser (via the heic2any library
-   loaded from index.html) before anything else touches the file. */
+   supporting it natively in Photos -- so an unconverted HEIC upload can't be cropped/previewed and
+   gets rejected outright before that. iOS Safari's own file picker usually transcodes a HEIC photo
+   to JPEG automatically when handing it to a web page, but that doesn't happen in every browser/
+   in-app webview or every iOS version, and some Android file providers hand over HEIC files with an
+   empty file.type -- so this checks the filename too, and when it finds one, converts it to an
+   ordinary JPEG right in the browser (via the heic2any library loaded from index.html) before
+   anything else touches the file. */
 var HEIC_NAME_RE = /\.hei[cf]$/i;
 function looksLikeHeic(file) {
 if (file.type === 'image/heic' || file.type === 'image/heif') return true;
@@ -1733,14 +1733,31 @@ var jpegBlob = Array.isArray(out) ? out[0] : out;
 var name = (file.name || 'photo').replace(/\.[^./\\]+$/, '') + '.jpg';
 return new File([jpegBlob], name, { type: 'image/jpeg' });
 }
+/* Many mobile file pickers (Android content providers, cloud-synced photo apps, the newer Android
+   Photo Picker) hand over a perfectly ordinary JPEG/PNG/GIF/WEBP with an empty or generic file.type
+   ("application/octet-stream", or nothing at all) -- so trusting file.type alone rejects real photos
+   that the browser could read just fine. This reads the first few bytes of the file itself (the
+   format's actual magic number) as a fallback whenever file.type doesn't already match one of the
+   types thread-images/avatars support, instead of trusting a label the OS may not have set correctly. */
+function sniffImageType(file) {
+return file.slice(0, 12).arrayBuffer().then(function (buf) {
+var b = new Uint8Array(buf);
+if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'image/jpeg';
+if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return 'image/png';
+if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif';
+if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+return null;
+}).catch(function () { return null; });
+}
 async function uploadImage(file) {
 if (!file) return null;
 try { file = await normalizeImageFile(file); } catch (e) { addSys(e.message || 'Could not read that photo.'); return null; }
-var ext = ALLOWED_IMG_TYPES[file.type];
-if (!ext) { addSys('Images must be JPG, PNG, GIF, or WEBP.'); return null; }
 if (file.size > MAX_IMG_BYTES) { addSys('Images must be 5MB or smaller.'); return null; }
+var type = ALLOWED_IMG_TYPES[file.type] ? file.type : await sniffImageType(file);
+var ext = ALLOWED_IMG_TYPES[type];
+if (!ext) { addSys('Images must be JPG, PNG, GIF, or WEBP.'); return null; }
 var path = me.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
-var up = await sb.storage.from('thread-images').upload(path, file, { contentType: file.type, upsert: false });
+var up = await sb.storage.from('thread-images').upload(path, file, { contentType: type, upsert: false });
 if (up.error) { addSys('Image upload failed: ' + up.error.message); return null; }
 var pub = sb.storage.from('thread-images').getPublicUrl(path);
 return (pub.data && pub.data.publicUrl) || null;
@@ -1753,7 +1770,17 @@ return (pub.data && pub.data.publicUrl) || null;
    upsert:true), there's only ever one file per account: a new upload simply replaces the old one,
    which is what "persistent until changed again" means here. A "?v=" cache-buster is appended to
    the stored URL each time so the new picture shows up immediately instead of the old one lingering
-   in the browser's image cache. */
+   in the browser's image cache.
+
+   Unlike uploadImage (which stores the original file as-is, so it needs to know the real type),
+   an avatar is always re-encoded to a fresh PNG by downscaleImageToBlob below -- what actually gets
+   uploaded to storage is never the original file, just 96x96 pixels drawn from it onto a canvas. So
+   there's no need to gate on file.type/extension at all: whether this particular photo can become a
+   profile picture is exactly the question of whether the browser's own Image() can decode it, which
+   downscaleImageToBlob already answers via its onload (success) / onerror ("Could not read that
+   image.") -- letting that be the real test, instead of a hand-maintained MIME allowlist, means any
+   format this browser can actually open (including ones mobile pickers mislabel or leave blank) just
+   works, and only genuinely undecodable files (e.g. TIFF) still get turned away, with a clear reason. */
 var AVATAR_SIZE = 96;
 function downscaleImageToBlob(file, size) {
 return new Promise(function (resolve, reject) {
@@ -1780,8 +1807,6 @@ thumb.innerHTML = (me && me.avatarUrl) ? '<img src="' + esc(me.avatarUrl) + '" a
 async function uploadAvatar(file) {
 if (!file || !me) return;
 try { file = await normalizeImageFile(file); } catch (e) { addSys(e.message || 'Could not read that photo.'); return; }
-var ext = ALLOWED_IMG_TYPES[file.type];
-if (!ext) { addSys('Profile pictures must be JPG, PNG, GIF, or WEBP.'); return; }
 if (file.size > MAX_IMG_BYTES) { addSys('Profile pictures must be 5MB or smaller.'); return; }
 var btn = $('avaBtn'); if (btn) btn.disabled = true;
 try {
