@@ -269,20 +269,23 @@ color:var(--bone);font:600 13px Cinzel,Georgia,serif;cursor:pointer}
 .status{display:flex;justify-content:space-between;gap:8px;padding:5px 12px;font-size:12px;color:var(--ash);
 border-top:2px solid var(--gold-lo);background:#0f0d0b;box-shadow:inset 0 2px 0 #000}
 .status .cell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* Small "made by" + version watermark for the room itself -- the login screen has its own copy
-   in .madeby, but that whole block disappears once #login is hidden at sign-on, so the room gets
-   its own, tucked in the corner rather than competing with the status bar's live info. Absolute
-   against .win (the nearest positioned ancestor), sitting just above the status bar; pointer-events
-   none and low opacity so it reads as a watermark, not another control. */
+/* "made by" + version watermark for the roulette teaser panel -- .roulette-panel is position:fixed,
+   giving it a stable positioning context, so an absolute corner watermark works cleanly there with
+   no collision risk against other content. Kept as an overlay since that's never been an issue. */
 .room-watermark{position:absolute;right:10px;bottom:34px;font:10px Cinzel,Georgia,serif;letter-spacing:1px;
 color:var(--ash);opacity:.65;pointer-events:none;user-select:none;z-index:1}
-/* On mobile the status bar measures taller than the 34px gap the desktop position assumes, so the
-   old bottom:38px here was landing right on/inside the status bar's own row instead of clearing it
-   -- checked against the actual rendered geometry (.status's top edge sits ~37-38px up from .win's
-   bottom border at this width), not just eyeballed. 42px gives it a few clean px of daylight above
-   the status bar's gold top border, so it reads as tucked between that and the frame's own bottom
-   border rather than crossing either line. */
 @media (max-width:500px){.room-watermark{bottom:42px;right:8px;font-size:9px}}
+/* Small "made by" + version footer for the main chat room -- the login screen has its own copy
+   in .madeby, but that whole block disappears once #login is hidden at sign-on, so the room gets
+   its own. Earlier this sat as an absolute overlay pinned above the status bar, but that kept
+   landing on/inside the status bar at various widths since the assumed gap never quite matched
+   the status bar's real height. Simpler and collision-proof: a normal in-flow row, last child of
+   .win, right after .status -- it just becomes the next line in the window instead of floating
+   over anything. */
+.room-footer{text-align:center;padding:3px 10px 4px;font:10px Cinzel,Georgia,serif;letter-spacing:1px;
+color:var(--ash);opacity:.65;pointer-events:none;user-select:none;border-top:1px solid var(--gold-lo);
+background:#0f0d0b}
+@media (max-width:500px){.room-footer{padding:2px 8px 3px;font-size:9px}}
 .login{grid-column:1 / -1;padding:22px 12px 18px;text-align:center;position:relative}
 .login h1{font:700 30px Cinzel,Georgia,serif;letter-spacing:3px;color:var(--gold);margin:0 0 4px;
 text-shadow:0 0 14px rgba(201,162,74,.5),0 2px 0 #000}
