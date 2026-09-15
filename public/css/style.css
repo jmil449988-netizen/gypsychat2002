@@ -311,6 +311,27 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .picker.open{display:grid}
 .picker button{font-size:18px;width:32px;height:32px;background:#0f0d0b;border:1px solid #3a3026;cursor:pointer;padding:0}
 .picker button:hover,.picker button:focus-visible{border-color:var(--gold);box-shadow:0 0 8px rgba(201,162,74,.6);outline:none}
+/* Reaction quick-pick -- same popup shell as .picker above, just a 4-wide grid since it's a
+   curated set of 8 rather than the full compose emoji list. */
+.rpicker{position:fixed;z-index:57;padding:6px;display:none;grid-template-columns:repeat(4,32px);gap:3px;
+background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double var(--gold-lo);box-shadow:0 0 0 1px #000,0 8px 24px #000}
+.rpicker.open{display:grid}
+.rpicker button{font-size:18px;width:32px;height:32px;background:#0f0d0b;border:1px solid #3a3026;cursor:pointer;padding:0}
+.rpicker button:hover,.rpicker button:focus-visible{border-color:var(--gold);box-shadow:0 0 8px rgba(201,162,74,.6);outline:none}
+/* Reaction pills under a message/thread post -- square chips rather than rounded pills to match
+   this app's sharp-edged Diablo-window look (nothing else here uses border-radius). */
+.reactions{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:3px}
+.react-pill{font:11px/16px inherit;background:#0f0d0b;border:1px solid #3a3026;color:var(--bone);padding:1px 6px;cursor:pointer}
+.react-pill span{color:#8a8070;margin-left:2px}
+.react-pill:hover,.react-pill:focus-visible{border-color:var(--gold-lo);outline:none}
+.react-pill.mine{border-color:var(--gold);color:var(--gold-hi);box-shadow:0 0 6px rgba(201,162,74,.35)}
+.react-pill.mine span{color:var(--gold)}
+.react-add{font:11px/16px inherit;background:none;border:1px dashed #3a3026;color:#5f5648;cursor:pointer;padding:0 6px;opacity:.55}
+.react-add:hover,.react-add:focus-visible{opacity:1;border-color:var(--gold-lo);color:var(--ash);outline:none}
+/* Level badge -- shown next to a name once someone has actually received at least one reaction
+   (see levelBadgeHtml); [hidden] keeps the node in the DOM so a live level-up just reveals and
+   updates it rather than needing new markup spliced in. */
+.lvl{font-size:9px;color:var(--gold);border:1px solid var(--gold-lo);padding:0 3px;margin-left:4px;letter-spacing:.5px;vertical-align:1px}
 .gifpicker{position:fixed;z-index:56;display:none;flex-direction:column;width:280px;max-width:calc(100vw - 20px);
 background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double var(--gold-lo);box-shadow:0 0 0 1px #000,0 8px 24px #000}
 .gifpicker.open{display:flex}
