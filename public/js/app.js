@@ -50,6 +50,30 @@ if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK
 
 var sb = null, me = null, channel = null;
 var people = {}; // user id -> presence object {name, status, awayMsg} (from presence)
+/* Mobile browsers throw a phone's realtime connection around constantly -- backgrounding the tab,
+   the OS freezing background network activity, a flaky signal dropping and reconnecting -- and any
+   of those makes `people` (this client's live view of who's in the room right now) instantly forget
+   someone who never actually left. That's a minor cosmetic flicker for the room list, but it's fatal
+   for @mention push: someone who steps away from their phone for a minute becomes un-@-mentionable
+   and never gets notified, which defeats the entire point of Web Push. recentPeople keeps a
+   short-lived memory of the last known presence data for anyone seen this session, so a mention
+   still resolves to a real user id for a grace window after they drop out of live `people`. */
+var recentPeople = {}; // user id -> { ...presence data, lastSeen }
+var RECENT_GRACE_MS = 15 * 60 * 1000; // long enough to survive a phone screen-lock/background cycle, short enough that someone genuinely gone eventually stops being mentionable
+function touchRecentPeople() {
+  var now = Date.now();
+  Object.keys(people).forEach(function (id) {
+    var p = people[id]; if (!p) return;
+    recentPeople[id] = { name: p.name, status: p.status, awayMsg: p.awayMsg, lastSeen: now };
+  });
+}
+/* Lazily sweeps out anything past its grace window before handing back the pool -- called right
+   before it's read rather than on a timer, so it's always accurate at the moment it matters. */
+function recentPeopleEntries() {
+  var now = Date.now();
+  Object.keys(recentPeople).forEach(function (id) { if (now - recentPeople[id].lastSeen > RECENT_GRACE_MS) delete recentPeople[id]; });
+  return recentPeople;
+}
 var wins = {}, unread = {}, seen = {};
 var typingRoom = {}; // user id -> {name, timer} -- who's currently typing in the main room; see the typing-indicator section below
 /* Message metadata cache, keyed by message id -- just enough (sender, raw body, when) for the 🚩
@@ -407,7 +431,7 @@ if (icon) icon.textContent = on ? '🔔' : (iosNeedsInstall ? '📲' : '🔕'); 
 notifBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
 notifBtn.title = iosNeedsInstall ? 'On iPhone/iPad: tap Share, then Add to Home Screen, then open Gypsy Chat from that icon to turn on notifications' :
 !supported ? 'Notifications are not supported in this browser' :
-Notification.permission === 'denied' ? 'Notifications are blocked — allow them in your browser’s site settings to turn this on' :
+Notification.permission === 'denied' ? (isAndroidDevice() && isStandaloneDisplay() ? 'Notifications are off — allow them in your phone’s Settings → Apps → Gypsy Chat → Notifications' : 'Notifications are blocked — allow them in your browser’s site settings to turn this on') :
 on ? 'Notifications on for whispers & mentions — click to turn off' : 'Turn on notifications for whispers & mentions';
 }
 if (notifBtn) {
@@ -424,7 +448,8 @@ if (Notification.permission === 'denied') {
    reversed by the person, in the browser's own settings, which is why this can look like "the bell
    does nothing" even though it's working as designed. Android Chrome buries that toggle a bit
    differently than desktop, so it gets its own exact steps here. */
-if (isAndroidDevice()) { addSys('Notifications are blocked for this site. Tap the ⓘ or 🔒 icon at the left of the address bar → Permissions (or "Site settings") → Notifications → Allow, then reload this page and tap the bell again.'); }
+if (isAndroidDevice() && isStandaloneDisplay()) { addSys('Notifications are off for Gypsy Chat. Once this is installed to your Home Screen, Chrome hands the on/off switch to Android itself -- Chrome’s own site settings will just say "Managed by Gypsy Chat 2000" and won’t have a working toggle. Go to your phone’s Settings → Apps → Gypsy Chat → Notifications → Allow, then come back and tap the bell again.'); }
+else if (isAndroidDevice()) { addSys('Notifications are blocked for this site. Tap the ⓘ or 🔒 icon at the left of the address bar → Permissions (or "Site settings") → Notifications → Allow, then reload this page and tap the bell again.'); }
 else { addSys('Notifications are blocked for this site — allow them in your browser’s site settings to turn this on.'); }
 return;
 }
@@ -463,8 +488,16 @@ return t.length > 140 ? t.slice(0, 140) + '…' : t;
    this is on, and everything reappears the moment it's switched back off. */
 var dmTabsOff = false;
 try { dmTabsOff = localStorage.getItem('gc_dm_tabs_off') === '1'; } catch (e) {}
+/* The toggle button always reflects the raw preference the person picked ("I don't want to see DM
+   tabs"), but that preference only actually hides anything while there are zero whisper windows
+   open -- opening (or receiving) a new whisper while the toggle is off should still show it, since
+   the person is looking right at it; once every whisper window is fully closed (not just
+   minimized -- see destroyWin), the DM UI goes back to hidden if the preference is still on. */
+function applyDmVisibility() {
+if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff && Object.keys(wins).length === 0);
+}
 function updateDmToggleBtn() {
-if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff);
+applyDmVisibility();
 if (!dmToggleBtn) return;
 dmToggleBtn.textContent = dmTabsOff ? '🚫' : '💬';
 dmToggleBtn.setAttribute('aria-pressed', dmTabsOff ? 'true' : 'false');
@@ -905,16 +938,21 @@ function bodyMentionsMe(body) {
   if (!me) return false;
   return new RegExp('@' + escRe(me.name) + '(?![\\w-])', 'i').test(String(body || ''));
 }
-/* Same matching rule as bodyMentionsMe/highlightMentions (only people currently in the room can be
-   @mentioned), but returning every matched user id instead of just a yes/no for "me" -- used right
-   after sending a room message to work out who to push-notify, since the sender's client is the only
-   one guaranteed to be online at that moment to trigger it. Excludes the sender themselves so
-   mentioning your own name can't push-notify you. */
+/* Similar matching rule to bodyMentionsMe/highlightMentions, but resolved against recentPeople
+   (anyone seen in the last RECENT_GRACE_MS, not just who's live in `people` this instant) and
+   returning every matched user id instead of just a yes/no for "me" -- used right after sending a
+   room message to work out who to push-notify, since the sender's client is the only one guaranteed
+   to be online at that moment to trigger it. Excludes the sender themselves so mentioning your own
+   name can't push-notify you. The wider pool matters specifically for mobile: someone whose phone
+   dropped its realtime connection a moment ago (backgrounded, weak signal) is exactly who needs the
+   push to actually reach them -- if @mentions only worked for people already live in `people`, the
+   push would only ever fire for people who didn't need it. */
 function mentionedUserIds(body) {
   var text = String(body || ''); var ids = [];
-  Object.keys(people).forEach(function (id) {
+  var pool = recentPeopleEntries();
+  Object.keys(pool).forEach(function (id) {
     if (id === (me && me.id)) return;
-    var n = people[id] && people[id].name; if (!n) return;
+    var n = pool[id] && pool[id].name; if (!n) return;
     if (new RegExp('@' + escRe(n) + '(?![\\w-])', 'i').test(text)) ids.push(id);
   });
   return ids;
@@ -1356,6 +1394,7 @@ bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up);
 makeResizable(el);
 $('ims').appendChild(el); wins[id] = win;
 makeTab(id); updateTab(id); updateWinAvatar(id); // tab starts visible (win starts minimized) regardless of who the first message is from
+applyDmVisibility(); // a whisper was just opened -- show it even if the DM-tabs-off preference is on
 return win;
 }
 /* ---------- whisper window resizing ----------
@@ -1521,6 +1560,7 @@ function destroyWin(id) {
 var w = wins[id]; if (!w) return;
 clearTimeout(w.typingTimer);
 w.el.remove(); if (w.tab) w.tab.remove(); delete wins[id];
+applyDmVisibility(); // once the last open whisper is fully closed, go back to hidden if that's still the preference
 }
 function front(el) { el.style.zIndex = ++zTop; }
 function imSys(id, text) { var w = wins[id]; if (!w) return; var d = document.createElement('div'); d.className = 'm sys'; d.textContent = text; w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; }
@@ -3412,6 +3452,7 @@ channel = sb.channel('room:' + (C.ROOM || 'main'), { config: { presence: { key: 
 channel.on('presence', { event: 'sync' }, function () {
 var stt = channel.presenceState(); people = {};
 Object.keys(stt).forEach(function (k) { if (stt[k][0]) people[k] = stt[k][0]; });
+touchRecentPeople(); // refresh the mention-push grace-window cache with whoever's live right now
 Object.keys(wins).forEach(function (id) { if (people[id]) { renameWin(id, people[id].name); updateWinAvatar(id); } });
 renderPeople();
 });
