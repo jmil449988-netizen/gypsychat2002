@@ -111,6 +111,12 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .list div.st-away::before{background:var(--gold);box-shadow:0 0 5px rgba(201,162,74,.7)}
 .users .list div.st-busy::before{background:var(--blood);box-shadow:0 0 5px rgba(179,38,30,.7)}
 .users .list div.st-idle::before{background:#5f6b7a;box-shadow:0 0 5px rgba(95,107,122,.6)}
+/* Idle overrides whatever colour the name would otherwise have (including the lilac glow an
+   unread whisper gives it) -- someone who's stepped away shouldn't read as more "lit up" than
+   someone who's actually here. The higher-specificity .unread.st-idle rule is what wins that
+   fight; without it the single .unread class would still win on source order alone. */
+.users .list div.st-idle{color:var(--ash);text-shadow:none}
+.users .list div.unread.st-idle{color:var(--ash);text-shadow:none}
 .users .list .stag{font-size:10px;font-style:italic;color:#8f8371;margin-left:2px}
 .users .list .fg-hd{font:700 10px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold-lo);text-transform:uppercase;padding:6px 2px 2px;white-space:nowrap}
 .users .list .fg-hd:first-child{padding-top:2px}
@@ -427,6 +433,25 @@ background-size:230px auto,cover}
 .status .savebtn:hover{color:var(--gold-hi)}
 .save-modal{max-width:420px;width:calc(100vw - 32px);text-align:left}
 .save-modal .modal-body{max-height:min(60vh,520px);overflow-y:auto}
+
+/* Admin-only "review reports" bell -- same treatment as the other status-bar cell buttons, plus
+   a small red count badge for open reports so an admin doesn't have to open it to know something
+   is waiting. */
+.status .reportsbtn{position:relative}
+.rbadge{position:absolute;top:-6px;right:-6px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;
+background:var(--blood);color:#fff;font:700 10px Cinzel,Georgia,serif;line-height:15px;text-align:center;
+box-shadow:0 0 0 1px #000}
+.reports-modal{max-width:520px;width:calc(100vw - 32px);text-align:left}
+.reports-modal .modal-body{max-height:min(70vh,560px);overflow-y:auto}
+.reports-list .empty{color:#5f5648;font-style:italic;font-size:13px;padding:6px 0}
+.report-row{border:1px solid var(--gold-lo);background:rgba(0,0,0,.25);padding:8px 10px;margin-bottom:8px}
+.report-row .rr-hd{font-size:12px;color:var(--ash);margin-bottom:4px}
+.report-row .rr-hd b{color:var(--gold-hi);font-weight:700}
+.report-row .rr-reason{font-size:13px;color:var(--bone);line-height:1.4;margin-bottom:8px;white-space:pre-wrap;word-break:break-word}
+.report-row .rr-actions{display:flex;gap:6px;justify-content:flex-end}
+.report-row .rr-actions .btn{min-width:0;padding:0 10px;height:26px;font-size:12px}
+.report-row .rr-actions .rr-ban{color:#e07a7a;border-color:#7a2a2a}
+.report-row .rr-actions .rr-ban:hover{color:#ff9c9c;border-color:#7a2a2a;background:rgba(179,38,30,.15)}
 .save-lead{margin:0 0 12px;line-height:1.6;color:var(--bone)}
 .save-lead b{color:var(--gold-hi);font-weight:normal;font-family:Cinzel,Georgia,serif;letter-spacing:.5px}
 .save-modal label{display:block;margin:10px 0 3px;font:700 10px Cinzel,Georgia,serif;letter-spacing:1.5px;
@@ -481,6 +506,20 @@ text-underline-offset:3px}
   .thread-toggle-fab{bottom:auto;right:8px}
   .roulette-toggle-fab{bottom:auto;right:8px}
 }
+
+/* Draggable / sweepable bubbles (see makeFabDraggable() in app.js). touch-action:none stops a
+   drag on a phone from also scrolling the page underneath it, matching the .uz resize grip
+   above. The left/top transition is what makes a release (snap back into the viewport, or dock
+   against an edge) glide instead of jump -- suppressed while a drag is actively in progress, or
+   it would fight the pointer and lag a frame behind your finger. */
+.thread-toggle-fab,.roulette-toggle-fab{touch-action:none;transition:left .22s ease,top .22s ease,opacity .18s ease}
+.thread-toggle-fab.fab-dragging,.roulette-toggle-fab.fab-dragging{transition:none;box-shadow:0 0 0 1px #000,0 6px 20px #000,0 0 20px rgba(201,162,74,.9)}
+/* Docked = swept mostly off-screen, just a tab's width left showing at the edge. Dimmed so it
+   reads as tucked away rather than as a normal, ready-to-tap button; full opacity on hover/focus
+   so it's still easy to find with a mouse. */
+.thread-toggle-fab.fab-docked,.roulette-toggle-fab.fab-docked{opacity:.5}
+.thread-toggle-fab.fab-docked:hover,.thread-toggle-fab.fab-docked:focus-visible,
+.roulette-toggle-fab.fab-docked:hover,.roulette-toggle-fab.fab-docked:focus-visible{opacity:1}
 
 /* Watermark: a touch larger and nudged right of centre. Sized as a share of the log rather than
    a fixed pixel width -- the log runs ~570px wide on a full desktop window but barely 260px in a
