@@ -157,8 +157,8 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .list div.f-away{color:var(--gold)}
 .users .list div.f-busy{color:#e07a7a}
 .users .list div.f-idle{color:#7a8494}
-.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
-.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn,.status .bugbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
+.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover,.status .bugbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
 .status .avabtn{padding:1px 6px}
 .ava-thumb{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#2b2521;color:var(--gold);font-size:12px;line-height:1;overflow:hidden;vertical-align:-3px}
 .ava-thumb img{width:16px;height:16px;border-radius:50%;object-fit:cover;display:block}
@@ -608,6 +608,34 @@ box-shadow:0 0 0 1px #000}
 .report-row .rr-select{height:26px;font-size:12px;background:rgba(0,0,0,.35);color:var(--bone);border:1px solid var(--gold-lo);border-radius:4px;padding:0 4px;max-width:100%}
 .report-row .rr-actions .rr-apply{color:#e07a7a;border-color:#7a2a2a}
 .report-row .rr-actions .rr-apply:hover{color:#ff9c9c;border-color:#7a2a2a;background:rgba(179,38,30,.15)}
+
+/* "Report a bug" -- composer (.bug-report-modal, reached from the status-bar "..." popover) and
+   the admin review queue (.bug-reports-modal, same .reports-modal/.report-row shape as the abuse
+   -reports queue above, plus .rr-attachments/.rr-context for the two things a bug report has that
+   an abuse report doesn't). */
+.status .bugreportsbtn{position:relative}
+.bug-report-modal{max-width:420px;width:calc(100vw - 32px);text-align:left}
+.bug-report-modal .modal-body{max-height:min(70vh,560px);overflow-y:auto}
+.bug-hint{font-size:12px;color:var(--ash);line-height:1.45;margin-bottom:10px}
+.bug-desc{display:block;width:100%;min-height:90px;padding:8px;font:13px "IM Fell English",Georgia,serif;
+color:var(--bone);resize:vertical;outline:none;box-sizing:border-box;margin-bottom:10px;caret-color:var(--gold-hi)}
+.bug-desc:focus{box-shadow:inset 0 0 18px #000,0 0 0 1px var(--gold),0 0 10px rgba(201,162,74,.35)}
+.bug-attach-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.bug-attach-hint{font-size:11px;color:#5f5648}
+.bug-attach-list{display:flex;flex-wrap:wrap;gap:10px}
+.bug-attach-chip{position:relative;display:flex;flex-direction:column;align-items:center;width:64px}
+.bug-attach-chip img,.bug-attach-video{width:64px;height:64px;box-sizing:border-box;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
+.bug-attach-chip img{object-fit:cover;display:block}
+.bug-attach-video{display:flex;align-items:center;justify-content:center;font-size:24px;background:rgba(0,0,0,.3)}
+.bug-attach-name{font-size:9px;color:var(--ash);max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.bug-attach-remove{position:absolute;top:-8px;right:-8px;width:20px;height:20px;line-height:16px;padding:0;font-size:12px;color:#fff;
+background:var(--blood);border:1px solid #000;border-radius:50%;cursor:pointer}
+.bug-attach-remove:hover{background:#d33}
+.bug-reports-modal .rr-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.rr-att,.rr-att-video{width:56px;height:56px;display:block;box-sizing:border-box;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
+.rr-att img{width:100%;height:100%;object-fit:cover;display:block}
+.rr-att-video{display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(0,0,0,.3);text-decoration:none}
+.report-row .rr-context{font-size:10px;color:#5f5648;font-style:italic;word-break:break-word;margin-bottom:8px}
 .save-lead{margin:0 0 12px;line-height:1.6;color:var(--bone)}
 .save-lead b{color:var(--gold-hi);font-weight:normal;font-family:Cinzel,Georgia,serif;letter-spacing:.5px}
 .save-modal label{display:block;margin:10px 0 3px;font:700 10px Cinzel,Georgia,serif;letter-spacing:1.5px;
