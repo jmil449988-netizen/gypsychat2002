@@ -59,7 +59,7 @@ var people = {}; // user id -> presence object {name, status, awayMsg} (from pre
    short-lived memory of the last known presence data for anyone seen this session, so a mention
    still resolves to a real user id for a grace window after they drop out of live `people`. */
 var recentPeople = {}; // user id -> { ...presence data, lastSeen }
-var RECENT_GRACE_MS = 15 * 60 * 1000; // long enough to survive a phone screen-lock/background cycle, short enough that someone genuinely gone eventually stops being mentionable
+var RECENT_GRACE_MS = 30 * 60 * 1000; // matches IDLE_DISCONNECT_MS below -- if a quiet connection isn't kicked from the room until 30 minutes of inactivity, there's no reason to treat someone as "gone" for whisper/mention purposes any sooner than that
 function touchRecentPeople() {
   var now = Date.now();
   Object.keys(people).forEach(function (id) {
@@ -1308,8 +1308,14 @@ return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1
    roulette have their own separate watermark footers (threadsWatermark/rouletteWatermark) that
    intentionally don't get an online count, since that count is specific to who's in the room. */
 if ($('roomWatermark')) $('roomWatermark').textContent = ids.length + ' online · ' + WATERMARK_TEXT;
+/* "here" for whisper-delivery purposes uses the same recently-seen pool as @mention push (see
+   recentPeopleEntries above): a phone that dropped its realtime connection a moment ago is still
+   reachable, not gone, right up until the same 30-minute window the server itself uses to kick a
+   truly-idle connection (IDLE_DISCONNECT_MS). Without this, sendIM's w.gone guard would silently
+   refuse to deliver a whisper to someone who never actually left. */
+var reachablePool = recentPeopleEntries();
 Object.keys(wins).forEach(function (id) {
-var w = wins[id], here = !!people[id];
+var w = wins[id], here = !!(people[id] || reachablePool[id]);
 if (!here && !w.gone) { w.gone = true; imSys(id, w.name + ' has left the room.'); }
 if (here && w.gone) { w.gone = false; imSys(id, w.name + ' is back.'); }
 });
@@ -1362,7 +1368,7 @@ el.innerHTML = '<div class="bar"><span class="gem"></span><span class="wava" ari
 el.querySelector('.nm').textContent = name;
 // typingPeer/typingTimer track whether -- and until when -- the OTHER person in this whisper is
 // shown as typing; see markImTyping/clearImTyping in the typing-indicator section below.
-var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !people[id], name: name, minimized: true, tab: null };
+var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !(people[id] || recentPeopleEntries()[id]), name: name, minimized: true, tab: null };
 win.ta.placeholder = 'Whisper to ' + name + '...';
 win.ta.addEventListener('input', function () { sendTyping(id, !!win.ta.value); });
 var off = (nWin++ % 6) * 24; el.style.left = (30 + off) + 'px'; el.style.top = (70 + off) + 'px';
@@ -1629,10 +1635,15 @@ var menu = document.createElement('div'); menu.className = 'nmenu'; menu.setAttr
 function closeMenu() { menu.classList.remove('open'); }
 function openMenu(id, anchor, fallbackName) {
 var online = !!people[id];
-var name = (online && people[id].name) || (friends[id] && friends[id].name) || fallbackName; if (!name) return;
+/* Reachable (can still receive a whisper) is a wider set than online (live in the room right now)
+   -- it also includes anyone seen within the last RECENT_GRACE_MS, so a phone that just dropped its
+   connection doesn't lock you out of even starting a whisper to them. See recentPeopleEntries. */
+var recent = recentPeopleEntries()[id];
+var reachable = online || !!recent;
+var name = (online && people[id].name) || (recent && recent.name) || (friends[id] && friends[id].name) || fallbackName; if (!name) return;
 var items = [];
 items.push(['Get Info', function () { showInfo(id, name); }]);
-if (online && !blocked[id]) items.push(['Whisper', function () { unread[id] = 0; openIM(id, name, true); }]);
+if (reachable && !blocked[id]) items.push(['Whisper', function () { unread[id] = 0; openIM(id, name, true); }]);
 items.push(blocked[id] ? ['Unblock', function () { unblock(id); }] : ['Block', function () { block(id, name); }]);
 items.push(['Report', async function () { var rr = await showPromptModal('Report ' + name, { placeholder: 'e.g. spam, harassment', maxLength: 300 }); if (rr) report(id, name, rr); }]);
 items.push(friends[id] ? ['Remove Friend', function () { removeFriend(id, name); }] : ['Add Friend', function () { addFriend(id, name); }]);
