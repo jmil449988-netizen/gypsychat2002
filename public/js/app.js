@@ -1059,7 +1059,13 @@ if (leaderboardList) {
    anywhere else, rather than the leaderboard being a dead-end list. */
 leaderboardList.addEventListener('click', function (e) {
 var row = e.target.closest('.lb-row[data-id]'); if (!row || row.dataset.id === me.id) return;
-openMenu(row.dataset.id, row, row.dataset.name);
+/* Close the modal first -- its backdrop sits above the name menu (z-index 70 vs. 60), so
+   leaving it open would bury the menu behind an invisible click-catcher. Capture the row's
+   position before hiding it, though: once .hidden (display:none) applies, the row itself no
+   longer has a layout box, so getBoundingClientRect() on it would collapse to (0,0). */
+var rect = row.getBoundingClientRect();
+leaderboardOverlay.classList.add('hidden');
+openMenu(row.dataset.id, { getBoundingClientRect: function () { return rect; } }, row.dataset.name);
 });
 leaderboardList.addEventListener('keydown', function (e) {
 if (e.key !== 'Enter' && e.key !== ' ') return;
