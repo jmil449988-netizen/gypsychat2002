@@ -1585,6 +1585,12 @@ if (lastBuzz[id] && now - lastBuzz[id] < 3000) return;
 lastBuzz[id] = now;
 channel.send({ type: 'broadcast', event: 'buzz', payload: { to: id, from: me.id, name: me.name } });
 imSys(id, 'You sent a buzz.');
+/* Unlike whispers/mentions, a buzz is a pure realtime broadcast -- it never touches the messages
+   table, so it only ever reached someone whose tab already had the realtime channel open. That's
+   the same "closed browser never hears it" gap Web Push was built to close for whispers, just
+   never wired up here too. Trigger it the same way: from the sender's client, right after the
+   broadcast goes out. */
+triggerPush(id, me.name, 'sent you a buzz ⚡', 'gc-buzz-' + id);
 }
 function renderIM(m) {
 if (seen[m.id]) return; seen[m.id] = 1;
