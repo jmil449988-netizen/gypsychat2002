@@ -276,8 +276,16 @@ if (!ur.width || !lr.width) return; // nothing laid out yet; leave the last answ
 gcRoot.classList.toggle('users-stacked', ur.top >= lr.bottom - 2);
 }
 window.addEventListener('resize', updateUsersStacked);
-/* iOS reports the new size a beat after orientationchange fires, so re-measure once it settles */
-window.addEventListener('orientationchange', function () { setTimeout(updateUsersStacked, 300); });
+/* iOS reports the new size a beat after orientationchange fires, so re-measure once it settles.
+   That lag is also why the scroll snapshot below is taken right here, synchronously, rather than
+   inside the timeout: at the moment this event fires the old (pre-rotation) layout and scroll
+   position are still in effect, which is exactly the "before" picture rememberChatScroll()/
+   returnToChat() (defined further down) need to put you back where you were instead of dumping
+   you at the top of the chat once the new orientation settles. */
+window.addEventListener('orientationchange', function () {
+rememberChatScroll();
+setTimeout(function () { updateUsersStacked(); returnToChat(); }, 300);
+});
 
 var USERS_H_MIN = 84, USERS_H_DEFAULT = 150;
 var usersH = USERS_H_DEFAULT, usersFolded = false;
@@ -1792,7 +1800,13 @@ tpReplyGifBtn.onclick = function () { openGifPicker('', 'thread-reply', tpReplyG
    you come back pinned to the newest message, including whatever arrived while you were away,
    rather than to the older message that happened to be at that pixel offset.
    Two frames on the way back: one for the browser to lay .win out again, one for the scroll to
-   actually stick on iOS Safari. */
+   actually stick on iOS Safari.
+   Rotating the device needs the exact same rescue: below the 500px breakpoint the whole PAGE
+   scrolls instead of the log having its own scrollbox, and a phone's width crosses that
+   breakpoint on almost every portrait<->landscape flip. That swaps which element is actually
+   scrollable out from under you, and the new one starts at scrollTop 0 -- so without this,
+   rotating either way dumped you back at the top mid-conversation. The orientationchange
+   listener below reuses this same remember/return pair for that case. */
 var chatScroll = null;
 function isNarrow() { return window.matchMedia('(max-width:1339px)').matches; }
 function logVisible() { return log && !log.classList.contains('hidden'); }
