@@ -22,7 +22,7 @@ var reportsBtn = $('reportsBtn'), reportsBadge = $('reportsBadge'), reportsOverl
 var bugBtn = $('bugBtn'), bugFile = $('bugFile'), bugReportOverlay = $('bugReportOverlay'), bugDesc = $('bugDesc'),
     bugAttachBtn = $('bugAttachBtn'), bugAttachList = $('bugAttachList'), bugReportCancel = $('bugReportCancel'), bugReportSubmit = $('bugReportSubmit');
 var bugReportsBtn = $('bugReportsBtn'), bugReportsBadge = $('bugReportsBadge'), bugReportsOverlay = $('bugReportsOverlay'), bugReportsList = $('bugReportsList'), bugReportsClose = $('bugReportsClose');
-var leaderboardBtn = $('leaderboardBtn'), leaderboardOverlay = $('leaderboardOverlay'), leaderboardList = $('leaderboardList'), leaderboardClose = $('leaderboardClose');
+var leaderboardBtn = $('leaderboardBtn'), leaderboardPanel = $('leaderboardPanel'), leaderboardList = $('leaderboardList'), leaderboardBack = $('leaderboardBack');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
@@ -46,6 +46,7 @@ if ($('madeBy')) $('madeBy').textContent = 'created by Yogg Squad © 2027 · ' +
 if ($('roomWatermark')) $('roomWatermark').textContent = WATERMARK_TEXT;
 if ($('threadsWatermark')) $('threadsWatermark').textContent = WATERMARK_TEXT;
 if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
+if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
 
 var sb = null, me = null, channel = null;
 var people = {}; // user id -> presence object {name, status, awayMsg} (from presence)
@@ -1052,20 +1053,14 @@ var pr = await sb.from('profiles').select('user_id, name, avatar_url').in('user_
 }
 renderLeaderboard(rows, profById);
 }
-if (leaderboardBtn) leaderboardBtn.onclick = function () { leaderboardOverlay.classList.remove('hidden'); loadLeaderboard(); };
-if (leaderboardClose) leaderboardClose.onclick = function () { leaderboardOverlay.classList.add('hidden'); };
 if (leaderboardList) {
 /* Tapping a row opens the same Get Info / Whisper / Block / ... menu as tapping their name
-   anywhere else, rather than the leaderboard being a dead-end list. */
+   anywhere else, rather than the leaderboard being a dead-end list. The panel sits at z-index 40,
+   well below .nmenu's 60, so no rect-capture workaround is needed here the way the old modal
+   overlay (z-index 70) required. */
 leaderboardList.addEventListener('click', function (e) {
 var row = e.target.closest('.lb-row[data-id]'); if (!row || row.dataset.id === me.id) return;
-/* Close the modal first -- its backdrop sits above the name menu (z-index 70 vs. 60), so
-   leaving it open would bury the menu behind an invisible click-catcher. Capture the row's
-   position before hiding it, though: once .hidden (display:none) applies, the row itself no
-   longer has a layout box, so getBoundingClientRect() on it would collapse to (0,0). */
-var rect = row.getBoundingClientRect();
-leaderboardOverlay.classList.add('hidden');
-openMenu(row.dataset.id, { getBoundingClientRect: function () { return rect; } }, row.dataset.name);
+openMenu(row.dataset.id, row, row.dataset.name);
 });
 leaderboardList.addEventListener('keydown', function (e) {
 if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -1901,7 +1896,7 @@ if (bugReportOverlay) bugReportOverlay.classList.add('hidden');
 if (bugReportsOverlay) bugReportsOverlay.classList.add('hidden');
 if (threadsPanel) { threadsPanel.classList.remove('ready'); }
 if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
-if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('signed-on'); }
+if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('leaderboard-open'); gcRoot.classList.remove('signed-on'); }
 openThreadId = null;
 /* Reaction/level caches are keyed off ids that only mean something while this particular room
    channel is live -- a stale "mine" flag surviving a kick/reconnect into a fresh join would show
@@ -2741,6 +2736,7 @@ if (threadToggleBtn) {
 threadToggleBtn.onclick = function () {
 closeGif();
 if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
+if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
 /* Grab the scroll position BEFORE toggling the class -- that class puts .win at display:none,
    and reading window.scrollY / log.scrollTop after that returns the already-collapsed value
    (effectively 0, since the scrollable content is gone), not where you actually were. That's
@@ -2770,6 +2766,7 @@ if (rouletteToggleBtn) {
 rouletteToggleBtn.onclick = function () {
 closeGif();
 if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
+if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
 /* Same fix as the threads toggle above: capture the scroll position before the class that
    hides .win is applied, not after -- otherwise it always records 0 and "back to chat" always
    lands at the top. */
@@ -2785,6 +2782,27 @@ if ($('rouletteBack')) $('rouletteBack').onclick = function () { closeMobileRoul
 /* unlike the threads bubble this one needs no account, so it is live from the sign-on screen --
    the same as the side panel, which visitors already see before they enter */
 if (rouletteToggleBtn) rouletteToggleBtn.classList.add('ready');
+
+/* ---------- leaderboard: same full-page takeover as threads/roulette, but with no floating
+   toggle bubble of its own -- #leaderboardBtn (inside .win's status popover) stays exactly where
+   it already lives and only ever opens the panel. Since opening hides .win (and therefore the
+   button) the same way it hides it for threads/roulette, leaderboardBack is the only way back. */
+function closeLeaderboard() {
+if (!gcRoot.classList.contains('leaderboard-open')) return;
+gcRoot.classList.remove('leaderboard-open');
+returnToChat();
+}
+if (leaderboardBtn) {
+leaderboardBtn.onclick = function () {
+closeGif();
+if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
+if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
+rememberChatScroll();
+gcRoot.classList.add('leaderboard-open');
+loadLeaderboard();
+};
+}
+if (leaderboardBack) leaderboardBack.onclick = closeLeaderboard;
 
 /* ---------- draggable / sweepable fab bubbles ----------
    Either bubble can be dragged anywhere on screen, and dragged most of the way off the left or
