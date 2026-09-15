@@ -36,9 +36,9 @@ var NAME_RE = /^[\p{L}\p{N}\p{M}_ .'-]{2,16}$/u;
    bump on every small deploy and would be a meaningless, constantly-churning number to show
    someone in the room. Bump this by hand only for a release worth calling out. Single source of
    truth: both spots below read this rather than having the string baked into index.html twice. */
-var APP_VERSION = '1.0';
-if ($('madeBy')) $('madeBy').textContent = 'created by Yogg Squad © 2027 · v' + APP_VERSION;
-if ($('roomWatermark')) $('roomWatermark').textContent = 'Yogg Squad © 2027 · v' + APP_VERSION;
+var APP_VERSION = 'Beta v0.1';
+if ($('madeBy')) $('madeBy').textContent = 'created by Yogg Squad © 2027 · ' + APP_VERSION;
+if ($('roomWatermark')) $('roomWatermark').textContent = 'Yogg Squad © 2027 · ' + APP_VERSION;
 
 var sb = null, me = null, channel = null;
 var people = {}; // user id -> presence object {name, status, awayMsg} (from presence)
