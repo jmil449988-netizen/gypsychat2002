@@ -46,6 +46,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
 var sb = null, me = null, channel = null;
 var people = {}; // user id -> presence object {name, status, awayMsg} (from presence)
 var wins = {}, unread = {}, seen = {};
+var typingRoom = {}; // user id -> {name, timer} -- who's currently typing in the main room; see the typing-indicator section below
 /* Message metadata cache, keyed by message id -- just enough (sender, raw body, when) for the 🚩
    "report this message" action below to file an exact snapshot without scraping it back out of
    the rendered/escaped HTML. Populated as each message is rendered (room or whisper), never
@@ -581,16 +582,19 @@ bar.textContent = moderation.mutedPermanent ? '🔇 Muted. Only an admin can lif
 (moderation.mutedUntil > now ? '🔇 Muted until ' + fmt(moderation.mutedUntil) + '.' : '🔇 Muted. Only an admin can lift this.');
 bar.classList.remove('hidden'); bar.classList.add('muted');
 clearModTimer();
+renderRoomTyping(); // this bar just took over the spot above the composer -- let it hide the typing indicator too
 return;
 }
 if (moderation.cooldownUntil > now) {
 msg.disabled = true; $('send').disabled = true; lockThreadCompose(true);
 bar.textContent = '⏳ Cooldown: ' + Math.max(1, Math.ceil((moderation.cooldownUntil - now) / 1000)) + 's remaining';
 bar.classList.remove('hidden'); bar.classList.remove('muted');
+renderRoomTyping();
 } else {
 msg.disabled = false; $('send').disabled = false; lockThreadCompose(false);
 bar.classList.add('hidden'); bar.classList.remove('muted');
 clearModTimer();
+renderRoomTyping(); // cooldown just cleared -- give the spot back to the typing indicator if it's due
 }
 }
 function applyModeration(state) {
@@ -890,7 +894,7 @@ function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
 el.innerHTML = '<div class="bar"><span class="gem"></span><span class="wava" aria-hidden="true"></span><span class="nm"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" aria-label="Minimize">–</button></div>' +
-'<div class="ilog" aria-live="polite"></div><div class="icomp">' +
+'<div class="ilog" aria-live="polite"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
 '<input type="file" class="im-img-file hidden" accept="image/*,.heic,.heif">' +
@@ -898,8 +902,11 @@ el.innerHTML = '<div class="bar"><span class="gem"></span><span class="wava" ari
 '<div class="rz rz-nw" data-dir="nw" aria-hidden="true"></div><div class="rz rz-ne" data-dir="ne" aria-hidden="true"></div>' +
 '<div class="rz rz-sw" data-dir="sw" aria-hidden="true"></div><div class="rz rz-se" data-dir="se" aria-hidden="true"></div>';
 el.querySelector('.nm').textContent = name;
-var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), gone: !people[id], name: name, minimized: true, tab: null };
+// typingPeer/typingTimer track whether -- and until when -- the OTHER person in this whisper is
+// shown as typing; see markImTyping/clearImTyping in the typing-indicator section below.
+var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !people[id], name: name, minimized: true, tab: null };
 win.ta.placeholder = 'Whisper to ' + name + '...';
+win.ta.addEventListener('input', function () { sendTyping(id, !!win.ta.value); });
 var off = (nWin++ % 6) * 24; el.style.left = (30 + off) + 'px'; el.style.top = (70 + off) + 'px';
 el.querySelector('.x').onclick = function () { minimizeIM(id); };
 el.querySelector('.buzz').onclick = function () { sendBuzz(id); };
@@ -1092,6 +1099,7 @@ w.minimized = true; w.el.classList.add('hidden'); updateTab(id); msg.focus();
 }
 function destroyWin(id) {
 var w = wins[id]; if (!w) return;
+clearTimeout(w.typingTimer);
 w.el.remove(); if (w.tab) w.tab.remove(); delete wins[id];
 }
 function front(el) { el.style.zIndex = ++zTop; }
@@ -1138,7 +1146,7 @@ post('[Away] ' + (myAwayMsg || (me.name + ' is currently away.')), otherId, othe
 async function sendIM(id) {
 var w = wins[id]; var t = w.ta.value.trim(); if (!t) return;
 if (w.gone) { imSys(id, w.name + ' is not here to hear you.'); return; }
-w.ta.value = '';
+w.ta.value = ''; sendTyping(id, false);
 await post(t, id, w.name);
 w.ta.focus();
 }
@@ -1477,6 +1485,9 @@ if ($('saveBtn')) $('saveBtn').classList.add('hidden');
 if ($('moreBtn')) { $('moreBtn').classList.add('hidden'); closeMoreMenu(); }
 if (st) st.classList.remove('renamable');
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
+Object.keys(typingRoom).forEach(function (k) { clearTimeout(typingRoom[k].timer); }); typingRoom = {};
+Object.keys(typingSendState).forEach(function (k) { clearTimeout(typingSendState[k].stopTimer); }); typingSendState = {};
+if ($('typingIndicator')) { $('typingIndicator').classList.add('hidden'); $('typingIndicator').textContent = ''; }
 if ($('joinFields')) $('joinFields').classList.remove('hidden'); // undo restoreIdentity()'s auto-resume hiding, if it was mid-flight
 if ($('loginTag')) $('loginTag').textContent = 'Stay awhile, and chat.'; // undo restoreIdentity()'s "Reconnecting as X…", if this is being shown after a successful auto-resume
 $('login').classList.remove('hidden'); $('join').disabled = !rejoinable;
@@ -1517,6 +1528,82 @@ var r = await sb.from('messages').insert(row).select().single();
 if (r.error) { addSys('Your words were lost: ' + r.error.message); return; }
 handleMessage(r.data); // show immediately; the realtime echo is de-duplicated by id
 }
+
+/* ---------- typing indicators (main room + whispers) ----------
+   One 'typing' broadcast on the shared room channel -- the same pattern buzz already uses just
+   above: a 'to' of null means the main room, a real user id means a whisper aimed at just that
+   person. Broadcast has no per-recipient filtering (everyone on the channel technically
+   receives every ping, same as buzz's own 'to' field already does), so every other client just
+   ignores a 'to' that isn't null and isn't their own id -- see the channel.on('broadcast',
+   {event:'typing'}...) handler near the buzz one below.
+   Sends are throttled to once every TYPING_SEND_THROTTLE_MS while someone keeps typing, plus an
+   explicit stop the moment they send, clear the box, or pause for TYPING_STOP_MS -- see
+   sendTyping. Receivers don't trust a stop to always arrive (a closed tab or a dropped
+   connection sends none), so every 'typing:true' also arms a TYPING_EXPIRE_MS timer that clears
+   them out on its own if nothing else does -- see markRoomTyping/markImTyping. */
+var TYPING_SEND_THROTTLE_MS = 2500, TYPING_STOP_MS = 4000, TYPING_EXPIRE_MS = 6000;
+var typingSendState = {}; // key ('room', or a whisper peer's id) -> {lastSent, stopTimer}
+function sendTyping(target, isTyping) {
+if (!channel || !me) return;
+var key = target || 'room';
+var st = typingSendState[key] || (typingSendState[key] = { lastSent: 0, stopTimer: null });
+clearTimeout(st.stopTimer); st.stopTimer = null;
+if (!isTyping) {
+st.lastSent = 0;
+channel.send({ type: 'broadcast', event: 'typing', payload: { from: me.id, name: me.name, to: target || null, typing: false } });
+return;
+}
+var now = Date.now();
+if (now - st.lastSent > TYPING_SEND_THROTTLE_MS) {
+st.lastSent = now;
+channel.send({ type: 'broadcast', event: 'typing', payload: { from: me.id, name: me.name, to: target || null, typing: true } });
+}
+st.stopTimer = setTimeout(function () { sendTyping(target, false); }, TYPING_STOP_MS);
+}
+function markRoomTyping(id, name) {
+var t = typingRoom[id] || (typingRoom[id] = { name: name });
+t.name = name;
+clearTimeout(t.timer);
+t.timer = setTimeout(function () { clearRoomTyping(id); }, TYPING_EXPIRE_MS);
+renderRoomTyping();
+}
+function clearRoomTyping(id) {
+var t = typingRoom[id]; if (!t) return;
+clearTimeout(t.timer);
+delete typingRoom[id];
+renderRoomTyping();
+}
+/* 1 typer -> their name; 2-3 -> just the count (asked for over names once it's more than one
+   person); 4+ -> capped at "3+ typing" rather than an ever-growing name list or count. Steps
+   aside for the cooldown/mute bar, which sits in the exact same spot above the compose box and
+   matters more when both are true at once. */
+function renderRoomTyping() {
+var el = $('typingIndicator'); if (!el) return;
+if ($('cooldownMsg') && !$('cooldownMsg').classList.contains('hidden')) { el.classList.add('hidden'); return; }
+var names = Object.keys(typingRoom).map(function (id) { return typingRoom[id].name; });
+var n = names.length;
+var text = n === 0 ? '' : n === 1 ? names[0] + ' is typing' : n <= 3 ? n + ' typing' : '3+ typing';
+el.textContent = text;
+el.classList.toggle('hidden', n === 0);
+}
+function markImTyping(id, name) {
+var w = wins[id]; if (!w) return; // never pull a whisper window into existence just for a typing ping
+w.typingPeer = true;
+clearTimeout(w.typingTimer);
+w.typingTimer = setTimeout(function () { clearImTyping(id); }, TYPING_EXPIRE_MS);
+renderImTyping(w);
+}
+function clearImTyping(id) {
+var w = wins[id]; if (!w) return;
+clearTimeout(w.typingTimer); w.typingTimer = null; w.typingPeer = false;
+renderImTyping(w);
+}
+function renderImTyping(w) {
+if (!w.typingEl) return;
+w.typingEl.textContent = w.typingPeer ? w.name + ' is typing' : '';
+w.typingEl.classList.toggle('hidden', !w.typingPeer);
+}
+
 function findId(name) { return Object.keys(people).filter(function (k) { return people[k].name.toLowerCase() === name.toLowerCase(); })[0]; }
 async function command(t) {
 var m = t.match(/^\/(\w+)\s*(\S*)\s*([\s\S]*)$/); if (!m) return false;
@@ -1548,18 +1635,18 @@ default: addSys('Unknown command. Type /help.'); return true;
 }
 async function send() {
 var t = msg.value.trim(); if (!t || !me) return;
-if (t[0] === '/' && !/^\/w(hisper)?\s/i.test(t)) { msg.value = ''; closeMention(); await command(t); return; }
+if (t[0] === '/' && !/^\/w(hisper)?\s/i.test(t)) { msg.value = ''; sendTyping(null, false); closeMention(); await command(t); return; }
 var w = t.match(/^\/w(?:hisper)?\s+(\S+)\s*([\s\S]*)$/i);
 if (w) {
 var id = Object.keys(people).filter(function (k) { return people[k].name.toLowerCase() === w[1].toLowerCase(); })[0];
 if (!id) { addSys('No one here is named ' + w[1] + '.'); return; }
 if (id === me.id) { addSys('You cannot whisper to yourself.'); return; }
 if (blocked[id]) { addSys('You have blocked ' + people[id].name + '. Unblock them first.'); return; }
-msg.value = ''; closeMention(); var win = openIM(id, people[id].name, true);
+msg.value = ''; sendTyping(null, false); closeMention(); var win = openIM(id, people[id].name, true);
 if (w[2].trim()) { win.ta.value = w[2].trim(); sendIM(id); }
 return;
 }
-msg.value = ''; closeMention(); await post(t); msg.focus();
+msg.value = ''; sendTyping(null, false); closeMention(); await post(t); msg.focus();
 }
 $('send').onclick = send;
 msg.onkeydown = function (e) {
@@ -1624,6 +1711,7 @@ closeMention();
 msg.focus(); msg.selectionStart = msg.selectionEnd = newPos;
 }
 msg.addEventListener('input', updateMentionMenu);
+msg.addEventListener('input', function () { sendTyping(null, !!msg.value); });
 msg.addEventListener('click', updateMentionMenu);
 document.addEventListener('click', function (e) { if (!mentionMenu.contains(e.target) && e.target !== msg) closeMention(); });
 
@@ -2689,6 +2777,12 @@ imSys(b.from, b.name + ' sent you a buzz!'); front(w.el);
 w.el.classList.remove('shake'); void w.el.offsetWidth; w.el.classList.add('shake');
 }
 if (document.hidden) bumpTitle();
+});
+channel.on('broadcast', { event: 'typing' }, function (p) {
+var d = p.payload; if (!d || !me || d.from === me.id) return;
+if (d.to == null) { if (d.typing === false) clearRoomTyping(d.from); else markRoomTyping(d.from, d.name); }
+else if (d.to === me.id) { if (d.typing === false) clearImTyping(d.from); else markImTyping(d.from, d.name); }
+// d.to pointing at someone else's whisper isn't ours -- ignore, same as buzz's own 'to' above.
 });
 channel.on('presence', { event: 'leave' }, function (p) { if (p.leftPresences[0]) addSys(p.leftPresences[0].name + ' has left the room.'); });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + (C.ROOM || 'main') }, function (p) { handleMessage(p.new); });
