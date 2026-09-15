@@ -2045,8 +2045,12 @@ return (a + b + num).slice(0, 16);
 async function join() {
 /* A returning visitor re-enters under the name this device already holds -- see
    restoreIdentity() below for why the name is pinned rather than re-typed each visit.
-   Email sign-on is exempt: that account's real name is looked up after authenticating. */
-var n = (!emailMode && lockedName) ? lockedName : $('sn').value.trim(); fail('');
+   Email sign-on is exempt: that account's real name is looked up after authenticating, so it
+   must NOT read the character-name box at all here -- that box is hidden in email mode but can
+   still hold stale/invalid leftover text (e.g. from before the "Sign in with email" toggle was
+   clicked), which used to fail the name-format check below even though it was never going to be
+   used. */
+var n = emailMode ? (lockedName || randomName()) : (lockedName || $('sn').value.trim()); fail('');
 if (!n) n = randomName();
 if (!NAME_RE.test(n)) { fail('2–16 letters (any language), numbers, spaces or . \' -'); return; }
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0) { fail('Backend not configured — edit js/config.js.'); return; }
