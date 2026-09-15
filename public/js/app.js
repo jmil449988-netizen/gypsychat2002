@@ -334,8 +334,65 @@ document.addEventListener('click', unlockAudioOnce, { passive: true });
 function isIOSDevice() {
 return /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 13+ reports as a Mac unless you check touch points
 }
+function isAndroidDevice() {
+return /Android/.test(navigator.userAgent);
+}
 function isStandaloneDisplay() {
 return window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+/* Converts the VAPID public key (a URL-safe base64 string, the form the `web-push` tooling and
+   appconfig.js both use) into the raw byte array pushManager.subscribe() actually wants. */
+function urlBase64ToUint8Array(base64String) {
+var padding = '='.repeat((4 - base64String.length % 4) % 4);
+var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+var raw = atob(base64);
+var arr = new Uint8Array(raw.length);
+for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+return arr;
+}
+/* Registers this browser installation with the push service (Chrome's, Firefox's, Apple's...) and
+   hands the resulting endpoint + keys to Supabase so send-push can find it later. This is what
+   actually makes closed-browser delivery possible -- notifyDesktop()'s plain `new Notification(...)`
+   a few lines down only ever works while this tab is still open somewhere. Safe to call again for an
+   already-subscribed browser: pushManager.subscribe() just hands back the same subscription, and the
+   upsert (conflict target: endpoint) overwrites the same row instead of duplicating it. */
+async function subscribeToPush() {
+if (!('serviceWorker' in navigator) || !('PushManager' in window) || !C.VAPID_PUBLIC_KEY || !sb || !me) return;
+try {
+var reg = await navigator.serviceWorker.ready;
+var sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(C.VAPID_PUBLIC_KEY) });
+var j = sub.toJSON();
+await sb.from('push_subscriptions').upsert({ user_id: me.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: 'endpoint' });
+} catch (e) { /* a failed subscribe just means no closed-browser delivery this session -- the in-tab path still works */ }
+}
+/* The reverse: turning the bell off means "stop reaching me", including on other devices this
+   browser previously subscribed -- so this actually tells the push service to drop the
+   subscription and deletes the matching row, rather than just flipping a local flag. */
+async function unsubscribeFromPush() {
+if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+try {
+var reg = await navigator.serviceWorker.ready;
+var sub = await reg.pushManager.getSubscription();
+if (sub) {
+if (sb) { try { await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); } catch (e2) {} }
+await sub.unsubscribe();
+}
+} catch (e) {}
+}
+/* Fire-and-forget call to the send-push edge function -- never awaited by its callers below, and
+   any failure (offline, function cold-start error, whatever) is swallowed here so a push hiccup can
+   never block or break sending the actual chat message it's reporting on. */
+function triggerPush(targetUserId, title, body, tag) {
+if (!targetUserId || !sb || !C.SUPABASE_URL) return;
+sb.auth.getSession().then(function (s) {
+var jwt = s && s.data && s.data.session && s.data.session.access_token;
+if (!jwt) return;
+return fetch(C.SUPABASE_URL + '/functions/v1/send-push', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt },
+body: JSON.stringify({ targetUserId: targetUserId, title: title, body: body, tag: tag })
+});
+}).catch(function () {});
 }
 var notifBtn = $('notifBtn');
 var notifEnabled = false;
@@ -361,7 +418,16 @@ if (isIOSDevice() && !isStandaloneDisplay()) { addSys('iPhone/iPad notifications
 else { addSys('Your browser does not support notifications.'); }
 return;
 }
-if (Notification.permission === 'denied') { addSys('Notifications are blocked for this site — allow them in your browser’s site settings to turn this on.'); return; }
+if (Notification.permission === 'denied') {
+/* Once a browser has recorded "denied" for this site, it will never show the real permission
+   popup again no matter how many times JS calls requestPermission() -- that decision can only be
+   reversed by the person, in the browser's own settings, which is why this can look like "the bell
+   does nothing" even though it's working as designed. Android Chrome buries that toggle a bit
+   differently than desktop, so it gets its own exact steps here. */
+if (isAndroidDevice()) { addSys('Notifications are blocked for this site. Tap the ⓘ or 🔒 icon at the left of the address bar → Permissions (or "Site settings") → Notifications → Allow, then reload this page and tap the bell again.'); }
+else { addSys('Notifications are blocked for this site — allow them in your browser’s site settings to turn this on.'); }
+return;
+}
 if (Notification.permission === 'default') {
 var perm = await Notification.requestPermission(); // must run inside this click handler, not after any await before it, or some browsers silently ignore the prompt
 notifEnabled = perm === 'granted';
@@ -370,6 +436,7 @@ notifEnabled = !notifEnabled; // already granted -- this button is just the user
 }
 try { localStorage.setItem('gc_notif_enabled', notifEnabled ? '1' : '0'); } catch (e) {}
 updateNotifBtn();
+if (notifEnabled) subscribeToPush(); else unsubscribeFromPush();
 };
 }
 /* Shows a real OS notification, only when on, granted, and the person genuinely isn't looking at
@@ -837,6 +904,20 @@ function highlightMentions(html) {
 function bodyMentionsMe(body) {
   if (!me) return false;
   return new RegExp('@' + escRe(me.name) + '(?![\\w-])', 'i').test(String(body || ''));
+}
+/* Same matching rule as bodyMentionsMe/highlightMentions (only people currently in the room can be
+   @mentioned), but returning every matched user id instead of just a yes/no for "me" -- used right
+   after sending a room message to work out who to push-notify, since the sender's client is the only
+   one guaranteed to be online at that moment to trigger it. Excludes the sender themselves so
+   mentioning your own name can't push-notify you. */
+function mentionedUserIds(body) {
+  var text = String(body || ''); var ids = [];
+  Object.keys(people).forEach(function (id) {
+    if (id === (me && me.id)) return;
+    var n = people[id] && people[id].name; if (!n) return;
+    if (new RegExp('@' + escRe(n) + '(?![\\w-])', 'i').test(text)) ids.push(id);
+  });
+  return ids;
 }
 function bodyHtml(body) {
   var t = String(body || '').trim();
@@ -2057,6 +2138,19 @@ if (recipientId) { row.recipient_id = recipientId; row.recipient_name = recipien
 var r = await sb.from('messages').insert(row).select().single();
 if (r.error) { addSys('Your words were lost: ' + r.error.message); return; }
 handleMessage(r.data); // show immediately; the realtime echo is de-duplicated by id
+/* Kick off any push notifications this message should cause. This has to happen from the SENDER's
+   client -- it's the only side guaranteed to be online right now -- which is also exactly why it
+   can't simply mirror notifyDesktop's receiver-side "is my own tab hidden/unfocused" check: at
+   send time we have no idea what state the recipient's browser (if it's even running at all) is
+   in. That judgment call is made later, push-service-side, by the service worker's own push
+   handler (see sw.js), which skips showing anything if it finds a focused window already open. */
+if (recipientId) {
+triggerPush(recipientId, me.name, notifPreview(row.body), 'gc-whisper-' + me.id);
+} else {
+mentionedUserIds(row.body).forEach(function (id) {
+triggerPush(id, me.name + ' mentioned you', notifPreview(row.body), 'gc-mention');
+});
+}
 }
 
 /* ---------- typing indicators (main room + whispers) ----------
@@ -3308,6 +3402,11 @@ me = { id: user.id, name: n, avatarUrl: null };
 manualStatus = 'online'; myAwayMsg = ''; autoIdle = false; awayReplied = {};
 var myProf = await sb.from('profiles').select('avatar_url').eq('user_id', me.id).maybeSingle();
 if (!myProf.error && myProf.data && myProf.data.avatar_url) me.avatarUrl = myProf.data.avatar_url;
+// Anyone who already had notifications on before push subscriptions existed (this flag predates
+// them) has permission:'granted' and notifEnabled:true but no row in push_subscriptions yet --
+// catch them up here, now that sb/me actually exist, instead of waiting for them to happen to
+// re-click the bell.
+if (typeof notifEnabled !== 'undefined' && notifEnabled && 'Notification' in window && Notification.permission === 'granted' && typeof subscribeToPush === 'function') subscribeToPush();
 
 channel = sb.channel('room:' + (C.ROOM || 'main'), { config: { presence: { key: me.id } } });
 channel.on('presence', { event: 'sync' }, function () {
