@@ -177,6 +177,10 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
 .im .ilog .sys{color:var(--sys);font-style:italic}
 .im .ilog .t{color:#5a4f63;font-size:11px;margin-right:6px}
 .im .ilog .e{font-size:16px;vertical-align:-2px}
+/* Read receipt -- sits under the last message YOU sent, once the other person has read it (see
+   updateSeenMark in app.js). Right-aligned and quiet, same idea as the timestamp but not meant to
+   compete with the message text above it. */
+.im .ilog .dm-seen{text-align:right;font:italic 10px "IM Fell English",Georgia,serif;color:#8a7a9c;margin:1px 2px 5px}
 .im .icomp{display:grid;grid-template-columns:auto auto 1fr auto;gap:6px;padding:6px}
 .im .icomp textarea{font:inherit;color:var(--bone);resize:none;height:44px;padding:5px 8px;outline:none;caret-color:#e2c4ff;
 background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-shadow:inset 0 0 16px #000}
