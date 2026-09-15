@@ -159,14 +159,20 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
    the sign-on text, the status dot, and the DM toggle. */
 #moreBtn{display:none}
 #statusPopover{display:contents}
+/* Labels next to the popover's icons (Change picture / Save with email / Sound / Reports) --
+   hidden everywhere by default since on a wide screen these same buttons render inline in the
+   status bar itself (display:contents flattens #statusPopover there) and there's no room for
+   text next to them; the mobile media query below is the only place that turns them back on. */
+.popover-label{display:none}
 @media (max-width:500px){
 .status{position:relative}
 #moreBtn{display:inline-flex;align-items:center;justify-content:center}
 #statusPopover{display:none;flex-direction:column;gap:6px;position:absolute;right:8px;bottom:32px;
 background:linear-gradient(180deg,#2a2118,#171310);border:2px double var(--gold-lo);outline:1px solid #000;
-padding:8px;border-radius:4px;z-index:40;box-shadow:0 0 0 1px #000,0 6px 18px #000;min-width:168px}
+padding:8px;border-radius:4px;z-index:40;box-shadow:0 0 0 1px #000,0 6px 18px #000;min-width:190px}
 #statusPopover.open{display:flex}
-#statusPopover .cell{width:100%;justify-content:flex-start;text-align:left}
+#statusPopover .cell{width:100%;display:flex;align-items:center;gap:8px;text-align:left}
+#statusPopover .popover-label{display:inline;font-size:11px}
 }
 /* whisper windows */
 .im{position:fixed;width:340px;height:280px;min-width:260px;min-height:200px;max-width:calc(100vw - 12px);max-height:calc(100vh - 12px);
