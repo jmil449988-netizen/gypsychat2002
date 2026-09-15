@@ -31,14 +31,17 @@ var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','�
    rule lives in claim_name() -- see supabase/international_names_feature.sql. */
 var NAME_RE = /^[\p{L}\p{N}\p{M}_ .'-]{2,16}$/u;
 
-/* The public-facing version shown to players (login footer + room watermark) -- deliberately
-   separate from the ?v=NN cache-busting numbers on app.js/style.css in index.html/sw.js, which
-   bump on every small deploy and would be a meaningless, constantly-churning number to show
-   someone in the room. Bump this by hand only for a release worth calling out. Single source of
-   truth: both spots below read this rather than having the string baked into index.html twice. */
+/* The public-facing version shown to players (login footer + room/threads/roulette watermarks) --
+   deliberately separate from the ?v=NN cache-busting numbers on app.js/style.css in index.html/
+   sw.js, which bump on every small deploy and would be a meaningless, constantly-churning number
+   to show someone in the room. Bump this by hand only for a release worth calling out. Single
+   source of truth: every spot below reads this rather than having the string baked in repeatedly. */
 var APP_VERSION = 'Beta v0.1';
+var WATERMARK_TEXT = 'Yogg Squad © 2027 · ' + APP_VERSION;
 if ($('madeBy')) $('madeBy').textContent = 'created by Yogg Squad © 2027 · ' + APP_VERSION;
-if ($('roomWatermark')) $('roomWatermark').textContent = 'Yogg Squad © 2027 · ' + APP_VERSION;
+if ($('roomWatermark')) $('roomWatermark').textContent = WATERMARK_TEXT;
+if ($('threadsWatermark')) $('threadsWatermark').textContent = WATERMARK_TEXT;
+if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
 
 var sb = null, me = null, channel = null;
 var people = {}; // user id -> presence object {name, status, awayMsg} (from presence)
