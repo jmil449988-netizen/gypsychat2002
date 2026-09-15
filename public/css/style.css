@@ -319,15 +319,22 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .rpicker button{font-size:18px;width:32px;height:32px;background:#0f0d0b;border:1px solid #3a3026;cursor:pointer;padding:0}
 .rpicker button:hover,.rpicker button:focus-visible{border-color:var(--gold);box-shadow:0 0 8px rgba(201,162,74,.6);outline:none}
 /* Reaction pills under a message/thread post -- square chips rather than rounded pills to match
-   this app's sharp-edged Diablo-window look (nothing else here uses border-radius). */
-.reactions{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:3px}
+   this app's sharp-edged Diablo-window look (nothing else here uses border-radius). No more "+"
+   button lives here -- reacting is a tap-and-hold (or right-click) on the message itself, see
+   attachLongPress in app.js -- so .reactions only ever grows a footprint once there's something
+   in it, instead of a permanent extra control sitting on every single message. */
+.reactions{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.reactions:not(:empty){margin-top:3px}
 .react-pill{font:11px/16px inherit;background:#0f0d0b;border:1px solid #3a3026;color:var(--bone);padding:1px 6px;cursor:pointer}
 .react-pill span{color:#8a8070;margin-left:2px}
 .react-pill:hover,.react-pill:focus-visible{border-color:var(--gold-lo);outline:none}
 .react-pill.mine{border-color:var(--gold);color:var(--gold-hi);box-shadow:0 0 6px rgba(201,162,74,.35)}
 .react-pill.mine span{color:var(--gold)}
-.react-add{font:11px/16px inherit;background:none;border:1px dashed #3a3026;color:#5f5648;cursor:pointer;padding:0 6px;opacity:.55}
-.react-add:hover,.react-add:focus-visible{opacity:1;border-color:var(--gold-lo);color:var(--ash);outline:none}
+/* Long-press-in-progress feedback -- a slow fade-in timed roughly to LONG_PRESS_MS so the
+   highlight visibly builds while held, giving the same "something's about to happen" cue a
+   native app's press-and-hold has, then it's undone instantly on release/cancel. */
+.log .m,.tp-posts .tp-post{-webkit-touch-callout:none}
+.log .m.pressing,.tp-posts .tp-post.pressing{background:rgba(201,162,74,.14);transition:background-color .45s linear}
 /* Level badge -- shown next to a name once someone has actually received at least one reaction
    (see levelBadgeHtml); [hidden] keeps the node in the DOM so a live level-up just reveals and
    updates it rather than needing new markup spliced in. */
