@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=53">
+<link rel="stylesheet" href="./css/style.css?v=54">
 </head>
 <body>
 <div class="gc-root">
@@ -141,6 +141,12 @@
 <div class="tp-watermark" id="threadsWatermark" aria-hidden="true"></div>
 </div>
 
+<div class="leaderboard-panel" id="leaderboardPanel" role="complementary" aria-label="Leaderboard">
+<div class="tp-hd"><button class="tp-back" type="button" id="leaderboardBack" aria-label="Back to chat">←</button><span>🏆 Leaderboard</span></div>
+<div class="lb-list" id="leaderboardList"></div>
+<div class="tp-watermark" id="leaderboardWatermark" aria-hidden="true"></div>
+</div>
+
 <button class="thread-toggle-fab" id="threadToggleBtn" type="button" aria-label="Open threads board">🧵</button>
 <button class="roulette-toggle-fab" id="rouletteToggleBtn" type="button" aria-label="Gypsy Roulette — coming soon">✦</button>
 </div>
@@ -250,20 +256,6 @@
 </div>
 </div>
 
-<!-- Top players by reactions received -- reuses the .reports-modal/.modal shape (a title, a
-     scrolling list, one Close button) rather than inventing a new dialog layout, since it's the
-     same "modal with a scrollable list of rows" as Reports/Bug Reports above. Reachable by
-     everyone (not admin-gated) from the same "more options" popover as Sound/Report a bug. -->
-<div class="modal-overlay hidden" id="leaderboardOverlay">
-<div class="modal reports-modal leaderboard-modal" role="dialog" aria-modal="true" aria-label="Leaderboard">
-<div class="modal-hd">🏆 Leaderboard</div>
-<div class="modal-body">
-<div class="reports-list leaderboard-list" id="leaderboardList"></div>
-</div>
-<button class="btn" type="button" id="leaderboardClose">Close</button>
-</div>
-</div>
-
 <!-- Click any posted picture -- in the room, a whisper, or a thread -- to see it full size here.
      Reused by every image click handler in app.js (see openLightbox/closeLightbox) rather than
      each surface building its own popup. -->
@@ -279,6 +271,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=1"></script>
-<script src="./js/app.js?v=70"></script>
+<script src="./js/app.js?v=71"></script>
 </body>
 </html>
