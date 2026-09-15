@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=33">
+<link rel="stylesheet" href="./css/style.css?v=34">
 </head>
 <body>
 <div class="gc-root">
@@ -105,7 +105,7 @@
 
 <div class="threads-panel" id="threadsPanel" role="complementary" aria-label="Threads board">
 <div class="tp-list" id="tpList">
-<div class="tp-hd"><span>Threads</span></div>
+<div class="tp-hd"><span>/gen/ — General</span></div>
 <div class="tp-newwrap"><button class="btn tp-new" type="button" id="tpNewBtn">+ New Thread</button></div>
 <div class="tp-newpost hidden" id="tpNewPost">
 <textarea id="tpNewBody" class="sunk" maxlength="1000" placeholder="Post anything to start a thread..."></textarea>
@@ -120,7 +120,7 @@
 <div class="tp-items" id="tpItems"></div>
 </div>
 <div class="tp-detail hidden" id="tpDetail">
-<div class="tp-hd"><button class="tp-back" type="button" id="tpBack" aria-label="Back to threads">←</button><span>Thread</span></div>
+<div class="tp-hd"><button class="tp-back" type="button" id="tpBack" aria-label="Back to threads">←</button><span>/gen/</span></div>
 <div class="tp-posts" id="tpPosts"></div>
 <div class="tp-reply">
 <div class="tp-reply-compose">
@@ -192,6 +192,14 @@
 </div>
 </div>
 
+<!-- Click any posted picture -- in the room, a whisper, or a thread -- to see it full size here.
+     Reused by every image click handler in app.js (see openLightbox/closeLightbox) rather than
+     each surface building its own popup. -->
+<div class="modal-overlay lightbox-overlay hidden" id="imgLightbox" role="dialog" aria-modal="true" aria-label="Image viewer">
+<button type="button" class="lightbox-close" id="imgLightboxClose" aria-label="Close image viewer">✕</button>
+<img id="imgLightboxImg" class="lightbox-img" src="" alt="Full-size image">
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <!-- Converts iPhone HEIC/HEIF photos to JPEG in the browser before upload -- no browser can decode
@@ -199,6 +207,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=1"></script>
-<script src="./js/app.js?v=42"></script>
+<script src="./js/app.js?v=43"></script>
 </body>
 </html>
