@@ -3,8 +3,8 @@ Chat itself always needs a connection; this only makes the UI load offline.
 v2: bumped the cache name and hardened the fetch/install paths to bypass the HTTP cache — iOS
 Safari in particular can hold onto an old app.js/index.html far more stubbornly than desktop
 Chrome, which silently ran stale code (missing new features) even though the deploy succeeded. */
-var CACHE = 'gc2000-v94';
-var SHELL = ['./', './index.html', './css/style.css?v=55', './js/appconfig.js?v=2', './js/app.js?v=79', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
+var CACHE = 'gc2000-v95';
+var SHELL = ['./', './index.html', './css/style.css?v=55', './js/appconfig.js?v=2', './js/app.js?v=80', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', function (e) {
 e.waitUntil(
 caches.open(CACHE).then(function (c) {
@@ -51,6 +51,7 @@ body: body,
 tag: tag,
 icon: './icons/icon-192.png',
 badge: './icons/icon-192.png',
+silent: false, // explicit, not just the default -- some WebKit versions have been inconsistent about treating an unset `silent` as audible
 data: { url: url }
 });
 })
