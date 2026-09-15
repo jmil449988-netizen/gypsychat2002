@@ -178,14 +178,25 @@ manualStatus = status; myAwayMsg = awayMsg || ''; autoIdle = false;
 updateMyPresence(); updateStatusBtn(); resetIdle();
 }
 var IDLE_MS = 3 * 60 * 1000; // auto-idle after 3 minutes of no activity, AIM-style
-var idleTimer = null;
+/* Auto-disconnect after 30 minutes of no activity at all -- a harder timeout than the 3-minute
+   idle marker above, and a different kind of thing: autoIdle only changes what your presence
+   *shows* (still fully connected, still holding your name and your spot in the room), while this
+   actually leaves the room the same way an admin kick does (see idleDisconnect() and leaveRoom()
+   near kicked() below), freeing the name and the realtime seat for someone else once a device has
+   plainly been left open and unattended. Deliberately independent of manualStatus/autoIdle: going
+   AWAY on purpose doesn't reset real inactivity, so someone who sets themselves Away and then
+   genuinely walks off still times out on the same clock as anyone else. */
+var IDLE_DISCONNECT_MS = 30 * 60 * 1000;
+var idleTimer = null, idleDisconnectTimer = null;
 function resetIdle() {
 if (!me) return;
 if (autoIdle) { autoIdle = false; updateMyPresence(); updateStatusBtn(); }
 clearTimeout(idleTimer);
+clearTimeout(idleDisconnectTimer);
 idleTimer = setTimeout(function () {
 if (manualStatus === 'online') { autoIdle = true; updateMyPresence(); updateStatusBtn(); }
 }, IDLE_MS);
+idleDisconnectTimer = setTimeout(function () { if (me) idleDisconnect(); }, IDLE_DISCONNECT_MS);
 }
 ['mousemove', 'keydown', 'touchstart', 'scroll', 'pointerdown'].forEach(function (evt) { document.addEventListener(evt, resetIdle, { passive: true }); });
 
@@ -1417,7 +1428,15 @@ var r = await sb.from('bans').delete().eq('user_id', id);
 if (r.error) { addSys('Could not lift the ban: ' + r.error.message); return; }
 delete bans[id]; addSys(name + ' may return.');
 }
-function kicked(reason) {
+/* Shared teardown for "no longer in the room" -- an admin kick/ban and an idle timeout end up in
+   exactly the same place (channel torn down, every panel that only makes sense while signed on
+   hidden again, whisper windows closed, back on the login screen) and differ only in what they
+   say and whether tapping back in should be immediate or blocked. Keeping one function for both
+   means neither can quietly drift out of sync with the other as the room gains more signed-on-only
+   UI over time -- something that would otherwise show up as, say, the threads bubble or the
+   mobile watermark's layout (.gc-root.signed-on, see style.css) still thinking it's signed on
+   after one path removed it and the other didn't. */
+function leaveRoom(message, rejoinable) {
 if (channel) { channel.unsubscribe(); channel = null; }
 unsubscribeThreads();
 unsubscribeReports();
@@ -1429,6 +1448,7 @@ if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); thread
 if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('signed-on'); }
 openThreadId = null;
 clearTimeout(idleTimer);
+clearTimeout(idleDisconnectTimer);
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
 if ($('roomWatermark')) $('roomWatermark').classList.add('hidden');
 if ($('statusBtn')) $('statusBtn').classList.add('hidden');
@@ -1437,9 +1457,20 @@ if ($('saveBtn')) $('saveBtn').classList.add('hidden');
 if ($('moreBtn')) { $('moreBtn').classList.add('hidden'); closeMoreMenu(); }
 if (st) st.classList.remove('renamable');
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
-$('login').classList.remove('hidden'); $('join').disabled = true;
-fail('You have been removed from the room.' + (reason ? ' Reason: ' + reason : ''));
-setStatus('Removed'); me = null;
+if ($('joinFields')) $('joinFields').classList.remove('hidden'); // undo restoreIdentity()'s auto-resume hiding, if it was mid-flight
+$('login').classList.remove('hidden'); $('join').disabled = !rejoinable;
+fail(message);
+setStatus(rejoinable ? 'Not signed on' : 'Removed'); me = null;
+}
+function kicked(reason) {
+leaveRoom('You have been removed from the room.' + (reason ? ' Reason: ' + reason : ''), false);
+}
+/* 30 minutes with no mouse/keyboard/touch/scroll activity at all -- see IDLE_DISCONNECT_MS above.
+   Unlike a kick, this is nobody's fault and nothing stops the same person from walking straight
+   back in, so the join button comes back enabled and the name box already shows "Enter as
+   <name>" (restoreIdentity() set that once at page load and nothing here unlocks it again). */
+function idleDisconnect() {
+leaveRoom('You were disconnected after 30 minutes of inactivity. Tap in again whenever you’re ready.', true);
 }
 
 /* ---------- sending ---------- */
@@ -2424,6 +2455,23 @@ var sn = $('sn');
 sn.value = n; sn.readOnly = true; sn.classList.add('locked');
 if (!emailMode) $('join').textContent = 'Enter as ' + n;
 if ($('snNote')) $('snNote').classList.remove('hidden');
+/* Reconnect straight into the room instead of leaving a returning visitor sitting on the
+   login screen every time they refresh. A device that reaches this point already has a
+   session AND a claimed name, which only happens after successfully joining at least once
+   before -- the invite key and the Turnstile check exist to gate a NEW identity into the room,
+   not to re-prove an already-vetted one on every page load (see the "resuming" branches in
+   join() for the matching client/server-side skips). The login form is hidden rather than
+   removed, so if the resume attempt below fails for any reason -- an expired session, a network
+   hiccup -- join()'s own catch block re-shows it (see the check right after the call) with the
+   real error message already sitting in #err, and the ordinary manual sign-on still works. */
+var joinFields = $('joinFields'), tag = $('loginTag');
+if (joinFields) joinFields.classList.add('hidden');
+if (tag) tag.textContent = 'Reconnecting as ' + n + '…';
+await join({ resuming: true });
+if (!me) {
+if (joinFields) joinFields.classList.remove('hidden');
+if (tag) tag.textContent = 'Stay awhile, and chat.';
+}
 } catch (e) { /* first visit, or storage blocked -- fall through to the normal sign-on */ }
 }
 restoreIdentity();
@@ -2479,15 +2527,23 @@ var b = nouns[Math.floor(Math.random() * nouns.length)];
 var num = Math.floor(Math.random() * 90) + 10;
 return (a + b + num).slice(0, 16);
 }
-async function join() {
+async function join(opts) {
+opts = opts || {};
+/* resuming: called automatically by restoreIdentity() for a device that already holds a
+   session and a claimed name, to reconnect on page load/refresh without ever showing the login
+   screen. Treated as its own mode rather than just "the non-email path with blanks filled in",
+   because it skips two checks that only make sense for actually GAINING entry: the invite key
+   and the Turnstile human check. A device that already has a claimed name has, by definition,
+   passed both at least once already -- see the comment above the key/Turnstile block below. */
+var resuming = !!opts.resuming;
 /* A returning visitor re-enters under the name this device already holds -- see
    restoreIdentity() below for why the name is pinned rather than re-typed each visit.
-   Email sign-on is exempt: that account's real name is looked up after authenticating, so it
-   must NOT read the character-name box at all here -- that box is hidden in email mode but can
-   still hold stale/invalid leftover text (e.g. from before the "Sign in with email" toggle was
-   clicked), which used to fail the name-format check below even though it was never going to be
-   used. */
-var n = emailMode ? (lockedName || randomName()) : (lockedName || $('sn').value.trim()); fail('');
+   Email sign-on and an auto-resume are both exempt from reading the character-name box: that
+   box is hidden in email mode but can still hold stale/invalid leftover text (e.g. from before
+   the "Sign in with email" toggle was clicked), which used to fail the name-format check below
+   even though it was never going to be used, and a resume always has a locked name already (see
+   restoreIdentity() -- it never calls join({resuming:true}) without one). */
+var n = (emailMode || resuming) ? (lockedName || randomName()) : (lockedName || $('sn').value.trim()); fail('');
 if (!n) n = randomName();
 if (!NAME_RE.test(n)) { fail('2–16 letters (any language), numbers, spaces or . \' -'); return; }
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0) { fail('Backend not configured — edit js/config.js.'); return; }
@@ -2496,19 +2552,21 @@ var adminEmailVal, adminPasswordVal, keyCode = '';
 if (emailMode) {
 adminEmailVal = adminEmail.value.trim(); adminPasswordVal = adminPassword.value;
 if (!adminEmailVal || !adminPasswordVal) { fail('Enter your email and password.'); return; }
-} else {
+} else if (!resuming) {
 // Testing is invite-only -- see supabase/access_keys_feature.sql and the verify-access-key
 // edge function. Admins signing in with email skip this entirely (the branch above), since
-// their credentials already prove who they are.
+// their credentials already prove who they are. A resumed session skips it too: the key (and
+// the Turnstile check just below) gate NEW entry, not an already-vetted device reconnecting --
+// see verify-join further down for the matching server-side half of that reasoning.
 keyCode = accessCode ? accessCode.value.trim() : '';
 if (!keyCode) { fail('Enter your invite key.'); return; }
 if (window.turnstile && !turnstileToken) { fail('Please complete the verification check above.'); return; }
 }
 ensureAudioCtx(); // warm up audio on this user gesture so later sounds aren't blocked by autoplay policy
-$('join').disabled = true; setStatus('Signing on...');
+$('join').disabled = true; setStatus(resuming ? 'Reconnecting...' : 'Signing on...');
 try {
 sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
-if (!emailMode) {
+if (!emailMode && !resuming) {
 var kv = await verifyAccessCode(keyCode);
 if (!kv || !kv.ok) {
 throw new Error(kv && kv.reason === 'revoked' ? 'This key has been revoked.' : 'Invalid key.');
@@ -2523,7 +2581,10 @@ user = pw.data.user;
 } else {
 var s = await sb.auth.getSession();
 user = s.data.session && s.data.session.user;
-if (!user) { var a = await sb.auth.signInAnonymously(); if (a.error) throw a.error; user = a.data.user; }
+if (!user) {
+if (resuming) throw new Error('Your session has expired. Please sign in again.');
+var a = await sb.auth.signInAnonymously(); if (a.error) throw a.error; user = a.data.user;
+}
 }
 /* Whatever the sign-on route, the account's claimed name is the authority on who this is.
    It matters most for email sign-in on a fresh device: there is no local session there, so the
@@ -2550,12 +2611,15 @@ if (claim.data && claim.data.ok === false) {
 if (lockedName) unlockName();
 throw new Error(claim.data.reason === 'taken' ? 'That name is already taken.' : 'That name can’t be used. Try a different one.');
 }
-if (!emailMode) {
+if (!emailMode && !resuming) {
 // Server-side half of the Turnstile check, plus IP-based fresh-identity churn tracking --
 // see supabase/join_ip_log_feature.sql and the verify-join edge function. Fails OPEN on
 // anything but an explicit "turnstile_failed" verdict: this is a hardening layer on top of
 // the real defense (mute/cooldown is enforced in RLS regardless), not something that should
-// lock genuine players out over a network hiccup or a cold-started function.
+// lock genuine players out over a network hiccup or a cold-started function. Skipped on
+// resume for the same reason the key/Turnstile block above is: this churn tracking exists to
+// catch someone minting FRESH identities, and a resumed session -- by definition an identity
+// that already exists -- has already been through it once.
 try {
 var vj = await sb.functions.invoke('verify-join', { body: { turnstileToken: turnstileToken } });
 if (vj.data && vj.data.ok === false && vj.data.reason === 'turnstile_failed') {
