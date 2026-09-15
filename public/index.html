@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=40">
+<link rel="stylesheet" href="./css/style.css?v=41">
 </head>
 <body>
 <div class="gc-root">
@@ -185,6 +185,22 @@
 </div>
 </div>
 
+<!-- One small in-window dialog standing in for window.prompt() everywhere the app needs a single
+     line of text back (away message, friend group name, ...) -- styled like the rest of the room
+     instead of the bare native prompt, which some mobile browsers render tucked up near the address
+     bar rather than as part of the page. showPromptModal() in app.js drives title/hint/value. -->
+<div class="modal-overlay hidden" id="promptOverlay">
+<div class="modal prompt-modal" role="dialog" aria-modal="true" aria-label="Prompt">
+<div class="modal-hd" id="promptTitle">Prompt</div>
+<div class="modal-body hidden" id="promptBody"></div>
+<input id="promptInput" class="sunk" type="text" autocomplete="off">
+<div class="save-actions">
+<button class="btn" type="button" id="promptCancel">Cancel</button>
+<button class="btn" type="button" id="promptOk">OK</button>
+</div>
+</div>
+</div>
+
 <div class="modal-overlay hidden" id="reportsOverlay">
 <div class="modal reports-modal" role="dialog" aria-modal="true" aria-label="Reports">
 <div class="modal-hd">Reports</div>
@@ -210,6 +226,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=1"></script>
-<script src="./js/app.js?v=45"></script>
+<script src="./js/app.js?v=46"></script>
 </body>
 </html>
