@@ -62,6 +62,21 @@ var msgCache = {};
 var dmRead = {};
 try { dmRead = JSON.parse(localStorage.getItem('gc_dm_read') || '{}') || {}; } catch (e) { dmRead = {}; }
 function saveDmRead() { try { localStorage.setItem('gc_dm_read', JSON.stringify(dmRead)); } catch (e) {} }
+/* Per-conversation "dismissed" marks (peer id -> ms timestamp), same idea and same storage
+   pattern as dmRead just above, for a different problem: swiping away, ✕-ing, or Backspacing a
+   minimized whisper tab (see dismissTab below) only ever removed it from the in-memory wins{}
+   map, with nothing recorded anywhere else. That was invisible when a page refresh meant a full
+   logout -- reopening the app was a fresh login you'd expect to rebuild your tray from scratch
+   -- but now that restoreIdentity() resumes silently on every refresh (see join({resuming:true})
+   below), the exact same history replay runs far more often, and it has always recreated a tab
+   for every whisper conversation still in the last C.HISTORY messages with no memory of what
+   you'd previously dismissed. These marks are what let renderIM() below tell "a conversation
+   you closed and nothing new has happened in since" apart from "a conversation you closed but
+   which now has something new" -- the latter still needs to come back, same as any other unread
+   whisper waiting in the tray. */
+var dmDismissed = {};
+try { dmDismissed = JSON.parse(localStorage.getItem('gc_dm_dismissed') || '{}') || {}; } catch (e) { dmDismissed = {}; }
+function saveDmDismissed() { try { localStorage.setItem('gc_dm_dismissed', JSON.stringify(dmDismissed)); } catch (e) {} }
 function markDmRead(id, when) {
 var t = when ? new Date(when).getTime() : Date.now();
 if (!(dmRead[id] >= t)) { dmRead[id] = t; saveDmRead(); syncReadReceipt(id, t); }
@@ -989,6 +1004,7 @@ var w = wins[id]; if (!w || !w.tab) return;
 var el = w.tab;
 el.style.transform = 'translateX(' + ((el._dismissDir || 1) * 120) + '%)';
 el.style.opacity = '0';
+dmDismissed[id] = Date.now(); saveDmDismissed(); // see dmDismissed above -- keeps history replay from bringing this tab straight back
 setTimeout(function () { destroyWin(id); }, 180);
 }
 function makeSwipeToDismiss(el, id) {
@@ -1093,6 +1109,10 @@ var mine = m.sender_id === me.id;
 msgCache[m.id] = { senderId: m.sender_id, senderName: m.sender_name, body: m.body, createdAt: m.created_at };
 var otherId = mine ? m.recipient_id : m.sender_id;
 var otherName = mine ? ((people[otherId] && people[otherId].name) || m.recipient_name || 'unknown') : m.sender_name;
+// A conversation dismissed on this device stays gone through replay unless something in it is
+// actually newer than the dismissal -- see dmDismissed above. Once a window exists, this never
+// applies again until it's dismissed afresh (the wins[otherId] check short-circuits first).
+if (!wins[otherId] && dmDismissed[otherId] && new Date(m.created_at).getTime() <= dmDismissed[otherId]) return;
 var w = ensureWin(otherId, otherName); // never pops the window open on its own — see note above
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them'); d.dataset.mid = m.id;
 if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
