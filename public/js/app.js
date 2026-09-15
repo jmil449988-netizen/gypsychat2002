@@ -9,7 +9,7 @@ var log = $('log'), msg = $('msg'), st = $('st'), cnt = $('cnt'), ulist = $('uli
 var gifBtn = $('gifBtn'), gifPicker = $('gifPicker'), gifQ = $('gifQ'), gifGo = $('gifGo'), gifResults = $('gifResults');
 var tray = $('imTray');
 var gcRoot = document.querySelector('.gc-root');
-var threadsPanel = $('threadsPanel'), tpList = $('tpList'), tpDetail = $('tpDetail'), tpItems = $('tpItems');
+var threadsPanel = $('threadsPanel'), tpList = $('tpList'), tpDetail = $('tpDetail'), tpItems = $('tpItems'), tpPages = $('tpPages');
 var tpNewBtn = $('tpNewBtn'), tpNewPost = $('tpNewPost'), tpNewBody = $('tpNewBody'), tpNewCancel = $('tpNewCancel'), tpNewSubmit = $('tpNewSubmit');
 var tpBack = $('tpBack'), tpPosts = $('tpPosts'), tpReplyBody = $('tpReplyBody'), tpReplySend = $('tpReplySend');
 var threadToggleBtn = $('threadToggleBtn'), dmToggleBtn = $('dmToggleBtn');
@@ -75,6 +75,8 @@ var threadsCache = {}; // thread id -> thread row {id, op_id, op_name, body, cre
 var threadsOrder = []; // thread ids, kept sorted by bumped_at desc
 var openThreadId = null;
 var threadsChannel = null;
+var threadsPage = 0; // current page (0-based) of the catalog list
+var THREADS_PAGE_SIZE = 12;
 var reportsChannel = null;
 var threadPostsSeen = {};
 var lastThreadSend = 0;
@@ -1500,8 +1502,16 @@ if (f) uploadAvatar(f);
 }
 function renderThreadList() {
 if (!tpItems) return;
-if (!threadsOrder.length) { tpItems.innerHTML = '<div class="tp-empty">No threads yet. Start one!</div>'; return; }
-tpItems.innerHTML = threadsOrder.map(function (id) {
+if (!threadsOrder.length) {
+tpItems.innerHTML = '<div class="tp-empty">No threads yet. Start one!</div>';
+if (tpPages) tpPages.innerHTML = '';
+return;
+}
+var pageCount = Math.max(1, Math.ceil(threadsOrder.length / THREADS_PAGE_SIZE));
+if (threadsPage >= pageCount) threadsPage = pageCount - 1; // clamp e.g. after a deletion shrinks the list
+if (threadsPage < 0) threadsPage = 0;
+var pageIds = threadsOrder.slice(threadsPage * THREADS_PAGE_SIZE, threadsPage * THREADS_PAGE_SIZE + THREADS_PAGE_SIZE);
+tpItems.innerHTML = pageIds.map(function (id) {
 var t = threadsCache[id]; if (!t) return '';
 var n = t.reply_count || 0;
 var preview = t.body ? '<div class="tp-preview">' + esc(String(t.body).slice(0, 180)) + '</div>' : '';
@@ -1512,6 +1522,16 @@ var thumb = t.image_url ? '<img class="tp-thumb" src="' + esc(t.image_url) + '" 
 return '<button type="button" class="tp-item" data-id="' + id + '">' + thumb + '<div class="tp-op">' + esc(t.op_name) + '</div>' + preview +
 '<div class="tp-meta">' + n + ' repl' + (n === 1 ? 'y' : 'ies') + ' · ' + timeAgo(t.bumped_at) + '</div></button>';
 }).join('');
+renderThreadPages(pageCount);
+}
+function renderThreadPages(pageCount) {
+if (!tpPages) return;
+if (pageCount <= 1) { tpPages.innerHTML = ''; return; }
+var html = '';
+for (var i = 0; i < pageCount; i++) {
+html += '<button type="button" class="tp-page' + (i === threadsPage ? ' active' : '') + '" data-page="' + i + '">' + (i + 1) + '</button>';
+}
+tpPages.innerHTML = html;
 }
 function upsertThread(t) {
 if (!t || !t.id) return;
@@ -1530,7 +1550,8 @@ renderThreadList();
 }
 function appendThreadPost(p, isOp) {
 if (threadPostsSeen[p.id]) return; threadPostsSeen[p.id] = 1;
-var d = document.createElement('div'); d.className = 'tp-post' + (isOp ? ' op' : '');
+var postIsAdmin = isAdminId(p.sender_id);
+var d = document.createElement('div'); d.className = 'tp-post' + (isOp ? ' op' : '') + (postIsAdmin ? ' admin' : '');
 d.dataset.postId = String(p.id);
 var html = '<span class="t">' + fmt(p.created_at) + '</span><b>' + esc(p.sender_name) + (isOp ? ' (OP)' : '') + ':</b> ';
 if (p.body) html += bodyHtml(p.body);
@@ -1538,7 +1559,15 @@ if (p.image_url) html += (p.body ? '<br>' : '') + '<img class="tp-posted-img" sr
 if (isAdmin) html += ' <button type="button" class="tp-del" data-id="' + esc(String(p.id)) + '" data-op="' + (isOp ? '1' : '0') + '" data-thread="' + esc(String(p.thread_id)) + '" title="' + (isOp ? 'Delete thread' : 'Delete reply') + '" aria-label="' + (isOp ? 'Delete thread' : 'Delete reply') + '">🗑</button>';
 d.innerHTML = html;
 var atBottom = tpPosts.scrollHeight - tpPosts.scrollTop - tpPosts.clientHeight < 60;
+/* Admin posts are pinned as a block at the top of the thread (in chronological order among
+   themselves), above every regular post -- rather than sorted purely by time. */
+if (postIsAdmin) {
+var firstNonAdmin = tpPosts.querySelector('.tp-post:not(.admin)');
+if (firstNonAdmin) tpPosts.insertBefore(d, firstNonAdmin);
+else tpPosts.appendChild(d);
+} else {
 tpPosts.appendChild(d);
+}
 if (atBottom) { tpPosts.scrollTop = tpPosts.scrollHeight; stickImages(tpPosts, d); }
 }
 /* ---------- delete threads / replies (admins only) ---------- */
@@ -1586,14 +1615,19 @@ if (!threadsCache[id]) return;
 closeGif();
 openThreadId = id; threadPostsSeen = {};
 tpList.classList.add('hidden'); tpDetail.classList.remove('hidden');
-var tpDetailHd = tpDetail.querySelector('.tp-hd span'); if (tpDetailHd) tpDetailHd.textContent = '/gen/ — No.' + id;
+var t = threadsCache[id];
+var tpDetailHd = tpDetail.querySelector('.tp-hd span');
+if (tpDetailHd) {
+var snippet = t.body ? String(t.body).slice(0, 60) : '';
+if (t.body && String(t.body).length > 60) snippet += '…';
+tpDetailHd.textContent = '/Gen "' + snippet + '"';
+}
 if (gcRoot) gcRoot.classList.add('thread-open');
 tpPosts.innerHTML = '<div class="tp-loading">Loading…</div>';
-var t = threadsCache[id];
 var r = await sb.from('thread_posts').select('*').eq('thread_id', id).order('created_at', { ascending: true }).limit(500);
 if (openThreadId !== id) return; // closed/switched while the query was in flight
 tpPosts.innerHTML = '';
-appendThreadPost({ id: 'op-' + id, sender_name: t.op_name, body: t.body, image_url: t.image_url, created_at: t.created_at, thread_id: id }, true);
+appendThreadPost({ id: 'op-' + id, sender_id: t.op_id, sender_name: t.op_name, body: t.body, image_url: t.image_url, created_at: t.created_at, thread_id: id }, true);
 if (!r.error) r.data.forEach(function (p) { appendThreadPost(p, false); });
 tpPosts.scrollTop = tpPosts.scrollHeight;
 if (tpReplyBody) tpReplyBody.focus();
@@ -1631,6 +1665,7 @@ if (imageUrl) row.image_url = imageUrl;
 var r = await sb.from('threads').insert(row).select().single();
 if (r.error) { addSys('Your thread was lost: ' + r.error.message); return; }
 tpNewBody.value = ''; clearPendingImage('new'); tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden');
+threadsPage = 0;
 upsertThread(r.data);
 openThread(r.data.id);
 }
@@ -1680,6 +1715,10 @@ var img = e.target.closest('.tp-thumb'); if (img) { e.stopPropagation(); openLig
 var b = e.target.closest('.tp-item'); if (!b) return; openThread(Number(b.dataset.id));
 };
 tpBack.onclick = closeThread;
+if (tpPages) tpPages.onclick = function (e) {
+var b = e.target.closest('.tp-page'); if (!b) return;
+threadsPage = Number(b.dataset.page); renderThreadList();
+};
 tpReplySend.onclick = submitReply;
 tpReplyBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitReply(); } };
 }
