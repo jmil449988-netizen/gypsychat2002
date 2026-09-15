@@ -46,6 +46,12 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
 var sb = null, me = null, channel = null;
 var people = {}; // user id -> presence object {name, status, awayMsg} (from presence)
 var wins = {}, unread = {}, seen = {};
+/* Message metadata cache, keyed by message id -- just enough (sender, raw body, when) for the 🚩
+   "report this message" action below to file an exact snapshot without scraping it back out of
+   the rendered/escaped HTML. Populated as each message is rendered (room or whisper), never
+   pruned -- same lifetime as the seen{} id-dedupe map above, which has the same shape of growth
+   and has never needed trimming in practice. */
+var msgCache = {};
 /* Per-conversation "last read" marks. Sign-on replays your recent whispers through the very
    same renderIM() that handles live ones, so every whisper you had already read came back as a
    fresh red badge (and a fresh ding). These marks are what tell the two apart.
@@ -430,7 +436,20 @@ window.addEventListener('focus', clearTitle);
    never building raw SQL from user input is. */
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function sanitizeInput(s) { return String(s || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); }
-function fmt(t) { var d = new Date(t); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+/* getHours()/getMinutes() already read the LOCAL clock -- a Date parses the stored UTC
+   created_at and these getters convert it to whatever timezone the browser/device is set to, so
+   every timestamp already lands in each viewer's own timezone with zero server-side work. The
+   only thing this used to get wrong was the format: plain 24-hour "HH:MM". This converts that to
+   12-hour clock face + AM/PM (never military time), same local-timezone value either way. */
+function fmt(t) {
+var d = new Date(t), h = d.getHours(), m = d.getMinutes(), ap = h >= 12 ? 'PM' : 'AM';
+h = h % 12; if (!h) h = 12;
+return h + ':' + ('0' + m).slice(-2) + ' ' + ap;
+}
+/* Date + time for contexts that span more than one day (the admin reports queue) -- the date part
+   uses the browser's own locale/timezone via toLocaleDateString, the time part is always the same
+   12-hour fmt() above so it never flips to 24-hour just because a locale prefers that. */
+function fmtDateTime(t) { return new Date(t).toLocaleDateString() + ' ' + fmt(t); }
 function wrapEmoji(h) { return h.replace(/(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)/gu, '<span class="e">$1</span>'); }
 var URL_RE = /(https?:\/\/[^\s<]+)/g;
 function linkify(html) {
@@ -734,9 +753,11 @@ log.appendChild(d); log.scrollTop = log.scrollHeight;
 function renderRoom(m) {
 if (seen[m.id]) return; seen[m.id] = 1;
 var mine = m.sender_id === me.id;
+msgCache[m.id] = { senderId: m.sender_id, senderName: m.sender_name, body: m.body, createdAt: m.created_at };
 var mentionsMe = !mine && bodyMentionsMe(m.body);
-var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them') + (mentionsMe ? ' mention-me' : '');
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them') + (mentionsMe ? ' mention-me' : ''); d.dataset.mid = m.id;
+var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 log.appendChild(d);
 if (atBottom || mine) { log.scrollTop = log.scrollHeight; stickImages(log, d); }
@@ -826,7 +847,10 @@ var f = imgFile.files && imgFile.files[0]; imgFile.value = '';
 if (f) sendIMImage(id, f);
 };
 win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') minimizeIM(id); };
-win.log.onclick = function (e) { var img = e.target.closest('img.gif'); if (img) openLightbox(img.src); };
+win.log.onclick = function (e) {
+var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
+var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) reportMessage(rpt.dataset.mid);
+};
 el.addEventListener('pointerdown', function () { front(el); });
 var bar = el.querySelector('.bar');
 bar.addEventListener('pointerdown', function (e) {
@@ -947,12 +971,14 @@ imSys(id, 'You sent a buzz.');
 function renderIM(m) {
 if (seen[m.id]) return; seen[m.id] = 1;
 var mine = m.sender_id === me.id;
+msgCache[m.id] = { senderId: m.sender_id, senderName: m.sender_name, body: m.body, createdAt: m.created_at };
 var otherId = mine ? m.recipient_id : m.sender_id;
 var otherName = mine ? ((people[otherId] && people[otherId].name) || m.recipient_name || 'unknown') : m.sender_name;
 var w = ensureWin(otherId, otherName); // never pops the window open on its own — see note above
-var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them');
+var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them'); d.dataset.mid = m.id;
 if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + avatarHtml(m.sender_id, m.sender_name) + '<b>' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b>' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
 if (mine) updateSeenMark(otherId); // this may now be the new last message of mine -- move/(re)show the mark
 if (!mine && !alreadyRead(otherId, m.created_at)) {
@@ -1000,7 +1026,7 @@ var items = [];
 items.push(['Get Info', function () { showInfo(id, name); }]);
 if (online && !blocked[id]) items.push(['Whisper', function () { unread[id] = 0; openIM(id, name, true); }]);
 items.push(blocked[id] ? ['Unblock', function () { unblock(id); }] : ['Block', function () { block(id, name); }]);
-items.push(['Report', function () { var rr = prompt('Report ' + name + ' for: (e.g. spam, harassment)'); if (rr !== null && rr.trim()) report(id, name, rr.trim()); }]);
+items.push(['Report', async function () { var rr = await showPromptModal('Report ' + name, { placeholder: 'e.g. spam, harassment', maxLength: 300 }); if (rr) report(id, name, rr); }]);
 items.push(friends[id] ? ['Remove Friend', function () { removeFriend(id, name); }] : ['Add Friend', function () { addFriend(id, name); }]);
 if (friends[id]) items.push(['Move to Group', async function () { var g = await showPromptModal('Move to Group', { value: friends[id].group || '', placeholder: 'blank for none', maxLength: 40 }); if (g !== null) moveFriendGroup(id, g); }]);
 /* Kick/Mute/Unmute don't require the target to still be online — most of the time an admin is
@@ -1034,6 +1060,7 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clos
    Kick/Mute for admins) — no need to go hunting for them in the Online list first. */
 log.onclick = function (e) {
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
+var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { e.stopPropagation(); reportMessage(rpt.dataset.mid); return; }
 var b = e.target.closest('.who[data-id]'); if (!b || b.dataset.id === me.id) return;
 e.stopPropagation(); openMenu(b.dataset.id, b, b.dataset.name);
 };
@@ -1062,11 +1089,28 @@ if (r.error) { addSys('Could not unblock: ' + r.error.message); return; }
 delete blocked[id]; addSys('You have unblocked ' + name + '.'); renderPeople();
 }
 
-/* ---------- report abuse ---------- */
-async function report(id, name, reason) {
-var r = await sb.from('reports').insert({ reporter_id: me.id, reporter_name: me.name, reported_id: id, reported_name: name, reason: sanitizeInput(reason).slice(0, 300) });
+/* ---------- report abuse ----------
+   messageId/messageBody are optional -- present only when the report was filed by tapping the 🚩
+   on a specific message (reportMessage below), so the admin queue can show exactly what was said
+   instead of just a name and a freeform reason. See supabase/report_message_feature.sql for the
+   columns this writes to. */
+async function report(id, name, reason, messageId, messageBody) {
+var row = { reporter_id: me.id, reporter_name: me.name, reported_id: id, reported_name: name, reason: sanitizeInput(reason).slice(0, 300) };
+if (messageId) { row.message_id = messageId; row.message_body = sanitizeInput(messageBody || '').slice(0, 500); }
+var r = await sb.from('reports').insert(row);
 if (r.error) { addSys('Could not send report: ' + r.error.message); return; }
 addSys('Report sent. Thank you — an admin will review it.');
+}
+/* Tapping 🚩 on a specific message (room or whisper) -- lets you point at exactly which message
+   you're reporting instead of just naming the person and describing it from memory. Pulls the
+   original text from msgCache (populated in renderRoom/renderIM) rather than the rendered HTML,
+   so what gets attached is the real message, not a formatted/escaped copy of it. */
+async function reportMessage(mid) {
+var mm = msgCache[mid]; if (!mm) return;
+if (mm.senderId === me.id) { addSys('You cannot report your own message.'); return; }
+var quote = mm.body.length > 140 ? mm.body.slice(0, 140) + '…' : mm.body;
+var rr = await showPromptModal('Report ' + mm.senderName, { placeholder: 'e.g. spam, harassment', hint: 'Reporting this message: “' + quote + '”', maxLength: 300 });
+if (rr) report(mm.senderId, mm.senderName, rr, mid, mm.body);
 }
 
 /* ---------- reports queue (admins only) ----------
@@ -1087,9 +1131,14 @@ function renderReports(rows) {
 if (!reportsList) return;
 if (!rows.length) { reportsList.innerHTML = '<div class="empty">No open reports.</div>'; return; }
 reportsList.innerHTML = rows.map(function (r) {
-var when = new Date(r.created_at).toLocaleString();
+var when = fmtDateTime(r.created_at);
+/* message_id/message_body are only present when the report came from the new 🚩 tap on a
+   specific message (see reportMessage below) -- older reports and ones filed via /report or the
+   name-menu Report item have neither, so this quote block just doesn't render for those. */
+var quote = r.message_body ? '<div class="rr-msg">“' + esc(r.message_body) + '”</div>' : '';
 return '<div class="report-row" data-id="' + r.id + '">' +
 '<div class="rr-hd">' + esc(when) + ' — <b>' + esc(r.reporter_name || '?') + '</b> reported <b>' + esc(r.reported_name || '?') + '</b></div>' +
+quote +
 '<div class="rr-reason">' + esc(r.reason) + '</div>' +
 '<div class="rr-actions"><button type="button" class="btn rr-dismiss" data-id="' + r.id + '">Dismiss</button>' +
 '<button type="button" class="btn rr-ban" data-id="' + r.id + '" data-uid="' + esc(r.reported_id) + '" data-name="' + esc(r.reported_name || '') + '">Ban / Kick</button></div>' +
@@ -1261,7 +1310,7 @@ var cmd = m[1].toLowerCase(), arg = m[2], rest = m[3].trim(), id;
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports' : '') + '. Click a name in the chat log or Online list for options. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz.'); return true;
+case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports' : '') + '. Click a name in the chat log or Online list for options. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
@@ -1279,7 +1328,7 @@ case 'bans': if (!isAdmin) return true; var bn = Object.keys(bans).map(function 
 case 'mute': if (!isAdmin) { addSys('Only an admin may mute.'); return true; } id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot mute yourself.'); return true; } muteUser(id, people[id].name); return true;
 case 'unmute': if (!isAdmin) { addSys('Only an admin may unmute.'); return true; } id = Object.keys(mutedUsers).filter(function (k) { return (mutedUsers[k].user_name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('No active mute found for ' + arg + '.'); return true; } unmute(id, mutedUsers[id].user_name || arg); return true;
 case 'muted': if (!isAdmin) return true; var mn = Object.keys(mutedUsers).map(function (k) { return mutedUsers[k].user_name || k; }); addSys(mn.length ? 'Muted: ' + mn.join(', ') : 'No one is muted.'); return true;
-case 'reports': if (!isAdmin) return true; var rp = await sb.from('reports').select('reporter_name, reported_name, reason, created_at').order('created_at', { ascending: false }).limit(10); if (rp.error) { addSys('Could not load reports: ' + rp.error.message); return true; } if (!rp.data.length) { addSys('No reports.'); return true; } rp.data.forEach(function (x) { addSys('[' + fmt(x.created_at) + '] ' + x.reporter_name + ' reported ' + x.reported_name + ': ' + x.reason); }); return true;
+case 'reports': if (!isAdmin) return true; var rp = await sb.from('reports').select('reporter_name, reported_name, reason, created_at, message_body').order('created_at', { ascending: false }).limit(10); if (rp.error) { addSys('Could not load reports: ' + rp.error.message); return true; } if (!rp.data.length) { addSys('No reports.'); return true; } rp.data.forEach(function (x) { addSys('[' + fmtDateTime(x.created_at) + '] ' + x.reporter_name + ' reported ' + x.reported_name + ': ' + x.reason + (x.message_body ? ' (re: “' + x.message_body + '”)' : '')); }); return true;
 default: addSys('Unknown command. Type /help.'); return true;
 }
 }
