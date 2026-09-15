@@ -536,15 +536,31 @@ im.addEventListener('error', after);
    yourself, so it can never fight someone who has started reading back through the backlog. */
 function pinLogBottom(ms) {
 var released = false;
-function jump() { if (!released) log.scrollTop = log.scrollHeight; }
-function onScroll() { if (log.scrollHeight - log.scrollTop - log.clientHeight > 80) release(); }
+/* Below the 500px breakpoint .log has no scrollbox of its own -- height:auto, min-height:0 --
+   so it never overflows and log.scrollTop is a permanent no-op there; it's the whole PAGE that
+   scrolls instead. Sign-on was only ever moving log.scrollTop, so on a real phone it silently
+   did nothing and you landed wherever a fresh page load starts: the very top. Move the page too
+   whenever this layout is active (same test the mobile threads/roulette toggle uses). */
+function jump() {
+if (released) return;
+log.scrollTop = log.scrollHeight;
+if (isNarrow()) window.scrollTo(0, document.documentElement.scrollHeight);
+}
+function atBottom() {
+var logOk = log.scrollHeight - log.scrollTop - log.clientHeight <= 80;
+var pageOk = !isNarrow() || document.documentElement.scrollHeight - window.scrollY - window.innerHeight <= 80;
+return logOk && pageOk;
+}
+function onScroll() { if (!atBottom()) release(); }
 function release() {
 if (released) return;
 released = true;
 log.removeEventListener('scroll', onScroll);
+window.removeEventListener('scroll', onScroll);
 log.removeEventListener('load', jump, true);
 }
 log.addEventListener('scroll', onScroll, { passive: true });
+window.addEventListener('scroll', onScroll, { passive: true });
 log.addEventListener('load', jump, true); // capture: 'load' from an <img> does not bubble
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(jump);
 requestAnimationFrame(function () { requestAnimationFrame(jump); });
