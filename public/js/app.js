@@ -19,7 +19,7 @@ var tpReplyImgBtn = $('tpReplyImgBtn'), tpReplyImgFile = $('tpReplyImgFile'), tp
 var tpReplyPreviewWrap = $('tpReplyPreviewWrap'), tpReplyPreviewImg = $('tpReplyPreviewImg'), tpReplyImgRemove = $('tpReplyImgRemove');
 var adminToggle = $('adminToggle'), adminFields = $('adminFields'), adminEmail = $('adminEmail'), adminPassword = $('adminPassword');
 var reportsBtn = $('reportsBtn'), reportsBadge = $('reportsBadge'), reportsOverlay = $('reportsOverlay'), reportsList = $('reportsList'), reportsClose = $('reportsClose');
-var gateFields = $('gateFields'), accessCode = $('accessCode'), gateGo = $('gateGo'), gateErr = $('gateErr'), joinFields = $('joinFields');
+var gateFields = $('gateFields'), accessCode = $('accessCode');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
 
@@ -2012,10 +2012,14 @@ adminToggle.textContent = emailMode ? 'Use a character name instead' : 'Sign in 
    you're not. This is also the admin route -- admin rights come from the admins table, not from
    which form you used -- so an admin signing in keeps whatever character their account holds. */
 if ($('nameFields')) $('nameFields').classList.toggle('hidden', emailMode);
+/* The invite key is only asked of the anonymous/character-name path -- an admin's email and
+   password already prove who they are, so there's nothing for a key to gate here. */
+if (gateFields) gateFields.classList.toggle('hidden', emailMode);
+if ($('gateNote')) $('gateNote').classList.toggle('hidden', emailMode);
 $('sn').readOnly = !emailMode && !!lockedName;
 if ($('snNote')) $('snNote').classList.toggle('hidden', emailMode || !lockedName);
 fail('');
-(emailMode ? adminEmail : $('sn')).focus();
+(emailMode ? adminEmail : (accessCode && !accessCode.value ? accessCode : $('sn'))).focus();
 };
 }
 /* Cloudflare Turnstile (join-screen human check): the widget calls these globally-named
@@ -2047,17 +2051,29 @@ if (!n) n = randomName();
 if (!NAME_RE.test(n)) { fail('2–16 letters (any language), numbers, spaces or . \' -'); return; }
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0) { fail('Backend not configured — edit js/config.js.'); return; }
 if (!window.supabase) { fail('Could not load the chat library. Check your connection.'); return; }
-var adminEmailVal, adminPasswordVal;
+var adminEmailVal, adminPasswordVal, keyCode = '';
 if (emailMode) {
 adminEmailVal = adminEmail.value.trim(); adminPasswordVal = adminPassword.value;
 if (!adminEmailVal || !adminPasswordVal) { fail('Enter your email and password.'); return; }
-} else if (window.turnstile && !turnstileToken) {
-fail('Please complete the verification check above.'); return;
+} else {
+// Testing is invite-only -- see supabase/access_keys_feature.sql and the verify-access-key
+// edge function. Admins signing in with email skip this entirely (the branch above), since
+// their credentials already prove who they are.
+keyCode = accessCode ? accessCode.value.trim() : '';
+if (!keyCode) { fail('Enter your invite key.'); return; }
+if (window.turnstile && !turnstileToken) { fail('Please complete the verification check above.'); return; }
 }
 ensureAudioCtx(); // warm up audio on this user gesture so later sounds aren't blocked by autoplay policy
 $('join').disabled = true; setStatus('Signing on...');
 try {
 sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+if (!emailMode) {
+var kv = await verifyAccessCode(keyCode);
+if (!kv || !kv.ok) {
+throw new Error(kv && kv.reason === 'revoked' ? 'This key has been revoked.' : 'Invalid key.');
+}
+try { localStorage.setItem('gc_access_code', keyCode); } catch (e) {}
+}
 var user;
 if (emailMode) {
 var pw = await sb.auth.signInWithPassword({ email: adminEmailVal, password: adminPasswordVal });
@@ -2213,22 +2229,26 @@ turnstileToken = null;
 }
 $('join').onclick = join;
 $('sn').onkeydown = function (e) { if (e.key === 'Enter') join(); };
+if (accessCode) accessCode.onkeydown = function (e) { if (e.key === 'Enter') join(); };
 if (adminEmail) adminEmail.onkeydown = function (e) { if (e.key === 'Enter') join(); };
 if (adminPassword) adminPassword.onkeydown = function (e) { if (e.key === 'Enter') join(); };
 
 /* ---------- access-key gate ----------
-   Testing is invite-only right now: #joinFields (the character-name/sign-in form) stays hidden
-   behind #gateFields until an access code checks out against the access_keys table (see
-   supabase/access_keys_feature.sql). Verification goes through the verify-access-key edge
-   function rather than a direct table read -- that table has no client-facing RLS policies at
-   all, so it isn't readable OR writable by anon/authenticated clients, only by the function's
-   service-role key. Codes are reusable until an admin flips a row's `revoked` flag to true in
-   the Supabase table editor: there's no single-use consumption and no in-app key-management UI. */
-function gateFail(t) { if (gateErr) gateErr.textContent = t; }
-function unlockGate() {
-if (gateFields) gateFields.classList.add('hidden');
-if (joinFields) joinFields.classList.remove('hidden');
-}
+   Testing is invite-only right now: the invite-key field lives right on the sign-on screen
+   alongside the character name, and join() checks it (against the access_keys table -- see
+   supabase/access_keys_feature.sql) as part of the same submit, rather than as a separate
+   screen before this one. Admins signing in with email skip it entirely -- see the emailMode
+   branch in join() and the adminToggle handler above, which hides this field for that path.
+   Verification goes through the verify-access-key edge function rather than a direct table
+   read -- that table has no client-facing RLS policies at all, so it isn't readable OR
+   writable by anon/authenticated clients, only by the function's service-role key. Codes are
+   reusable until an admin flips a row's `revoked` flag to true in the Supabase table editor:
+   there's no single-use consumption and no in-app key-management UI.
+
+   NOTE for when this goes live and the key requirement comes out: remove the #gateFields block
+   from index.html, drop the keyCode/verifyAccessCode bits from join() (both the empty-check
+   above and the verification call in the try block), and this function and the accessCode
+   element ref can go too -- character-name sign-on then works exactly as it did before keys. */
 async function verifyAccessCode(code) {
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0 || !window.supabase) return { ok: false, reason: 'unconfigured' };
 try {
@@ -2238,36 +2258,14 @@ if (res.error) return { ok: false, reason: 'server_error' };
 return res.data || { ok: false, reason: 'invalid' };
 } catch (e) { return { ok: false, reason: 'server_error' }; }
 }
-if (gateGo) {
-gateGo.onclick = async function () {
-var code = (accessCode.value || '').trim();
-gateFail('');
-if (!code) { gateFail('Enter your invite code.'); return; }
-gateGo.disabled = true; gateGo.textContent = 'Checking...';
-var r = await verifyAccessCode(code);
-gateGo.disabled = false; gateGo.textContent = 'Continue';
-if (r && r.ok) {
-try { localStorage.setItem('gc_access_code', code); } catch (e) {}
-unlockGate();
-$('sn').focus();
-} else {
-gateFail(r && r.reason === 'revoked' ? 'This code has been revoked.' : 'Invalid invite code.');
-}
-};
-}
-if (accessCode) accessCode.onkeydown = function (e) { if (e.key === 'Enter') gateGo.click(); };
-/* Silently re-check any code this device already unlocked with, so a returning tester doesn't
-   have to retype it every visit -- unless it's been revoked since, in which case the gate stays
-   up and the stale code is dropped rather than left to fail forever on every future load. */
-(function checkStoredAccessCode() {
-var stored = null;
-try { stored = localStorage.getItem('gc_access_code'); } catch (e) {}
-if (!stored) { if (accessCode) accessCode.focus(); return; }
-verifyAccessCode(stored).then(function (r) {
-if (r && r.ok) { unlockGate(); $('sn').focus(); }
-else { try { localStorage.removeItem('gc_access_code'); } catch (e) {} if (accessCode) accessCode.focus(); }
-});
-})();
+// Prefill (never auto-submit) any key this device already used, so a returning tester doesn't
+// have to retype it -- it's still re-checked for real by join() on submit, in case it's since
+// been revoked.
+try {
+var storedCode = localStorage.getItem('gc_access_code');
+if (storedCode && accessCode) accessCode.value = storedCode;
+} catch (e) {}
+if (accessCode && !accessCode.value) accessCode.focus(); else $('sn').focus();
 
 /* ---------- PWA service worker ---------- */
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
