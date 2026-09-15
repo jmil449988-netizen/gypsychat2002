@@ -1799,36 +1799,51 @@ tpReplyGifBtn.onclick = function () { openGifPicker('', 'thread-reply', tpReplyG
    The one deliberate exception is the bottom -- if you left while pinned to the newest message,
    you come back pinned to the newest message, including whatever arrived while you were away,
    rather than to the older message that happened to be at that pixel offset.
+   Rotating the device needs the exact same rescue, and needs it worse: below the 500px breakpoint
+   the whole PAGE scrolls instead of the log having its own scrollbox (see .log's max-width:500px
+   override in style.css), and a phone's width crosses that breakpoint on nearly every portrait<->
+   landscape flip. That doesn't just reset the scroll position -- it swaps WHICH element is the
+   scrolling container out from under you, so a raw pixel offset from one side (a page scrollY, or
+   a log.scrollTop) means nothing applied to the other: restoring window.scrollTo(oldPageY) after
+   landscape->portrait, when oldPageY was captured while landscape's near-static outer page barely
+   scrolled at all, is what was landing back near the top even with a "remembered" position on file.
+   So the snapshot stores a fraction (0 = top of the conversation, 1 = bottom) of whichever
+   container was actually scrolling at capture time, and restoring re-applies that same fraction to
+   whichever container is actually scrolling now -- which stays meaningful across the swap since
+   both containers hold the same messages in the same order, just measured differently.
    Two frames on the way back: one for the browser to lay .win out again, one for the scroll to
-   actually stick on iOS Safari.
-   Rotating the device needs the exact same rescue: below the 500px breakpoint the whole PAGE
-   scrolls instead of the log having its own scrollbox, and a phone's width crosses that
-   breakpoint on almost every portrait<->landscape flip. That swaps which element is actually
-   scrollable out from under you, and the new one starts at scrollTop 0 -- so without this,
-   rotating either way dumped you back at the top mid-conversation. The orientationchange
-   listener below reuses this same remember/return pair for that case. */
+   actually stick on iOS Safari. The orientationchange listener above reuses this same remember/
+   return pair for the rotation case. */
 var chatScroll = null;
 function isNarrow() { return window.matchMedia('(max-width:1339px)').matches; }
 function logVisible() { return log && !log.classList.contains('hidden'); }
+function pageScrollsLog() { return window.matchMedia('(max-width:500px)').matches; } // true: the whole page scrolls, log has no scrollbox of its own; false: log has its own fixed-height scrollbox and the outer page doesn't move
+function chatAtBottom() {
+if (!logVisible()) return true;
+if (pageScrollsLog()) { var doc = document.documentElement; return (doc.scrollHeight - (window.scrollY || doc.scrollTop || 0) - window.innerHeight) < 40; }
+return (log.scrollHeight - log.scrollTop - log.clientHeight) < 40;
+}
+function chatScrollFraction() {
+if (pageScrollsLog()) { var doc = document.documentElement; var max = Math.max(1, doc.scrollHeight - window.innerHeight); return (window.scrollY || doc.scrollTop || 0) / max; }
+if (!logVisible()) return 1;
+var max2 = Math.max(1, log.scrollHeight - log.clientHeight);
+return log.scrollTop / max2;
+}
+function scrollChatToBottom() {
+if (pageScrollsLog()) window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+else if (logVisible()) log.scrollTop = log.scrollHeight;
+}
 function rememberChatScroll() {
 if (!isNarrow()) return;
-chatScroll = {
-page: window.scrollY || document.documentElement.scrollTop || 0,
-log: logVisible() ? log.scrollTop : null,
-atBottom: logVisible() ? (log.scrollHeight - log.scrollTop - log.clientHeight < 40) : true
-};
+chatScroll = { fraction: chatScrollFraction(), atBottom: chatAtBottom() };
 }
 function returnToChat() {
 if (!isNarrow()) return;
 var st = chatScroll;
 function place() {
-if (!st) { // never saw the way out (e.g. rotated into this width) -- the bottom is the safe guess
-window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
-if (logVisible()) log.scrollTop = log.scrollHeight;
-return;
-}
-window.scrollTo(0, st.page);
-if (logVisible() && st.log !== null) log.scrollTop = st.atBottom ? log.scrollHeight : st.log;
+if (!st || st.atBottom) { scrollChatToBottom(); return; } // no snapshot (e.g. rotated into this width before ever leaving it), or pinned to the newest message -- the bottom is always the right target
+if (pageScrollsLog()) { var doc = document.documentElement; window.scrollTo(0, st.fraction * Math.max(0, doc.scrollHeight - window.innerHeight)); }
+else if (logVisible()) { log.scrollTop = st.fraction * Math.max(0, log.scrollHeight - log.clientHeight); }
 }
 /* One placement isn't the end of it on iOS: below the 500px breakpoint the chat log has no
    scrollbox of its own, so it's the whole PAGE that scrolls, and the page's height depends on
