@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=37">
+<link rel="stylesheet" href="./css/style.css?v=38">
 </head>
 <body>
 <div class="gc-root">
@@ -101,6 +101,7 @@
 <div class="rp-blurb">Two minutes with a stranger.<br>Then the wheel turns again.</div>
 <div class="rp-wheel" aria-hidden="true"><span>✦</span></div>
 <button class="btn rp-back" type="button" id="rouletteBack">Back to chat</button>
+<div class="room-watermark" id="rouletteWatermark" aria-hidden="true"></div>
 </aside>
 
 <div class="threads-panel" id="threadsPanel" role="complementary" aria-label="Threads board">
@@ -136,6 +137,7 @@
 <button class="btn" type="button" id="tpReplySend">Reply</button>
 </div>
 </div>
+<div class="tp-watermark" id="threadsWatermark" aria-hidden="true"></div>
 </div>
 
 <button class="thread-toggle-fab" id="threadToggleBtn" type="button" aria-label="Open threads board">🧵</button>
@@ -208,6 +210,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=1"></script>
-<script src="./js/app.js?v=44"></script>
+<script src="./js/app.js?v=45"></script>
 </body>
 </html>
