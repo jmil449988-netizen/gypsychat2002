@@ -40,11 +40,31 @@ end $$;
 drop trigger if exists messages_rate_limit on public.messages;
 create trigger messages_rate_limit before insert on public.messages for each row execute function public.rate_limit_messages();
 
--- Realtime: broadcast inserts (RLS is applied to what each client receives).
+-- Realtime: broadcast inserts and deletes (RLS is applied to what each client receives).
 alter publication supabase_realtime add table public.messages;
 
--- Housekeeping: keep the table small. Run manually or schedule via Database → Cron (pg_cron):
---   select cron.schedule('trim-messages', '0 4 * * *', $$delete from public.messages where created_at < now() - interval '30 days'$$);
+-- Housekeeping: keep the MAIN ROOM log capped at the 100 newest messages. Every insert into the
+-- room (recipient_id is null) walks the room's own history back from newest and deletes anything
+-- past the 100th row, so the oldest room message falls off each time a new one arrives -- a FIFO
+-- ring buffer, not a time-based expiry. Whispers (recipient_id is not null) are never touched by
+-- this trigger and have no cap of their own.
+create or replace function public.trim_room_messages() returns trigger language plpgsql security definer set search_path to 'public' as $function$
+begin
+  if new.recipient_id is null then
+    delete from public.messages
+    where id in (
+      select id from public.messages
+      where recipient_id is null and room = new.room
+      order by created_at desc, id desc
+      offset 100
+    );
+  end if;
+  return new;
+end;
+$function$;
+drop trigger if exists messages_trim_room on public.messages;
+create trigger messages_trim_room after insert on public.messages
+  for each row execute function public.trim_room_messages();
 
 -- =====================================================================
 -- Blocks, bans and admins
