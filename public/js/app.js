@@ -1591,8 +1591,7 @@ atBottom: logVisible() ? (log.scrollHeight - log.scrollTop - log.clientHeight < 
 function returnToChat() {
 if (!isNarrow()) return;
 var st = chatScroll;
-requestAnimationFrame(function () {
-requestAnimationFrame(function () {
+function place() {
 if (!st) { // never saw the way out (e.g. rotated into this width) -- the bottom is the safe guess
 window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
 if (logVisible()) log.scrollTop = log.scrollHeight;
@@ -1600,6 +1599,18 @@ return;
 }
 window.scrollTo(0, st.page);
 if (logVisible() && st.log !== null) log.scrollTop = st.atBottom ? log.scrollHeight : st.log;
+}
+/* One placement isn't the end of it on iOS: below the 500px breakpoint the chat log has no
+   scrollbox of its own, so it's the whole PAGE that scrolls, and the page's height depends on
+   100dvh -- which iOS Safari keeps changing for a few hundred ms after this fires, as its
+   address bar/toolbar animates open or closed on the way back from a full-viewport panel. A
+   single scrollTo lands correctly and then gets shoved off again a moment later when the
+   toolbar finishes moving and the document height changes under it. So re-assert the same
+   target a few more times over the next second instead of trusting one attempt to stick. */
+requestAnimationFrame(function () {
+requestAnimationFrame(function () {
+place();
+[50, 150, 300, 500, 800].forEach(function (ms) { setTimeout(place, ms); });
 });
 });
 }
