@@ -323,19 +323,28 @@ updateSoundBtn();
    context it creates is born suspended and stays that way for the rest of the session -- every
    playSound() afterward runs without error but is silently inaudible. Resuming on the very first
    real tap/click anywhere on the page (compose box, a message, anything) catches that case too,
-   without needing to know in advance which element the user will touch first. */
+   without needing to know in advance which element the user will touch first.
+   Two things that made the original version of this unreliable on iOS, fixed here: (1) it marked
+   itself "unlocked" after the very first gesture regardless of whether resume() actually succeeded
+   -- if that first tap landed on an element whose own handler never let the gesture reach a
+   bubble-phase listener, or resume() simply hadn't taken effect synchronously, audio stayed silent
+   for the rest of the session with no retry. Now it keeps trying on every gesture until the context
+   is confirmed 'running'. (2) it listened on the bubble phase, so any element's own
+   e.stopPropagation() (several exist in this file, e.g. the online-list/menu handlers) could keep
+   the gesture from ever reaching this document-level listener at all. Listening on the CAPTURE
+   phase instead runs this before any such handler gets a chance to stop it. */
 (function () {
-var unlocked = false;
-function unlockAudioOnce() {
-if (unlocked) return; unlocked = true;
-ensureAudioCtx();
-document.removeEventListener('pointerdown', unlockAudioOnce);
-document.removeEventListener('touchend', unlockAudioOnce);
-document.removeEventListener('click', unlockAudioOnce);
+function tryUnlockAudio() {
+var ctx = ensureAudioCtx();
+if (ctx && ctx.state === 'running') {
+document.removeEventListener('pointerdown', tryUnlockAudio, true);
+document.removeEventListener('touchend', tryUnlockAudio, true);
+document.removeEventListener('click', tryUnlockAudio, true);
 }
-document.addEventListener('pointerdown', unlockAudioOnce, { passive: true });
-document.addEventListener('touchend', unlockAudioOnce, { passive: true });
-document.addEventListener('click', unlockAudioOnce, { passive: true });
+}
+document.addEventListener('pointerdown', tryUnlockAudio, { capture: true, passive: true });
+document.addEventListener('touchend', tryUnlockAudio, { capture: true, passive: true });
+document.addEventListener('click', tryUnlockAudio, { capture: true, passive: true });
 })();
 
 /* ---------- desktop/OS notifications (Notification API) ----------
