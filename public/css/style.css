@@ -1,4 +1,17 @@
 /* Gypsy Chat 2000 — styles */
+/* Cinzel and IM Fell English (the two display/body fonts loaded in index.html) both draw their
+   digits noticeably smaller than their letters -- Cinzel especially, since it's really an
+   all-caps display face where numerals were never the focus. Rather than swap either typeface
+   site-wide, redirect JUST the digit characters (U+0030-0039) to a normal-sized numeral face
+   using the same family names: the browser picks whichever @font-face covers a given character's
+   codepoint, so every existing font-family:Cinzel/"IM Fell English" declaration below keeps its
+   letterforms untouched and only its digits change, with no markup or JS changes needed anywhere.
+   Georgia's numerals are a good match in weight/style for both; on platforms without a local
+   Georgia (most Android devices) the local() match simply fails and these digits fall through to
+   the next font in each declaration's own font-family list, same as any other missing font. */
+@font-face{font-family:'Cinzel';src:local('Georgia');unicode-range:U+0030-0039;font-weight:400}
+@font-face{font-family:'Cinzel';src:local('Georgia Bold'),local('Georgia');unicode-range:U+0030-0039;font-weight:700}
+@font-face{font-family:'IM Fell English';src:local('Georgia');unicode-range:U+0030-0039;font-weight:400}
 html,body{margin:0;min-height:100%;background:#0b0a09}
 body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 
