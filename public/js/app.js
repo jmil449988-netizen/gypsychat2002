@@ -19,6 +19,9 @@ var tpReplyImgBtn = $('tpReplyImgBtn'), tpReplyImgFile = $('tpReplyImgFile'), tp
 var tpReplyPreviewWrap = $('tpReplyPreviewWrap'), tpReplyPreviewImg = $('tpReplyPreviewImg'), tpReplyImgRemove = $('tpReplyImgRemove');
 var adminToggle = $('adminToggle'), adminFields = $('adminFields'), adminEmail = $('adminEmail'), adminPassword = $('adminPassword');
 var reportsBtn = $('reportsBtn'), reportsBadge = $('reportsBadge'), reportsOverlay = $('reportsOverlay'), reportsList = $('reportsList'), reportsClose = $('reportsClose');
+var bugBtn = $('bugBtn'), bugFile = $('bugFile'), bugReportOverlay = $('bugReportOverlay'), bugDesc = $('bugDesc'),
+    bugAttachBtn = $('bugAttachBtn'), bugAttachList = $('bugAttachList'), bugReportCancel = $('bugReportCancel'), bugReportSubmit = $('bugReportSubmit');
+var bugReportsBtn = $('bugReportsBtn'), bugReportsBadge = $('bugReportsBadge'), bugReportsOverlay = $('bugReportsOverlay'), bugReportsList = $('bugReportsList'), bugReportsClose = $('bugReportsClose');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
@@ -158,10 +161,14 @@ var threadsChannel = null;
 var threadsPage = 0; // current page (0-based) of the catalog list
 var THREADS_PAGE_SIZE = 12;
 var reportsChannel = null;
+var bugReportsChannel = null;
 var threadPostsSeen = {};
 var lastThreadSend = 0;
 var tpNewImageUrl = null, tpReplyImageUrl = null; // pending image_url for the post currently being composed
 var MAX_IMG_BYTES = 5 * 1024 * 1024;
+var MAX_BUG_ATTACH_BYTES = 25 * 1024 * 1024; // room for a short screen recording, not just a screenshot
+var MAX_BUG_ATTACHMENTS = 5;
+var bugAttachments = []; // [{url, type: 'image'|'video', name}] for the report currently being composed
 var ALLOWED_IMG_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
 
 /* ---------- my status (Online / Away / Busy, plus auto-Idle) ----------
@@ -672,6 +679,8 @@ if (!$('infoOverlay').classList.contains('hidden')) $('infoOk').click();
 if ($('promptOverlay') && !$('promptOverlay').classList.contains('hidden')) $('promptCancel').click();
 if ($('saveOverlay') && !$('saveOverlay').classList.contains('hidden')) $('saveOverlay').classList.add('hidden');
 if ($('imgLightbox') && !$('imgLightbox').classList.contains('hidden')) closeLightbox();
+if (bugReportOverlay && !bugReportOverlay.classList.contains('hidden')) closeBugReportModal();
+if (bugReportsOverlay && !bugReportsOverlay.classList.contains('hidden')) bugReportsOverlay.classList.add('hidden');
 });
 
 /* ---------- image lightbox: click any posted picture (room, whispers, threads) to see it full
@@ -1260,6 +1269,181 @@ var rr = await showPromptModal('Report ' + mm.senderName, { placeholder: 'e.g. s
 if (rr) report(mm.senderId, mm.senderName, rr, mid, mm.body);
 }
 
+/* ---------- report a bug ----------
+   Reachable from the same popover as "Change picture" (#statusPopover), for any signed-on player
+   -- unlike report()/the reports queue above, this isn't admin-gated at all on the filing side.
+   Free text (bugDesc) plus up to MAX_BUG_ATTACHMENTS attachments: screenshots or a short screen
+   recording the reporter already has on their device, picked via bugFile and uploaded to the
+   'bug-reports' storage bucket the moment each one is chosen -- the same "upload immediately, hold
+   onto just the URL" shape uploadImage/uploadAvatar already use below, so Send only ever has to
+   write one row (see supabase/bug_reports_feature.sql), never wait on an upload itself.
+   There's deliberately no in-page screenshot/recording capture here: no permission-free way to
+   grab either from JS on mobile exists, so this is a file picker, same as every other attachment
+   flow in this app.
+   context is auto-captured (browser + viewport) rather than asked for -- exactly the kind of
+   detail a bug report always needs and a reporter always forgets to mention. */
+function bugKindFor(file) {
+if (file.type === 'video/mp4' || file.type === 'video/quicktime' || file.type === 'video/webm') return 'video';
+if (/\.(mp4|mov|webm)$/i.test(file.name || '')) return 'video';
+return 'image'; // includes HEIC/blank-type files -- normalizeImageFile/sniffImageType below sort those out
+}
+async function uploadBugAttachment(file) {
+var kind = bugKindFor(file), contentType, ext;
+if (kind === 'image') {
+try { file = await normalizeImageFile(file); } catch (e) { addSys(e.message || 'Could not read that photo.'); return null; }
+if (file.size > MAX_IMG_BYTES) { addSys('Screenshots must be 5MB or smaller.'); return null; }
+contentType = ALLOWED_IMG_TYPES[file.type] ? file.type : await sniffImageType(file);
+ext = ALLOWED_IMG_TYPES[contentType];
+if (!ext) { addSys('Screenshots must be JPG, PNG, GIF, or WEBP.'); return null; }
+} else {
+if (file.size > MAX_BUG_ATTACH_BYTES) { addSys('Recordings must be 25MB or smaller.'); return null; }
+var VIDEO_EXT = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
+ext = VIDEO_EXT[file.type] || ((file.name || '').match(/\.(mp4|mov|webm)$/i) || [])[1] || 'mp4';
+contentType = file.type || (ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4');
+}
+var path = me.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
+var up = await sb.storage.from('bug-reports').upload(path, file, { contentType: contentType, upsert: false });
+if (up.error) { addSys('Attachment upload failed: ' + up.error.message); return null; }
+var pub = sb.storage.from('bug-reports').getPublicUrl(path);
+var url = pub.data && pub.data.publicUrl;
+if (!url) { addSys('Attachment upload failed.'); return null; }
+return { url: url, type: kind, name: file.name || ('attachment.' + ext) };
+}
+function renderBugAttachList() {
+if (!bugAttachList) return;
+bugAttachList.innerHTML = bugAttachments.map(function (a, i) {
+var thumb = a.type === 'image' ? '<img src="' + esc(a.url) + '" alt="">' : '<span class="bug-attach-video">🎥</span>';
+return '<div class="bug-attach-chip" data-i="' + i + '">' + thumb + '<span class="bug-attach-name">' + esc(a.name) + '</span>' +
+'<button type="button" class="bug-attach-remove" data-i="' + i + '" aria-label="Remove attachment">✕</button></div>';
+}).join('');
+}
+function resetBugReportForm() {
+if (bugDesc) bugDesc.value = '';
+bugAttachments = [];
+renderBugAttachList();
+if (bugFile) bugFile.value = '';
+}
+function openBugReportModal() {
+if (!bugReportOverlay || !me) return;
+resetBugReportForm();
+bugReportOverlay.classList.remove('hidden');
+if (bugDesc) bugDesc.focus();
+}
+function closeBugReportModal() { if (bugReportOverlay) bugReportOverlay.classList.add('hidden'); }
+if (bugBtn) bugBtn.onclick = openBugReportModal;
+if (bugReportCancel) bugReportCancel.onclick = closeBugReportModal;
+if (bugReportOverlay) bugReportOverlay.onclick = function (e) { if (e.target === bugReportOverlay) closeBugReportModal(); };
+if (bugAttachBtn) bugAttachBtn.onclick = function () {
+if (bugAttachments.length >= MAX_BUG_ATTACHMENTS) { addSys('You can attach up to ' + MAX_BUG_ATTACHMENTS + ' files.'); return; }
+bugFile.click();
+};
+if (bugFile) bugFile.onchange = async function () {
+var files = Array.prototype.slice.call(bugFile.files || []);
+bugFile.value = '';
+if (!files.length) return;
+var room = MAX_BUG_ATTACHMENTS - bugAttachments.length;
+if (room <= 0) { addSys('You can attach up to ' + MAX_BUG_ATTACHMENTS + ' files.'); return; }
+if (files.length > room) { addSys('Only attaching the first ' + room + ' -- ' + MAX_BUG_ATTACHMENTS + ' max per report.'); files = files.slice(0, room); }
+bugAttachBtn.disabled = true;
+for (var i = 0; i < files.length; i++) {
+var att = await uploadBugAttachment(files[i]);
+if (att) { bugAttachments.push(att); renderBugAttachList(); }
+}
+bugAttachBtn.disabled = false;
+};
+if (bugAttachList) bugAttachList.addEventListener('click', function (e) {
+var rBtn = e.target.closest('.bug-attach-remove'); if (!rBtn) return;
+bugAttachments.splice(Number(rBtn.dataset.i), 1);
+renderBugAttachList();
+});
+async function submitBugReport() {
+var desc = sanitizeInput(bugDesc ? bugDesc.value.trim() : '').slice(0, 1000);
+if (!desc) { addSys('Describe what went wrong before sending.'); if (bugDesc) bugDesc.focus(); return; }
+if (bugReportSubmit) bugReportSubmit.disabled = true;
+try {
+var context = navigator.userAgent + ' — ' + window.innerWidth + 'x' + window.innerHeight;
+var row = { reporter_id: me.id, reporter_name: me.name, description: desc, attachments: bugAttachments, context: context };
+var r = await sb.from('bug_reports').insert(row);
+if (r.error) { addSys('Could not send bug report: ' + r.error.message); return; }
+closeBugReportModal();
+addSys('Bug report sent. Thank you!');
+} finally {
+if (bugReportSubmit) bugReportSubmit.disabled = false;
+}
+}
+if (bugReportSubmit) bugReportSubmit.onclick = submitBugReport;
+
+/* ---------- bug reports queue (admins only) ----------
+   Same shape as the abuse-reports queue just below: a badge on a status-bar button, a modal
+   listing open reports, resolving actions on each row -- just Resolve/Dismiss instead of
+   Dismiss/Discipline, since a bug report doesn't point at a person to act on. */
+function refreshBugReportsBadge() {
+if (!isAdmin || !bugReportsBadge || !sb) return;
+sb.from('bug_reports').select('id', { count: 'exact', head: true }).eq('status', 'open').then(function (r) {
+if (r.error) return;
+var n = r.count || 0;
+bugReportsBadge.textContent = String(n > 99 ? '99+' : n);
+bugReportsBadge.classList.toggle('hidden', n === 0);
+});
+}
+function renderBugReports(rows) {
+if (!bugReportsList) return;
+if (!rows.length) { bugReportsList.innerHTML = '<div class="empty">No open bug reports.</div>'; return; }
+bugReportsList.innerHTML = rows.map(function (r) {
+var when = fmtDateTime(r.created_at);
+var atts = Array.isArray(r.attachments) ? r.attachments : [];
+var attHtml = atts.length ? '<div class="rr-attachments">' + atts.map(function (a) {
+return a.type === 'video'
+? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener" class="rr-att rr-att-video" title="' + esc(a.name || 'recording') + '">🎥</a>'
+: '<a href="' + esc(a.url) + '" target="_blank" rel="noopener" class="rr-att"><img src="' + esc(a.url) + '" alt="' + esc(a.name || 'screenshot') + '"></a>';
+}).join('') + '</div>' : '';
+var ctx = r.context ? '<div class="rr-context">' + esc(r.context) + '</div>' : '';
+return '<div class="report-row" data-id="' + r.id + '">' +
+'<div class="rr-hd">' + esc(when) + ' — <b>' + esc(r.reporter_name || '?') + '</b></div>' +
+'<div class="rr-reason">' + esc(r.description) + '</div>' +
+attHtml + ctx +
+'<div class="rr-actions"><button type="button" class="btn rr-dismiss" data-id="' + r.id + '">Dismiss</button>' +
+'<button type="button" class="btn rr-resolve" data-id="' + r.id + '">Resolve</button></div>' +
+'</div>';
+}).join('');
+}
+async function loadBugReports() {
+if (!isAdmin || !bugReportsList) return;
+var r = await sb.from('bug_reports').select('*').eq('status', 'open').order('created_at', { ascending: false }).limit(100);
+if (r.error) { bugReportsList.innerHTML = '<div class="empty">Could not load bug reports: ' + esc(r.error.message) + '</div>'; return; }
+renderBugReports(r.data || []);
+}
+async function resolveBugReport(id, status) {
+var r = await sb.from('bug_reports').update({ status: status, resolved_by: me.id, resolved_at: new Date().toISOString() }).eq('id', id);
+if (r.error) { addSys('Could not update the bug report: ' + r.error.message); return; }
+var row = bugReportsList && bugReportsList.querySelector('.report-row[data-id="' + id + '"]');
+if (row) row.remove();
+if (bugReportsList && !bugReportsList.querySelector('.report-row')) bugReportsList.innerHTML = '<div class="empty">No open bug reports.</div>';
+refreshBugReportsBadge();
+}
+if (bugReportsList) {
+bugReportsList.addEventListener('click', function (e) {
+var dBtn = e.target.closest('.rr-dismiss');
+if (dBtn) { resolveBugReport(dBtn.dataset.id, 'dismissed'); return; }
+var rBtn = e.target.closest('.rr-resolve');
+if (rBtn) resolveBugReport(rBtn.dataset.id, 'resolved');
+});
+}
+if (bugReportsBtn) bugReportsBtn.onclick = function () { bugReportsOverlay.classList.remove('hidden'); loadBugReports(); };
+if (bugReportsClose) bugReportsClose.onclick = function () { bugReportsOverlay.classList.add('hidden'); };
+function subscribeBugReports() {
+if (bugReportsChannel || !isAdmin) return;
+bugReportsChannel = sb.channel('bug-reports-queue');
+bugReportsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bug_reports' }, function () {
+refreshBugReportsBadge();
+if (bugReportsOverlay && !bugReportsOverlay.classList.contains('hidden')) loadBugReports();
+});
+bugReportsChannel.subscribe();
+}
+function unsubscribeBugReports() {
+if (bugReportsChannel) { bugReportsChannel.unsubscribe(); bugReportsChannel = null; }
+}
+
 /* ---------- reports queue (admins only) ----------
    report() above already worked client-side; it just had nowhere to write to until the reports
    table existed (see supabase/reports_feature.sql). This is the review side: a badge on a
@@ -1408,6 +1592,9 @@ if (!mu.error) mu.data.forEach(function (x) { mutedUsers[x.user_id] = x; });
 if (reportsBtn) reportsBtn.classList.remove('hidden');
 refreshReportsBadge();
 subscribeReports();
+if (bugReportsBtn) bugReportsBtn.classList.remove('hidden');
+refreshBugReportsBadge();
+subscribeBugReports();
 }
 }
 async function loadMyModeration() {
@@ -1471,6 +1658,12 @@ unsubscribeReports();
 if (reportsBtn) reportsBtn.classList.add('hidden');
 if (reportsBadge) reportsBadge.classList.add('hidden');
 if (reportsOverlay) reportsOverlay.classList.add('hidden');
+unsubscribeBugReports();
+if (bugBtn) bugBtn.classList.add('hidden');
+if (bugReportsBtn) bugReportsBtn.classList.add('hidden');
+if (bugReportsBadge) bugReportsBadge.classList.add('hidden');
+if (bugReportOverlay) bugReportOverlay.classList.add('hidden');
+if (bugReportsOverlay) bugReportsOverlay.classList.add('hidden');
 if (threadsPanel) { threadsPanel.classList.remove('ready'); }
 if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
 if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('signed-on'); }
@@ -1611,7 +1804,7 @@ var cmd = m[1].toLowerCase(), arg = m[2], rest = m[3].trim(), id;
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports' : '') + '. Click a name in the chat log or Online list for options. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz.'); return true;
+case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
@@ -1630,6 +1823,7 @@ case 'mute': if (!isAdmin) { addSys('Only an admin may mute.'); return true; } i
 case 'unmute': if (!isAdmin) { addSys('Only an admin may unmute.'); return true; } id = Object.keys(mutedUsers).filter(function (k) { return (mutedUsers[k].user_name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('No active mute found for ' + arg + '.'); return true; } unmute(id, mutedUsers[id].user_name || arg); return true;
 case 'muted': if (!isAdmin) return true; var mn = Object.keys(mutedUsers).map(function (k) { return mutedUsers[k].user_name || k; }); addSys(mn.length ? 'Muted: ' + mn.join(', ') : 'No one is muted.'); return true;
 case 'reports': if (!isAdmin) return true; var rp = await sb.from('reports').select('reporter_name, reported_name, reason, created_at, message_body').order('created_at', { ascending: false }).limit(10); if (rp.error) { addSys('Could not load reports: ' + rp.error.message); return true; } if (!rp.data.length) { addSys('No reports.'); return true; } rp.data.forEach(function (x) { addSys('[' + fmtDateTime(x.created_at) + '] ' + x.reporter_name + ' reported ' + x.reported_name + ': ' + x.reason + (x.message_body ? ' (re: “' + x.message_body + '”)' : '')); }); return true;
+case 'bugreports': if (!isAdmin) return true; var bp = await sb.from('bug_reports').select('reporter_name, description, created_at, attachments').eq('status', 'open').order('created_at', { ascending: false }).limit(10); if (bp.error) { addSys('Could not load bug reports: ' + bp.error.message); return true; } if (!bp.data.length) { addSys('No open bug reports.'); return true; } bp.data.forEach(function (x) { var n = Array.isArray(x.attachments) ? x.attachments.length : 0; addSys('[' + fmtDateTime(x.created_at) + '] ' + x.reporter_name + ': ' + x.description + (n ? ' (' + n + ' attachment' + (n > 1 ? 's' : '') + ')' : '')); }); return true;
 default: addSys('Unknown command. Type /help.'); return true;
 }
 }
@@ -2841,6 +3035,7 @@ if (gcRoot) gcRoot.classList.add('signed-on');
 updateUsersStacked(); // the panel only has a size now that it is no longer hidden
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
 if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
+if (bugBtn) bugBtn.classList.remove('hidden');
 if ($('moreBtn')) $('moreBtn').classList.remove('hidden');
 /* Anonymous accounts live in this browser's storage and nowhere else, so the 🔑 (and the nudge
    below) are only offered to them -- an account with an email attached is already portable. */
