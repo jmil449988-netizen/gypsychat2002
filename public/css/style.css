@@ -86,6 +86,11 @@ filter:drop-shadow(0 0 12px rgba(163,42,255,.8)) drop-shadow(0 0 4px rgba(214,80
 
 .log .t{color:#5f5648;font-size:11px;margin-right:6px}
 .log .e{font-size:16px;vertical-align:-2px;filter:sepia(.35) saturate(.9)}
+/* Report-this-message flag -- faint until hovered/focused so it doesn't compete with the message
+   text itself, but always present (not hover-only) so it works on touch too. Shared rule below
+   also covers the whisper-window copy of this button (.im .ilog .rpt-msg). */
+.log .rpt-msg,.im .ilog .rpt-msg{background:none;border:none;padding:0;margin-right:6px;font-size:10px;line-height:1;vertical-align:2px;cursor:pointer;opacity:.35;filter:grayscale(1)}
+.log .rpt-msg:hover,.log .rpt-msg:focus-visible,.im .ilog .rpt-msg:hover,.im .ilog .rpt-msg:focus-visible{opacity:1;filter:none;outline:none}
 .users{display:flex;flex-direction:column}
 .users .hd{padding:5px 6px;font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);text-align:center;
 border-bottom:1px solid var(--gold-lo);text-shadow:0 1px 0 #000}
@@ -535,6 +540,7 @@ box-shadow:0 0 0 1px #000}
 .report-row{border:1px solid var(--gold-lo);background:rgba(0,0,0,.25);padding:8px 10px;margin-bottom:8px}
 .report-row .rr-hd{font-size:12px;color:var(--ash);margin-bottom:4px}
 .report-row .rr-hd b{color:var(--gold-hi);font-weight:700}
+.report-row .rr-msg{font-size:12px;color:var(--ash);font-style:italic;line-height:1.4;background:rgba(0,0,0,.3);border-left:2px solid var(--gold-lo);padding:4px 8px;margin-bottom:8px;white-space:pre-wrap;word-break:break-word}
 .report-row .rr-reason{font-size:13px;color:var(--bone);line-height:1.4;margin-bottom:8px;white-space:pre-wrap;word-break:break-word}
 .report-row .rr-actions{display:flex;gap:6px;justify-content:flex-end}
 .report-row .rr-actions .btn{min-width:0;padding:0 10px;height:26px;font-size:12px}
