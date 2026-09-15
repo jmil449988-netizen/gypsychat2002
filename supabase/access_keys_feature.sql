@@ -15,15 +15,23 @@
 -- its stored code (or the next time they type it fresh), it will fail and they'll be sent back
 -- to the gate screen.
 --
+-- Each code is also IP-locked on first use (see the verify-access-key edge function):
+-- `locked_ip_hash` starts null and gets set to a salted hash of whichever IP first redeems the
+-- code (same salted-hash approach join_ip_log_feature.sql already uses -- never the raw IP).
+-- After that, the code only verifies from that same IP; anyone else typing it in gets
+-- `ip_locked` back instead of getting in. Clearing `locked_ip_hash` back to null in the table
+-- editor releases the lock, e.g. if a legitimate tester's IP changed and they need back in.
+--
 -- Run this once in the Supabase SQL Editor.
 
 create table if not exists public.access_keys (
-  id            bigint generated always as identity primary key,
-  code          text        not null unique,
-  label         text,                          -- who this code was handed to, e.g. "tester 07"
-  revoked       boolean     not null default false,
-  created_at    timestamptz not null default now(),
-  last_used_at  timestamptz
+  id              bigint generated always as identity primary key,
+  code            text        not null unique,
+  label           text,                          -- who this code was handed to, e.g. "tester 07"
+  revoked         boolean     not null default false,
+  created_at      timestamptz not null default now(),
+  last_used_at    timestamptz,
+  locked_ip_hash  text                            -- set on first redemption; see note above
 );
 
 alter table public.access_keys enable row level security;
