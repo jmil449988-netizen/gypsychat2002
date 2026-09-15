@@ -1458,6 +1458,7 @@ if ($('moreBtn')) { $('moreBtn').classList.add('hidden'); closeMoreMenu(); }
 if (st) st.classList.remove('renamable');
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
 if ($('joinFields')) $('joinFields').classList.remove('hidden'); // undo restoreIdentity()'s auto-resume hiding, if it was mid-flight
+if ($('loginTag')) $('loginTag').textContent = 'Stay awhile, and chat.'; // undo restoreIdentity()'s "Reconnecting as X…", if this is being shown after a successful auto-resume
 $('login').classList.remove('hidden'); $('join').disabled = !rejoinable;
 fail(message);
 setStatus(rejoinable ? 'Not signed on' : 'Removed'); me = null;
