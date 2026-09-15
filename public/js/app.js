@@ -5,7 +5,7 @@ Same file runs as a website, an installed PWA, or inside a Capacitor shell. */
 'use strict';
 var C = window.GC_CONFIG || {};
 var $ = function (id) { return document.getElementById(id); };
-var log = $('log'), msg = $('msg'), st = $('st'), cnt = $('cnt'), ulist = $('ulist'), flist = $('flist'), picker = $('picker');
+var log = $('log'), msg = $('msg'), st = $('st'), ulist = $('ulist'), flist = $('flist'), picker = $('picker');
 var gifBtn = $('gifBtn'), gifPicker = $('gifPicker'), gifQ = $('gifQ'), gifGo = $('gifGo'), gifResults = $('gifResults');
 var tray = $('imTray');
 var gcRoot = document.querySelector('.gc-root');
@@ -783,7 +783,11 @@ var tag = showStatus ? ' <span class="stag">(' + status + ')</span>' : '';
 var title = (status === 'away' && p.awayMsg) ? ' title="' + esc(p.awayMsg) + '"' : '';
 return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + esc(p.name) + tag + '</div>';
 }).join('');
-cnt.textContent = ids.length + ' online';
+/* The online count used to live in the icon-heavy status bar up top; it now lives in the main
+   chat's own footer line (directly below that bar), alongside the watermark -- threads and
+   roulette have their own separate watermark footers (threadsWatermark/rouletteWatermark) that
+   intentionally don't get an online count, since that count is specific to who's in the room. */
+if ($('roomWatermark')) $('roomWatermark').textContent = ids.length + ' online · ' + WATERMARK_TEXT;
 Object.keys(wins).forEach(function (id) {
 var w = wins[id], here = !!people[id];
 if (!here && !w.gone) { w.gone = true; imSys(id, w.name + ' has left the room.'); }
