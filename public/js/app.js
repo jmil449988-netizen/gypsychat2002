@@ -1362,7 +1362,9 @@ function nameTaken(n) { return Object.keys(people).some(function (id) { return i
    any incoming message while it's closed just update a small tab in the tray
    (like a mail icon) instead of popping a window over the room. Only a deliberate
    action (tapping a name > Whisper, /w, or tapping its tray tab) opens it. */
-var zTop = 20, nWin = 0, lastBuzz = {};
+/* Z_WIN_MIN/MAX bound how high a whisper window's stacking order can climb -- see front() below for
+   why that bound has to exist at all. */
+var zTop = 20, Z_WIN_MIN = 20, Z_WIN_MAX = 49, nWin = 0, lastBuzz = {};
 function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
@@ -1577,7 +1579,27 @@ clearTimeout(w.typingTimer);
 w.el.remove(); if (w.tab) w.tab.remove(); delete wins[id];
 applyDmVisibility(); // once the last open whisper is fully closed, go back to hidden if that's still the preference
 }
-function front(el) { el.style.zIndex = ++zTop; }
+/* Every tap on a whisper window (see the pointerdown listener a few lines up) calls this to bring
+   it to the front, so zTop climbs constantly during normal use -- not just once per window. Left
+   unbounded, a single active DM session can run zTop past 56 within minutes, which is the z-index
+   the emoji/GIF/mention pickers are pinned at (style.css .picker/.gifpicker/.mention-menu): since
+   front() sets an inline style, it overrides that CSS value outright, so once a window's inline
+   z-index climbs above 56 the picker silently renders BEHIND it -- opening it does nothing visible.
+   That's what was actually behind "emojis don't pop up in DMs": not a picker bug, a stacking-order
+   bug that got worse the longer a conversation ran. Recycling window z-indices back into
+   [Z_WIN_MIN, Z_WIN_MAX] whenever they'd cross that ceiling keeps them permanently below the
+   picker/menu tier, however long the session runs, while still preserving which open window was
+   most recently focused (that's all the actual number ever needs to encode). */
+function front(el) {
+zTop++;
+if (zTop > Z_WIN_MAX) {
+var order = Object.keys(wins).map(function (id) { return wins[id].el; })
+.sort(function (a, b) { return (parseInt(a.style.zIndex, 10) || 0) - (parseInt(b.style.zIndex, 10) || 0); });
+order.forEach(function (winEl, i) { winEl.style.zIndex = Z_WIN_MIN + i; });
+zTop = Z_WIN_MIN + order.length;
+}
+el.style.zIndex = zTop;
+}
 function imSys(id, text) { var w = wins[id]; if (!w) return; var d = document.createElement('div'); d.className = 'm sys'; d.textContent = text; w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; }
 function sendBuzz(id) {
 var now = Date.now();
