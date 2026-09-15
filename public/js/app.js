@@ -49,14 +49,69 @@ var wins = {}, unread = {}, seen = {};
 /* Per-conversation "last read" marks. Sign-on replays your recent whispers through the very
    same renderIM() that handles live ones, so every whisper you had already read came back as a
    fresh red badge (and a fresh ding). These marks are what tell the two apart.
-   Stored in this browser for now. When read receipts land they move into a table, so the mark
-   follows you between devices instead of starting over on each one. */
+   Kept in this browser too (so it still works the instant you read something, offline or not),
+   but now also pushed to the dm_reads table -- see supabase/dm_reads_feature.sql -- which is what
+   makes the mark follow you between devices instead of starting over on each one, AND is what
+   lets the other person's whisper window show "Seen" under the message you just read. */
 var dmRead = {};
 try { dmRead = JSON.parse(localStorage.getItem('gc_dm_read') || '{}') || {}; } catch (e) { dmRead = {}; }
 function saveDmRead() { try { localStorage.setItem('gc_dm_read', JSON.stringify(dmRead)); } catch (e) {} }
 function markDmRead(id, when) {
 var t = when ? new Date(when).getTime() : Date.now();
-if (!(dmRead[id] >= t)) { dmRead[id] = t; saveDmRead(); }
+if (!(dmRead[id] >= t)) { dmRead[id] = t; saveDmRead(); syncReadReceipt(id, t); }
+}
+/* Pushes a "read up to" mark to the dm_reads table so the OTHER person's whisper window can show
+   a "Seen" mark under the last message they sent you. markDmRead() above only calls this when
+   the local mark actually advances, so a burst of messages while the window is open/focused
+   upserts once, not once per message. Best-effort and silent: a failed write just means the
+   receipt doesn't show up for them yet (it'll catch up next time this fires), nothing else in
+   the app depends on it. */
+function syncReadReceipt(id, t) {
+if (!sb || !me) return;
+sb.from('dm_reads').upsert({ owner_id: me.id, peer_id: id, last_read_at: new Date(t).toISOString() })
+.then(function (r) { if (r.error) console.warn('read receipt not saved:', r.error.message); });
+}
+/* The mirror image of dmRead: how far the OTHER person in each whisper has read what I sent them
+   (peer's user id -> ms timestamp). Seeded at sign-on from dm_reads (loadDmReads) and kept live
+   by the dm_reads realtime subscription (see handleDmRead). */
+var dmSeenBy = {};
+/* Shows a single "Seen HH:MM" line under the LAST message I sent in a whisper window, once (and
+   only once) the other person has read up to it -- same convention as iMessage/WhatsApp: earlier
+   messages of mine don't each get their own mark, since dm_reads is a high-water mark, not a
+   per-message flag, and being caught up to the newest implies every older one too. Called after
+   any message I send is rendered, and again whenever a fresher dm_reads row for that person comes
+   in, so it moves to the new last message or appears/disappears as appropriate. */
+function updateSeenMark(id) {
+var w = wins[id]; if (!w) return;
+var old = w.log.querySelector('.dm-seen'); if (old) old.remove();
+var mineEls = w.log.querySelectorAll('.m.me'); if (!mineEls.length) return;
+var last = mineEls[mineEls.length - 1];
+var seenAt = dmSeenBy[id], lastAt = +last.dataset.at;
+if (seenAt && lastAt && seenAt >= lastAt) {
+var mark = document.createElement('div'); mark.className = 'dm-seen'; mark.textContent = 'Seen ' + fmt(seenAt);
+last.insertAdjacentElement('afterend', mark);
+}
+}
+/* Bulk-loaded once at sign-on (see loadDmReads below) and topped up live per-row after that by
+   the dm_reads realtime subscription registered alongside the messages one. */
+function handleDmRead(row) {
+if (!row || row.peer_id !== me.id) return; // not a receipt for anything I sent
+var t = new Date(row.last_read_at).getTime();
+if (!(dmSeenBy[row.owner_id] >= t)) { dmSeenBy[row.owner_id] = t; updateSeenMark(row.owner_id); }
+}
+/* One query, both directions: rows where I'm the owner are my own read-marks (merged into dmRead
+   so unread badges pick up where another device already left off -- never move a mark backwards,
+   in case this device has a newer local mark not yet synced), and rows where I'm the peer are
+   receipts for messages I sent (seed dmSeenBy so "Seen" can show up immediately on sign-on rather
+   than waiting for the next live update). */
+async function loadDmReads() {
+var r = await sb.from('dm_reads').select('owner_id, peer_id, last_read_at'); if (r.error) return;
+r.data.forEach(function (row) {
+var t = new Date(row.last_read_at).getTime();
+if (row.owner_id === me.id) { if (!(dmRead[row.peer_id] >= t)) dmRead[row.peer_id] = t; }
+else if (row.peer_id === me.id) dmSeenBy[row.owner_id] = t;
+});
+saveDmRead();
 }
 function alreadyRead(id, created) { return !!dmRead[id] && new Date(created).getTime() <= dmRead[id]; }
 /* True only while the sign-on history is being poured into the log, so the arrival reactions
@@ -896,8 +951,10 @@ var otherId = mine ? m.recipient_id : m.sender_id;
 var otherName = mine ? ((people[otherId] && people[otherId].name) || m.recipient_name || 'unknown') : m.sender_name;
 var w = ensureWin(otherId, otherName); // never pops the window open on its own — see note above
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them');
+if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
 d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + avatarHtml(m.sender_id, m.sender_name) + '<b>' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
+if (mine) updateSeenMark(otherId); // this may now be the new last message of mine -- move/(re)show the mark
 if (!mine && !alreadyRead(otherId, m.created_at)) {
 if (w.minimized || document.activeElement !== w.ta) { unread[otherId] = (unread[otherId] || 0) + 1; if (!replayingHistory) { renderPeople(); updateTab(otherId); } }
 else markDmRead(otherId, m.created_at); // you are sitting in the window with the cursor in it
@@ -2314,6 +2371,13 @@ if (document.hidden) bumpTitle();
 });
 channel.on('presence', { event: 'leave' }, function (p) { if (p.leftPresences[0]) addSys(p.leftPresences[0].name + ' has left the room.'); });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + (C.ROOM || 'main') }, function (p) { handleMessage(p.new); });
+/* Read receipts: rows naming me as the peer are marks other people set after reading what I sent
+   them. INSERT covers the first time someone reads a given whisper conversation, UPDATE covers
+   every time after that (dm_reads has one row per pair, upserted in place, not a new row each
+   time). Filtered server-side by RLS regardless -- filter here is just to avoid getting handed
+   rows this client has no use for. */
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dm_reads', filter: 'peer_id=eq.' + me.id }, function (p) { handleDmRead(p.new); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'dm_reads', filter: 'peer_id=eq.' + me.id }, function (p) { handleDmRead(p.new); });
 
 var firstSub = true;
 await new Promise(function (res, rej) {
@@ -2328,7 +2392,7 @@ await new Promise(function (r) { setTimeout(r, 400); }); // let presence sync so
 if (nameTaken(n)) { await channel.unsubscribe(); channel = null; throw new Error('That name is already taken.'); }
 var ban = await sb.from('bans').select('reason, expires_at').eq('user_id', me.id).maybeSingle();
 if (ban.data && (!ban.data.expires_at || new Date(ban.data.expires_at) > new Date())) { await channel.unsubscribe(); channel = null; throw new Error('You have been removed from this room.' + (ban.data.reason ? ' Reason: ' + ban.data.reason : '')); }
-await loadBlocks(); await loadAdmin(); await loadMyModeration(); await loadFriends();
+await loadBlocks(); await loadAdmin(); await loadMyModeration(); await loadFriends(); await loadDmReads();
 await channel.track({ name: n, status: 'online', awayMsg: '', avatarUrl: me.avatarUrl || '' });
 
 // history: recent room messages plus my recent whispers (RLS makes the server only return what I may see)
