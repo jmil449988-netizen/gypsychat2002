@@ -978,17 +978,30 @@ attachLongPress(tpPosts, '.tp-post[data-post-id]', LONG_PRESS_SKIP);
    that one user id (room log, thread posts, the online list) and updates it in place rather than
    re-rendering anything wholesale. The badge element is always emitted (see levelBadgeHtml) even
    for someone with no row yet, just left [hidden], so there's a stable node to reveal the moment
-   their first reaction lands instead of having to splice new markup into an existing message. */
+   their first reaction lands instead of having to splice new markup into an existing message.
+
+   Ten-wide tiers, each a distinct color, plus a small icon for the top three so a high level reads
+   at a glance without having to parse the number: 1-9 white, 10-19 dark blue, 20-29 purple, 30-39
+   gold, 40-49 pink, 50-59 cyan, 60-69 neon green, 70-79 "legendary" orange, 80-89 a crescent moon,
+   90-99 a full moon, 100+ a full gold moon -- the actual colors live in style.css as --lvl-t1..t11,
+   this just decides which one applies. */
+var LEVEL_TIERS = ['lvl-t1', 'lvl-t2', 'lvl-t3', 'lvl-t4', 'lvl-t5', 'lvl-t6', 'lvl-t7', 'lvl-t8', 'lvl-t9', 'lvl-t10', 'lvl-t11']
+.map(function (cls, i) { return { cls: cls, icon: i === 8 ? '🌙' : (i >= 9 ? '🌕' : '') }; });
+function levelTier(lvl) {
+var i = Math.min(10, Math.floor(lvl / 10)); // 1-9->0, 10-19->1, ... 90-99->9, 100+->10 (capped)
+return LEVEL_TIERS[i];
+}
 function levelBadgeHtml(id) {
 var s = userStats[id];
 var title = s ? ('Level ' + s.level + ' — ' + s.reactions_received + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ' received') : '';
-return '<span class="lvl" data-lvl-for="' + esc(id) + '"' + (s ? '' : ' hidden') + ' title="' + esc(title) + '">' + (s ? ('Lv' + s.level) : '') + '</span>';
+var tier = levelTier(s ? s.level : 1);
+return '<span class="lvl ' + tier.cls + '" data-lvl-for="' + esc(id) + '"' + (s ? '' : ' hidden') + ' title="' + esc(title) + '">' + (s ? (tier.icon + 'Lv' + s.level) : '') + '</span>';
 }
 function refreshLevelBadges(id) {
 var s = userStats[id];
 document.querySelectorAll('[data-lvl-for="' + id + '"]').forEach(function (el) {
-if (s) { el.hidden = false; el.textContent = 'Lv' + s.level; el.title = 'Level ' + s.level + ' — ' + s.reactions_received + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ' received'; }
-else { el.hidden = true; el.textContent = ''; el.title = ''; }
+if (s) { var tier = levelTier(s.level); el.hidden = false; el.className = 'lvl ' + tier.cls; el.textContent = tier.icon + 'Lv' + s.level; el.title = 'Level ' + s.level + ' — ' + s.reactions_received + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ' received'; }
+else { el.hidden = true; el.textContent = ''; el.title = ''; el.className = 'lvl'; }
 });
 renderPeople();
 }
