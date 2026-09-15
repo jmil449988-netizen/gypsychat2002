@@ -161,8 +161,8 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .list div.f-away{color:var(--gold)}
 .users .list div.f-busy{color:#e07a7a}
 .users .list div.f-idle{color:#7a8494}
-.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn,.status .bugbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
-.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover,.status .bugbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn,.status .bugbtn,.status .leaderboardbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
+.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover,.status .bugbtn:hover,.status .leaderboardbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
 .status .avabtn{padding:1px 6px}
 .ava-thumb{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#2b2521;color:var(--gold);font-size:12px;line-height:1;overflow:hidden;vertical-align:-3px}
 .ava-thumb img{width:16px;height:16px;border-radius:50%;object-fit:cover;display:block}
@@ -656,10 +656,20 @@ box-shadow:0 0 0 1px #000}
 .report-row .rr-actions .rr-apply{color:#e07a7a;border-color:#7a2a2a}
 .report-row .rr-actions .rr-apply:hover{color:#ff9c9c;border-color:#7a2a2a;background:rgba(179,38,30,.15)}
 
-/* Leaderboard -- top players by reactions received, reusing .reports-modal/.reports-list for the
-   dialog chrome (see index.html). Rows are their own thing (.lb-row) since they show an avatar,
-   name, level badge and a count rather than a report's quote/reason/actions. */
-.leaderboard-modal{max-width:440px}
+/* Leaderboard -- top players by reactions received, presented as its own full-page panel (the same
+   .gc-root.<state>-open takeover as .threads-panel/.roulette-panel -- see .gc-root.leaderboard-open
+   below) rather than a modal. Reuses .tp-hd/.tp-back/.tp-watermark for the header, back button and
+   footer chrome since it's the same "full-page panel with a header and a back button" shape as the
+   threads board. Rows are their own thing (.lb-row) since they show an avatar, name, level badge
+   and a count rather than a report's quote/reason/actions. */
+.leaderboard-panel{display:none;flex-direction:column;
+background:linear-gradient(180deg,var(--stone-2),var(--stone));overflow:hidden;z-index:8}
+.gc-root.leaderboard-open .win{display:none}
+.gc-root.leaderboard-open .leaderboard-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
+height:100%;border-width:0;border-radius:0;z-index:40}
+.lb-list{flex:1;overflow-y:auto;padding:10px 14px;scrollbar-color:var(--gold-lo) #0f0d0b;
+width:100%;max-width:700px;margin:0 auto;box-sizing:border-box}
+.lb-list .empty{padding:16px 8px;text-align:center;color:#5f5648;font-style:italic;font-size:12px}
 .lb-row{display:flex;align-items:center;gap:8px;border:1px solid var(--gold-lo);background:rgba(0,0,0,.25);padding:7px 10px;margin-bottom:6px;cursor:pointer}
 .lb-row:hover,.lb-row:focus-visible{background:rgba(201,162,74,.12);outline:none}
 .lb-row.lb-top{background:rgba(201,162,74,.09);border-color:var(--gold-hi)}
