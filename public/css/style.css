@@ -75,6 +75,22 @@ filter:drop-shadow(0 0 12px rgba(163,42,255,.8)) drop-shadow(0 0 4px rgba(214,80
   .win > .body{flex:1;display:grid;grid-template-rows:1fr auto;min-height:0;padding:8px}
   .win > .body .log{height:auto;min-height:0}
   .win > .body .login{align-self:center}
+  /* Once signed in, the frame needs to be EXACTLY viewport-tall, not just at least that tall.
+     .body's grid row for .log is `1fr`, and a `1fr` track only resolves to a bounded, finite size
+     when the grid's own ancestor chain has a firm height to divide up -- min-height alone lets
+     .win (and everything below it) keep growing to fit its content instead, so .log's "1fr" row
+     was silently computing to the height of every message ever posted in the room, not the space
+     actually visible on screen. That turned .log from an internally-scrolling pane into an
+     ordinary block the whole page had to be scrolled past, and it also put the watermark's
+     background-position:center dead in the vertical middle of that enormous box -- nowhere near
+     whatever slice of it a scrolled-to-the-bottom phone was actually looking at, once the room
+     had more than one screenful of history. That's why the artwork could work once (a fresh, short
+     log fits a screen fine) and quietly disappear later as the room filled up.
+     The sign-on screen still needs the old grow-to-fit min-height above -- her portrait footer
+     (.login .gw) relies on the page being free to grow past one screen without clipping her -- so
+     this firmer height only takes over once .signed-on lands on .gc-root. */
+  .gc-root.signed-on .win{height:calc(100vh - 8px)}
+  .gc-root.signed-on .win{height:calc(100dvh - 8px)}
 }
 .sunk{background:linear-gradient(180deg,#0f0d0b,#171310);border:1px solid var(--gold-lo);box-shadow:inset 0 0 18px #000,inset 0 0 0 1px #000,0 0 0 1px #2a2119}
 .log{height:420px;overflow-y:auto;padding:8px 10px;line-height:1.5;word-wrap:break-word;scrollbar-color:var(--gold-lo) #0f0d0b}
