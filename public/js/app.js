@@ -871,7 +871,7 @@ var pills = Object.keys(cell).map(function (e) {
 var set = cell[e], mine = !!(me && set.has(me.id));
 return '<button type="button" class="react-pill' + (mine ? ' mine' : '') + '" data-emoji="' + esc(e) + '" title="' + set.size + ' reaction' + (set.size === 1 ? '' : 's') + '">' + e + ' <span>' + set.size + '</span></button>';
 }).join('');
-return '<span class="reactions" data-rtype="' + esc(type) + '" data-rid="' + id + '">' + pills + '<button type="button" class="react-add" title="Add reaction" aria-label="Add reaction">+</button></span>';
+return '<span class="reactions" data-rtype="' + esc(type) + '" data-rid="' + id + '">' + pills + '</span>';
 }
 /* Every rendered .reactions span for this target gets replaced in one pass -- normally there's
    only ever one on screen at a time, but this stays correct even if that ever changes (e.g. the
@@ -918,8 +918,59 @@ reactPickerTarget = { type: type, id: id };
 reactPicker.classList.add('open');
 positionPicker(reactPicker, anchorEl);
 }
-document.addEventListener('click', function (e) { if (reactPicker.contains(e.target) || e.target.closest('.react-add')) return; closeReactPicker(); });
+/* suppressClickUntil: a long-press (below) fires the picker from a timer/contextmenu, not a click --
+   but the mouseup/touchend that ends the press still produces a real 'click' a moment later, which
+   would otherwise reach this same-tick outside-click listener and instantly close what the press
+   just opened. Anything that opens the picker via a press sets this a few hundred ms into the
+   future; every click-based listener below bails out while it's still in effect. */
+var suppressClickUntil = 0;
+document.addEventListener('click', function (e) { if (Date.now() < suppressClickUntil || reactPicker.contains(e.target)) return; closeReactPicker(); });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeReactPicker(); });
+
+/* ---------- long-press (or right-click) a message to react ----------
+   Replaces a permanent "+" control on every single message with the gesture chat apps actually use:
+   tap-and-hold (touch), press-and-hold the mouse, or right-click, anywhere on the message bubble
+   (outside its own interactive bits -- an existing reaction pill, the report flag, a delete button,
+   a link/image) opens the same quick-pick popup used above. The message's own .reactions span --
+   present even when empty, see reactionsHtml -- is reused as the anchor so the popup lands in the
+   same spot a click on the old "+" used to put it. */
+var LONG_PRESS_MS = 450, LONG_PRESS_SLOP = 10;
+function attachLongPress(container, itemSelector, skipSelector) {
+if (!container) return;
+var timer = null, startX = 0, startY = 0, pressEl = null;
+function targetFor(e) {
+var skip = skipSelector && e.target.closest(skipSelector); if (skip) return null;
+return e.target.closest(itemSelector);
+}
+function fire(el) {
+var rc = el.querySelector('.reactions'); if (!rc) return;
+suppressClickUntil = Date.now() + 500;
+if (navigator.vibrate) navigator.vibrate(10);
+openReactPicker(rc.dataset.rtype, Number(rc.dataset.rid), rc);
+}
+function begin(x, y, el) {
+cancel();
+startX = x; startY = y; pressEl = el; pressEl.classList.add('pressing');
+timer = setTimeout(function () { timer = null; pressEl.classList.remove('pressing'); fire(el); }, LONG_PRESS_MS);
+}
+function cancel() {
+if (timer) { clearTimeout(timer); timer = null; }
+if (pressEl) { pressEl.classList.remove('pressing'); pressEl = null; }
+}
+function moved(x, y) { return Math.abs(x - startX) > LONG_PRESS_SLOP || Math.abs(y - startY) > LONG_PRESS_SLOP; }
+container.addEventListener('touchstart', function (e) { var el = targetFor(e); if (!el) return; var t = e.touches[0]; begin(t.clientX, t.clientY, el); }, { passive: true });
+container.addEventListener('touchmove', function (e) { if (timer && moved(e.touches[0].clientX, e.touches[0].clientY)) cancel(); }, { passive: true });
+container.addEventListener('touchend', cancel);
+container.addEventListener('touchcancel', cancel);
+container.addEventListener('mousedown', function (e) { if (e.button !== 0) return; var el = targetFor(e); if (!el) return; begin(e.clientX, e.clientY, el); });
+container.addEventListener('mousemove', function (e) { if (timer && moved(e.clientX, e.clientY)) cancel(); });
+container.addEventListener('mouseup', cancel);
+container.addEventListener('mouseleave', cancel);
+container.addEventListener('contextmenu', function (e) { var el = targetFor(e); if (!el) return; e.preventDefault(); cancel(); fire(el); });
+}
+var LONG_PRESS_SKIP = '.react-pill, .rpt-msg, .tp-del, a, button';
+attachLongPress(log, '.m[data-mid]', LONG_PRESS_SKIP);
+attachLongPress(tpPosts, '.tp-post[data-post-id]', LONG_PRESS_SKIP);
 
 /* ---------- level badges ----------
    userStats is only ever written wholesale on join (loadUserStats) and patched per-user by the
@@ -1322,9 +1373,9 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clos
 /* Click a name right in the chat log to bring up the same menu (Whisper/Block/Report/Friend, plus
    Kick/Mute for admins) — no need to go hunting for them in the Online list first. */
 log.onclick = function (e) {
+if (Date.now() < suppressClickUntil) return; // this click is the tail end of a long-press that already acted
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
 var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { e.stopPropagation(); reportMessage(rpt.dataset.mid); return; }
-var radd = e.target.closest('.react-add'); if (radd) { e.stopPropagation(); var rc = radd.closest('.reactions'); openReactPicker(rc.dataset.rtype, Number(rc.dataset.rid), radd); return; }
 var rpill = e.target.closest('.react-pill'); if (rpill) { e.stopPropagation(); var rc2 = rpill.closest('.reactions'); toggleReaction(rc2.dataset.rtype, Number(rc2.dataset.rid), rpill.dataset.emoji); return; }
 var b = e.target.closest('.who[data-id]'); if (!b || b.dataset.id === me.id) return;
 e.stopPropagation(); openMenu(b.dataset.id, b, b.dataset.name);
@@ -2392,8 +2443,8 @@ addSys('Reply deleted.');
 }
 if (tpPosts) {
 tpPosts.onclick = function (e) {
+if (Date.now() < suppressClickUntil) return; // this click is the tail end of a long-press that already acted
 var img = e.target.closest('img.gif, img.tp-posted-img'); if (img) { openLightbox(img.src); return; }
-var radd = e.target.closest('.react-add'); if (radd) { e.stopPropagation(); var rc = radd.closest('.reactions'); openReactPicker(rc.dataset.rtype, Number(rc.dataset.rid), radd); return; }
 var rpill = e.target.closest('.react-pill'); if (rpill) { e.stopPropagation(); var rc2 = rpill.closest('.reactions'); toggleReaction(rc2.dataset.rtype, Number(rc2.dataset.rid), rpill.dataset.emoji); return; }
 var b = e.target.closest('.tp-del'); if (!b) return;
 e.stopPropagation();
