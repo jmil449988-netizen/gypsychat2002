@@ -126,7 +126,7 @@ function closeStatusMenu() { statusMenu.classList.remove('open'); }
 function openStatusMenu(anchor) {
 var items = [
 ['Online', function () { setMyStatus('online', ''); }],
-['Away', function () { var m = prompt('Away message (optional):', myAwayMsg || ''); if (m === null) return; setMyStatus('away', m.trim()); }],
+['Away', async function () { var m = await showPromptModal('Away Message', { value: myAwayMsg || '', placeholder: 'optional', hint: 'Shown to anyone who whispers you while you’re away.' }); if (m === null) return; setMyStatus('away', m); }],
 ['Busy', function () { setMyStatus('busy', ''); }]
 ];
 statusMenu.innerHTML = '<div class="hd">Set status</div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
@@ -486,10 +486,42 @@ $('infoBody').textContent = bio || 'No profile info set.';
 }
 $('infoOk').onclick = function () { $('infoOverlay').classList.add('hidden'); };
 $('infoOverlay').onclick = function (e) { if (e.target === $('infoOverlay')) $('infoOk').click(); };
+
+/* ---------- generic prompt modal -- stands in for window.prompt() everywhere the app needs one
+   line of text back. Native prompt() renders as a bare OS/browser dialog (on some mobile browsers
+   it shows up tucked in near the address bar, looking like it belongs to the browser chrome rather
+   than the room), so this keeps the same one-question-one-answer flow but inside a window styled
+   like the rest of the app. Returns a Promise: the trimmed string, or null if cancelled. */
+function showPromptModal(title, opts) {
+opts = opts || {};
+return new Promise(function (resolve) {
+var overlay = $('promptOverlay'), input = $('promptInput'), body = $('promptBody'),
+okBtn = $('promptOk'), cancelBtn = $('promptCancel');
+$('promptTitle').textContent = title;
+if (opts.hint) { body.textContent = opts.hint; body.classList.remove('hidden'); }
+else { body.textContent = ''; body.classList.add('hidden'); }
+input.value = opts.value || '';
+input.placeholder = opts.placeholder || '';
+input.maxLength = opts.maxLength || 100;
+overlay.classList.remove('hidden');
+input.focus(); input.select();
+function done(val) {
+overlay.classList.add('hidden');
+okBtn.onclick = null; cancelBtn.onclick = null; overlay.onclick = null; input.onkeydown = null;
+resolve(val);
+}
+okBtn.onclick = function () { done(input.value.trim()); };
+cancelBtn.onclick = function () { done(null); };
+overlay.onclick = function (e) { if (e.target === overlay) done(null); };
+input.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); okBtn.onclick(); } };
+});
+}
+
 document.addEventListener('keydown', function (e) {
 if (e.key !== 'Escape') return;
 if (!$('warnOverlay').classList.contains('hidden')) $('warnOk').click();
 if (!$('infoOverlay').classList.contains('hidden')) $('infoOk').click();
+if ($('promptOverlay') && !$('promptOverlay').classList.contains('hidden')) $('promptCancel').click();
 if ($('saveOverlay') && !$('saveOverlay').classList.contains('hidden')) $('saveOverlay').classList.add('hidden');
 if ($('imgLightbox') && !$('imgLightbox').classList.contains('hidden')) closeLightbox();
 });
@@ -905,7 +937,7 @@ if (online && !blocked[id]) items.push(['Whisper', function () { unread[id] = 0;
 items.push(blocked[id] ? ['Unblock', function () { unblock(id); }] : ['Block', function () { block(id, name); }]);
 items.push(['Report', function () { var rr = prompt('Report ' + name + ' for: (e.g. spam, harassment)'); if (rr !== null && rr.trim()) report(id, name, rr.trim()); }]);
 items.push(friends[id] ? ['Remove Friend', function () { removeFriend(id, name); }] : ['Add Friend', function () { addFriend(id, name); }]);
-if (friends[id]) items.push(['Move to Group', function () { var g = prompt('Group name (blank for none):', friends[id].group || ''); if (g !== null) moveFriendGroup(id, g.trim()); }]);
+if (friends[id]) items.push(['Move to Group', async function () { var g = await showPromptModal('Move to Group', { value: friends[id].group || '', placeholder: 'blank for none', maxLength: 40 }); if (g !== null) moveFriendGroup(id, g); }]);
 /* Kick/Mute/Unmute don't require the target to still be online — most of the time an admin is
    acting on something said in the chat log by someone who has since left the room. */
 if (isAdmin && mutedUsers[id]) items.push(['Unmute', function () { unmute(id, name); }]);
