@@ -266,6 +266,18 @@ border:1px solid var(--gold-lo);margin-right:7px;vertical-align:0;box-shadow:0 0
 letter-spacing:.5px;text-align:center;color:#f1d98a;background:linear-gradient(180deg,#3a2b12,#1a1310);
 border:2px double var(--gold-lo);outline:1px solid #000;box-shadow:0 0 0 1px #000,0 4px 14px #000;z-index:6}
 .cooldown.muted{color:#ffb3b3;border-color:#7a2a2a}
+/* Sits in the same spot as .cooldown above (bottom:100% of the composer it's inside) and yields
+   that spot entirely when a cooldown/mute message is up (see renderRoomTyping() in app.js), so
+   the two never stack. Its own background matters more here than .cooldown's does: the main
+   compose row has a real gap above it (.body's grid gap), but a whisper window's .ilog and
+   .icomp sit flush against each other with none, so without an opaque backing this would show
+   up sitting directly on top of the last line of chat. */
+.typing-indicator{position:absolute;left:0;right:0;bottom:100%;margin-bottom:4px;padding:3px 10px;
+font-style:italic;font-size:12px;text-align:center;color:var(--sys);pointer-events:none;
+background:linear-gradient(180deg,#1a1310,#221a26);border-top:1px solid var(--gold-lo)}
+.im .icomp{position:relative}
+.im .icomp .typing-indicator{font-family:"IM Fell English",Georgia,serif;font-size:11px;color:#c9a3e6;
+padding:2px 8px;margin-bottom:0;background:linear-gradient(180deg,#120e14,#221a26);border-top:1px solid #7a4bb0}
 .modal-overlay{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);padding:16px}
 .modal-overlay.hidden{display:none}
 .modal{width:100%;max-width:340px;background:linear-gradient(180deg,var(--stone-2),var(--stone));border:3px double var(--gold-lo);
