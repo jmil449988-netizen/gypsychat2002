@@ -233,7 +233,12 @@ if (kind === 'signon') { tone(660, 0.09, 0, 'triangle'); tone(880, 0.12, 0.09, '
 else if (kind === 'ding') { tone(1050, 0.14, 0, 'sine'); }
 else if (kind === 'buzz') { tone(120, 0.5, 0, 'sawtooth', 0.2); tone(90, 0.5, 0.05, 'sawtooth', 0.2); }
 }
-function updateSoundBtn() { var b = $('soundBtn'); if (!b) return; b.textContent = soundMuted ? '🔇' : '🔊'; b.setAttribute('aria-pressed', soundMuted ? 'true' : 'false'); }
+function updateSoundBtn() {
+var b = $('soundBtn'); if (!b) return;
+var icon = b.querySelector('.btn-icon');
+if (icon) icon.textContent = soundMuted ? '🔇' : '🔊'; else b.textContent = soundMuted ? '🔇' : '🔊';
+b.setAttribute('aria-pressed', soundMuted ? 'true' : 'false');
+}
 if ($('soundBtn')) {
 updateSoundBtn();
 $('soundBtn').onclick = function () {
@@ -978,6 +983,11 @@ setTimeout(function () { destroyWin(id); }, 180);
 function makeSwipeToDismiss(el, id) {
 var startX = 0, dx = 0, dragging = false, pid = null;
 el.addEventListener('pointerdown', function (e) {
+// Letting the tab claim pointer capture here too would retarget the close button's own click
+// at the tab itself once the button releases (pointer capture carries the whole mouse sequence
+// with it, click included) -- which is why tapping x was reopening the whisper instead of
+// closing it. Simplest fix: the drag/swipe logic never engages for a press that started on x.
+if (e.target.closest('.tab-close')) return;
 if (e.pointerType === 'mouse' && e.button !== 0) return;
 startX = e.clientX; dx = 0; dragging = true; pid = e.pointerId;
 el.classList.add('dragging');
