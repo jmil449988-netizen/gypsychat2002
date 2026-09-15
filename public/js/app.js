@@ -161,7 +161,15 @@ channel.track({ name: me.name, status: effectiveStatus(), awayMsg: manualStatus 
 function updateStatusBtn() {
 var b = $('statusBtn'); if (!b) return;
 var eff = effectiveStatus();
-b.textContent = '● ' + eff.charAt(0).toUpperCase() + eff.slice(1);
+var label = eff.charAt(0).toUpperCase() + eff.slice(1);
+/* Just the colored dot on the button itself -- .statusbtn[data-status] already colors it
+   green/yellow/red per status (see style.css), so the dot alone carries the same information
+   the word used to. The word still appears in the dropdown this opens (Online/Away/Busy), and
+   lives on here as the title/aria-label so it's not lost for anyone hovering or using a screen
+   reader. */
+b.textContent = '●';
+b.title = 'Status: ' + label + ' — click to change';
+b.setAttribute('aria-label', 'Status: ' + label + '. Click to change your status.');
 b.setAttribute('data-status', eff);
 }
 function setMyStatus(status, awayMsg) {
