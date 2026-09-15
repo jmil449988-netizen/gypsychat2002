@@ -1608,11 +1608,18 @@ if (threadToggleBtn) {
 threadToggleBtn.onclick = function () {
 closeGif();
 if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
+/* Grab the scroll position BEFORE toggling the class -- that class puts .win at display:none,
+   and reading window.scrollY / log.scrollTop after that returns the already-collapsed value
+   (effectively 0, since the scrollable content is gone), not where you actually were. That's
+   why this kept landing back at the top on the way in: rememberChatScroll() was running too
+   late to see anything but zero. */
+var opening = !gcRoot.classList.contains('mobile-threads-open');
+if (opening) rememberChatScroll();
 var open = gcRoot.classList.toggle('mobile-threads-open');
 threadToggleBtn.classList.toggle('open', open);
 threadToggleBtn.textContent = open ? '💬' : '🧵';
 threadToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Open threads board');
-if (open) { rememberChatScroll(); renderThreadList(); if (!openThreadId) tpList.classList.remove('hidden'); }
+if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidden'); }
 else returnToChat();
 };
 }
@@ -1630,10 +1637,15 @@ if (rouletteToggleBtn) {
 rouletteToggleBtn.onclick = function () {
 closeGif();
 if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
+/* Same fix as the threads toggle above: capture the scroll position before the class that
+   hides .win is applied, not after -- otherwise it always records 0 and "back to chat" always
+   lands at the top. */
+var opening = !gcRoot.classList.contains('mobile-roulette-open');
+if (opening) rememberChatScroll();
 var open = gcRoot.classList.toggle('mobile-roulette-open');
 rouletteToggleBtn.classList.toggle('open', open);
 rouletteToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Gypsy Roulette — coming soon');
-if (open) rememberChatScroll(); else returnToChat();
+if (!open) returnToChat();
 };
 }
 if ($('rouletteBack')) $('rouletteBack').onclick = function () { closeMobileRoulette(); returnToChat(); };
