@@ -22,6 +22,7 @@ var reportsBtn = $('reportsBtn'), reportsBadge = $('reportsBadge'), reportsOverl
 var bugBtn = $('bugBtn'), bugFile = $('bugFile'), bugReportOverlay = $('bugReportOverlay'), bugDesc = $('bugDesc'),
     bugAttachBtn = $('bugAttachBtn'), bugAttachList = $('bugAttachList'), bugReportCancel = $('bugReportCancel'), bugReportSubmit = $('bugReportSubmit');
 var bugReportsBtn = $('bugReportsBtn'), bugReportsBadge = $('bugReportsBadge'), bugReportsOverlay = $('bugReportsOverlay'), bugReportsList = $('bugReportsList'), bugReportsClose = $('bugReportsClose');
+var leaderboardBtn = $('leaderboardBtn'), leaderboardOverlay = $('leaderboardOverlay'), leaderboardList = $('leaderboardList'), leaderboardClose = $('leaderboardClose');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
@@ -1012,6 +1013,61 @@ userStats = {};
 r.data.forEach(function (x) { userStats[x.user_id] = x; });
 }
 
+/* ---------- leaderboard ----------
+   Top 20 by reactions_received, reachable by anyone (not admin-gated) from the "more options"
+   popover. user_stats alone has no name/avatar -- those live in profiles, and only for people
+   who are currently online is there already a live copy in people[] -- so this does one query
+   against each: user_stats for the ranking, then profiles for just those ids' name/avatar_url,
+   preferring the live people[] copy when someone happens to be online right now. Loads fresh
+   every time the modal opens rather than staying subscribed -- a leaderboard doesn't need to
+   reorder itself under someone's cursor the way the reports queue needs its badge to. */
+var LB_MEDAL = ['🥇', '🥈', '🥉'];
+function renderLeaderboard(rows, profById) {
+if (!leaderboardList) return;
+if (!rows.length) { leaderboardList.innerHTML = '<div class="empty">Nobody has earned a reaction yet — be the first.</div>'; return; }
+leaderboardList.innerHTML = rows.map(function (x, i) {
+var prof = profById[x.user_id] || {};
+var live = people[x.user_id];
+var name = (live && live.name) || prof.name || 'Unknown';
+var avaUrl = (live && live.avatarUrl) || prof.avatar_url;
+var ava = avaUrl ? '<img class="ava lb-ava" src="' + esc(avaUrl) + '" alt="" loading="lazy">' : '<span class="ava-fallback lb-ava" aria-hidden="true">' + esc(String(name).trim().charAt(0).toUpperCase() || '?') + '</span>';
+var tier = levelTier(x.level);
+var rank = i < 3 ? '<span class="lb-medal">' + LB_MEDAL[i] + '</span>' : '<span class="lb-rank">#' + (i + 1) + '</span>';
+return '<div class="lb-row' + (i < 3 ? ' lb-top' : '') + '" data-id="' + esc(x.user_id) + '" data-name="' + esc(name) + '" tabindex="0">' + rank + ava +
+'<span class="lb-name' + (isAdminId(x.user_id) ? ' admin' : '') + '">' + esc(name) + '</span>' +
+'<span class="lvl ' + tier.cls + '">' + tier.icon + 'Lv' + x.level + '</span>' +
+'<span class="lb-count">' + x.reactions_received.toLocaleString() + ' reaction' + (x.reactions_received === 1 ? '' : 's') + '</span></div>';
+}).join('');
+}
+async function loadLeaderboard() {
+if (!leaderboardList) return;
+leaderboardList.innerHTML = '<div class="empty">Loading…</div>';
+var r = await sb.from('user_stats').select('user_id, level, reactions_received').order('reactions_received', { ascending: false }).limit(20);
+if (r.error) { leaderboardList.innerHTML = '<div class="empty">Could not load the leaderboard: ' + esc(r.error.message) + '</div>'; return; }
+var rows = (r.data || []).filter(function (x) { return x.reactions_received > 0; });
+var profById = {};
+if (rows.length) {
+var pr = await sb.from('profiles').select('user_id, name, avatar_url').in('user_id', rows.map(function (x) { return x.user_id; }));
+(pr.data || []).forEach(function (p) { profById[p.user_id] = p; });
+}
+renderLeaderboard(rows, profById);
+}
+if (leaderboardBtn) leaderboardBtn.onclick = function () { leaderboardOverlay.classList.remove('hidden'); loadLeaderboard(); };
+if (leaderboardClose) leaderboardClose.onclick = function () { leaderboardOverlay.classList.add('hidden'); };
+if (leaderboardList) {
+/* Tapping a row opens the same Get Info / Whisper / Block / ... menu as tapping their name
+   anywhere else, rather than the leaderboard being a dead-end list. */
+leaderboardList.addEventListener('click', function (e) {
+var row = e.target.closest('.lb-row[data-id]'); if (!row || row.dataset.id === me.id) return;
+openMenu(row.dataset.id, row, row.dataset.name);
+});
+leaderboardList.addEventListener('keydown', function (e) {
+if (e.key !== 'Enter' && e.key !== ' ') return;
+var row = e.target.closest('.lb-row[data-id]'); if (!row) return;
+e.preventDefault(); row.click();
+});
+}
+
 /* ---------- presence list ---------- */
 function renderPeople() {
 var ids = Object.keys(people).sort(function (a, b) { return people[a].name.localeCompare(people[b].name); });
@@ -1361,7 +1417,7 @@ if (friends[id]) items.push(['Move to Group', async function () { var g = await 
 if (isAdmin && mutedUsers[id]) items.push(['Unmute', function () { unmute(id, name); }]);
 if (isAdmin && !mutedUsers[id]) items.push(['Mute', function () { muteUser(id, name); }, 'danger']);
 if (isAdmin) items.push(['Kick', function () { var r = prompt('Reason for kicking ' + name + '? (optional)'); if (r !== null) kick(id, name, r); }, 'danger']);
-menu.innerHTML = '<div class="hd">' + avatarHtml(id, name, 'ava-menu') + '<span class="hd-name' + (isAdminId(id) ? ' admin' : '') + '">' + esc(name) + '</span></div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
+menu.innerHTML = '<div class="hd">' + avatarHtml(id, name, 'ava-menu') + '<span class="hd-name' + (isAdminId(id) ? ' admin' : '') + '">' + esc(name) + '</span>' + levelBadgeHtml(id) + '</div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
 menu.querySelectorAll('button').forEach(function (b) { b.onclick = function () { closeMenu(); items[+b.dataset.i][1](); }; });
 menu.classList.add('open');
 var r = anchor.getBoundingClientRect();
