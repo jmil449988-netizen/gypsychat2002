@@ -321,25 +321,46 @@ document.addEventListener('click', unlockAudioOnce, { passive: true });
    "while the site is open somewhere" tier: it does NOT reach someone once they've closed the tab
    or browser, which would need a real Push subscription and a server to send from -- out of scope
    here. notifEnabled is the user's own on/off choice, remembered like the sound-mute toggle above;
-   Notification.permission is the browser's separate, one-way (except via site settings) grant. */
+   Notification.permission is the browser's separate, one-way (except via site settings) grant.
+
+   iOS Safari has an extra wrinkle no other mobile browser does: window.Notification does not exist
+   at all in a plain Safari tab, on any iOS version, for any site. Apple only turns it on once a page
+   has been added to the Home Screen (Share -> Add to Home Screen) and is then launched from that
+   icon, running standalone -- that's an OS-level restriction, nothing a site can request or work
+   around in JS. This site already ships a manifest.webmanifest with display:"standalone" and icons,
+   so it's a valid install target; the two helpers below just detect "iOS, but not installed yet" so
+   the button can say what to do instead of a dead-end "not supported". Android Chrome/Firefox/Edge
+   and desktop browsers all support Notification directly in a regular tab -- no install needed there. */
+function isIOSDevice() {
+return /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 13+ reports as a Mac unless you check touch points
+}
+function isStandaloneDisplay() {
+return window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
 var notifBtn = $('notifBtn');
 var notifEnabled = false;
 try { notifEnabled = localStorage.getItem('gc_notif_enabled') === '1'; } catch (e) {}
 function updateNotifBtn() {
 if (!notifBtn) return;
 var supported = 'Notification' in window;
+var iosNeedsInstall = !supported && isIOSDevice() && !isStandaloneDisplay();
 var icon = notifBtn.querySelector('.btn-icon');
 var on = supported && notifEnabled && Notification.permission === 'granted';
-if (icon) icon.textContent = on ? '🔔' : '🔕'; else notifBtn.textContent = on ? '🔔' : '🔕';
+if (icon) icon.textContent = on ? '🔔' : (iosNeedsInstall ? '📲' : '🔕'); else notifBtn.textContent = on ? '🔔' : (iosNeedsInstall ? '📲' : '🔕');
 notifBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-notifBtn.title = !supported ? 'Notifications are not supported in this browser' :
+notifBtn.title = iosNeedsInstall ? 'On iPhone/iPad: tap Share, then Add to Home Screen, then open Gypsy Chat from that icon to turn on notifications' :
+!supported ? 'Notifications are not supported in this browser' :
 Notification.permission === 'denied' ? 'Notifications are blocked — allow them in your browser’s site settings to turn this on' :
 on ? 'Notifications on for whispers & mentions — click to turn off' : 'Turn on notifications for whispers & mentions';
 }
 if (notifBtn) {
 updateNotifBtn();
 notifBtn.onclick = async function () {
-if (!('Notification' in window)) { addSys('Your browser does not support notifications.'); return; }
+if (!('Notification' in window)) {
+if (isIOSDevice() && !isStandaloneDisplay()) { addSys('iPhone/iPad notifications need this page added to your Home Screen first: tap the Share icon, choose "Add to Home Screen", then open Gypsy Chat from that icon and tap the bell again.'); }
+else { addSys('Your browser does not support notifications.'); }
+return;
+}
 if (Notification.permission === 'denied') { addSys('Notifications are blocked for this site — allow them in your browser’s site settings to turn this on.'); return; }
 if (Notification.permission === 'default') {
 var perm = await Notification.requestPermission(); // must run inside this click handler, not after any await before it, or some browsers silently ignore the prompt
