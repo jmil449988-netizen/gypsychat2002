@@ -265,6 +265,25 @@ updateDmToggleBtn();
 };
 }
 
+/* ---------- "more" popover (mobile bottom-bar declutter) ----------
+   Below 500px, style.css pulls #statusPopover out of the status bar's flex row into a small
+   floating panel holding the avatar/save/sound/reports buttons, so the row itself only ever shows
+   the sign-on text, the status dot, and the DM toggle -- everything else is one tap away behind
+   "...". Above 500px #statusPopover is display:contents (its buttons render inline exactly as
+   before) and #moreBtn stays hidden by CSS, so none of this code does anything on desktop. */
+var moreBtn = $('moreBtn'), statusPopover = $('statusPopover');
+function closeMoreMenu() { if (!statusPopover) return; statusPopover.classList.remove('open'); if (moreBtn) moreBtn.setAttribute('aria-expanded', 'false'); }
+function openMoreMenu() { if (!statusPopover) return; statusPopover.classList.add('open'); if (moreBtn) moreBtn.setAttribute('aria-expanded', 'true'); }
+if (moreBtn) {
+moreBtn.onclick = function (e) { e.stopPropagation(); if (statusPopover.classList.contains('open')) closeMoreMenu(); else openMoreMenu(); };
+}
+if (statusPopover) {
+// picking any action inside (change picture, save, sound, reports) closes the popover behind it
+statusPopover.addEventListener('click', function (e) { if (e.target.closest('button')) closeMoreMenu(); });
+}
+document.addEventListener('click', function (e) { if (statusPopover && !statusPopover.classList.contains('open')) return; if (statusPopover && !statusPopover.contains(e.target) && e.target !== moreBtn) closeMoreMenu(); });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMoreMenu(); });
+
 /* ---------- width of the Online/Friends panel ----------
    Horizontal only, deliberately: the panel is a grid cell whose height already tracks the chat
    log beside it, so there is nothing sensible for a vertical drag to do. The width lives in a
@@ -919,13 +938,73 @@ h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
 }
 function makeTab(id) {
 var w = wins[id];
-var b = document.createElement('button'); b.type = 'button'; b.className = 'im-tab hidden';
-b.innerHTML = '<span class="env" aria-hidden="true">✉</span><span class="nm"></span><span class="badge hidden">0</span>';
+// A <div role="button"> rather than a real <button> -- the close "x" inside it is its own real
+// button, and a button can't contain another button (the browser would silently pop it back out
+// as a sibling, breaking both the layout and the click handling below).
+var b = document.createElement('div'); b.className = 'im-tab hidden'; b.tabIndex = 0; b.setAttribute('role', 'button');
+b.innerHTML = '<span class="env" aria-hidden="true">✉</span><span class="nm"></span><span class="badge hidden">0</span>' +
+'<button type="button" class="tab-close" title="Close this whisper" aria-label="Close whisper with ' + esc(w.name) + '">✕</button>';
 b.querySelector('.nm').textContent = w.name;
 b.setAttribute('aria-label', 'Open whisper with ' + w.name);
-b.onclick = function () { openIM(id, w.name, true); };
+b.addEventListener('click', function (e) {
+if (e.target.closest('.tab-close')) return; // handled by its own onclick below
+if (b._swiped) { b._swiped = false; return; } // just finished a real drag -- don't also open it
+openIM(id, w.name, true);
+});
+b.addEventListener('keydown', function (e) {
+if (e.target !== b) return; // let the close button field its own Enter/Space
+if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIM(id, w.name, true); }
+else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); dismissTab(id); }
+});
+b.querySelector('.tab-close').onclick = function (e) { e.stopPropagation(); dismissTab(id); };
+makeSwipeToDismiss(b, id);
 tray.appendChild(b);
 w.tab = b;
+}
+/* ---------- swipe-away for minimized whisper tabs ----------
+   Drag a tab sideways -- touch or a mouse drag both work, via Pointer Events -- and past a small
+   threshold it slides the rest of the way off and closes that conversation for good, same as
+   tapping its ✕ or pressing Delete/Backspace while it's focused. A short drag that doesn't cross
+   the threshold just snaps back. Either way a real drag never also opens the whisper window
+   afterward (see the _swiped guard in makeTab's click handler). */
+var SWIPE_DISMISS_PX = 70;
+function dismissTab(id) {
+var w = wins[id]; if (!w || !w.tab) return;
+var el = w.tab;
+el.style.transform = 'translateX(' + ((el._dismissDir || 1) * 120) + '%)';
+el.style.opacity = '0';
+setTimeout(function () { destroyWin(id); }, 180);
+}
+function makeSwipeToDismiss(el, id) {
+var startX = 0, dx = 0, dragging = false, pid = null;
+el.addEventListener('pointerdown', function (e) {
+if (e.pointerType === 'mouse' && e.button !== 0) return;
+startX = e.clientX; dx = 0; dragging = true; pid = e.pointerId;
+el.classList.add('dragging');
+try { el.setPointerCapture(pid); } catch (err) {}
+});
+el.addEventListener('pointermove', function (e) {
+if (!dragging || e.pointerId !== pid) return;
+dx = e.clientX - startX;
+el.style.transform = 'translateX(' + dx + 'px)';
+el.style.opacity = String(Math.max(.15, 1 - Math.abs(dx) / 160));
+el.classList.toggle('past-threshold', Math.abs(dx) > SWIPE_DISMISS_PX);
+});
+function end(e) {
+if (!dragging || (e && e.pointerId !== pid)) return;
+dragging = false; el.classList.remove('dragging');
+try { el.releasePointerCapture(pid); } catch (err) {}
+if (Math.abs(dx) > SWIPE_DISMISS_PX) {
+el._swiped = true; el._dismissDir = dx < 0 ? -1 : 1;
+dismissTab(id);
+} else {
+if (Math.abs(dx) > 6) el._swiped = true; // a real drag that snapped back shouldn't also open the tab
+el.classList.remove('past-threshold');
+el.style.transform = ''; el.style.opacity = '';
+}
+}
+el.addEventListener('pointerup', end);
+el.addEventListener('pointercancel', end);
 }
 /* Keeps a whisper window's title bar, tray tab, and aria-labels showing the name that user
    currently has chosen — called whenever we learn a (possibly updated) name for an open
@@ -937,7 +1016,10 @@ w.el.setAttribute('aria-label', 'Whisper with ' + name);
 w.el.querySelector('.nm').textContent = name;
 var buzzBtn = w.el.querySelector('.buzz'); if (buzzBtn) buzzBtn.setAttribute('aria-label', 'Buzz ' + name);
 w.ta.placeholder = 'Whisper to ' + name + '...';
-if (w.tab) { w.tab.querySelector('.nm').textContent = name; w.tab.setAttribute('aria-label', 'Open whisper with ' + name); }
+if (w.tab) {
+w.tab.querySelector('.nm').textContent = name; w.tab.setAttribute('aria-label', 'Open whisper with ' + name);
+var closeBtn = w.tab.querySelector('.tab-close'); if (closeBtn) closeBtn.setAttribute('aria-label', 'Close whisper with ' + name);
+}
 }
 /* Keeps a whisper window's title-bar avatar in sync with presence -- called once when the window
    is created and again on every presence sync (a person can change their picture mid-conversation). */
@@ -1342,6 +1424,7 @@ if ($('roomWatermark')) $('roomWatermark').classList.add('hidden');
 if ($('statusBtn')) $('statusBtn').classList.add('hidden');
 if ($('avaBtn')) $('avaBtn').classList.add('hidden');
 if ($('saveBtn')) $('saveBtn').classList.add('hidden');
+if ($('moreBtn')) { $('moreBtn').classList.add('hidden'); closeMoreMenu(); }
 if (st) st.classList.remove('renamable');
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
 $('login').classList.remove('hidden'); $('join').disabled = true;
@@ -2533,6 +2616,7 @@ if (gcRoot) gcRoot.classList.add('signed-on');
 updateUsersStacked(); // the panel only has a size now that it is no longer hidden
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
 if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
+if ($('moreBtn')) $('moreBtn').classList.remove('hidden');
 /* Anonymous accounts live in this browser's storage and nowhere else, so the 🔑 (and the nudge
    below) are only offered to them -- an account with an email attached is already portable. */
 isAnonAccount = user.is_anonymous !== false && !user.email;
