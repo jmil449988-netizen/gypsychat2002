@@ -18,8 +18,18 @@ var tpNewPreviewWrap = $('tpNewPreviewWrap'), tpNewPreviewImg = $('tpNewPreviewI
 var tpReplyImgBtn = $('tpReplyImgBtn'), tpReplyImgFile = $('tpReplyImgFile'), tpReplyGifBtn = $('tpReplyGifBtn');
 var tpReplyPreviewWrap = $('tpReplyPreviewWrap'), tpReplyPreviewImg = $('tpReplyPreviewImg'), tpReplyImgRemove = $('tpReplyImgRemove');
 var adminToggle = $('adminToggle'), adminFields = $('adminFields'), adminEmail = $('adminEmail'), adminPassword = $('adminPassword');
+var reportsBtn = $('reportsBtn'), reportsBadge = $('reportsBadge'), reportsOverlay = $('reportsOverlay'), reportsList = $('reportsList'), reportsClose = $('reportsClose');
+var gateFields = $('gateFields'), accessCode = $('accessCode'), gateGo = $('gateGo'), gateErr = $('gateErr'), joinFields = $('joinFields');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
+
+/* A name used to be \w only (ASCII letters/digits/underscore), which silently rejected every
+   non-Latin script -- Greek, Cyrillic, Japanese, Chinese, etc. \p{L} matches a "letter" in any
+   Unicode script, so this opens the door to all of them at once instead of enumerating scripts
+   one at a time; \p{N} covers native digits (e.g. Devanagari) and \p{M} the combining marks
+   several of those scripts need (diacritics, Japanese dakuten). The server's copy of this same
+   rule lives in claim_name() -- see supabase/international_names_feature.sql. */
+var NAME_RE = /^[\p{L}\p{N}\p{M}_ .'-]{2,16}$/u;
 
 var sb = null, me = null, channel = null;
 var people = {}; // user id -> presence object {name, status, awayMsg} (from presence)
@@ -56,6 +66,7 @@ var threadsCache = {}; // thread id -> thread row {id, op_id, op_name, body, cre
 var threadsOrder = []; // thread ids, kept sorted by bumped_at desc
 var openThreadId = null;
 var threadsChannel = null;
+var reportsChannel = null;
 var threadPostsSeen = {};
 var lastThreadSend = 0;
 var tpNewImageUrl = null, tpReplyImageUrl = null; // pending image_url for the post currently being composed
@@ -367,7 +378,7 @@ var n = (raw || '').trim();
 if (!me || !sb) return;
 if (!n) { addSys('Usage: /nick YourNewName'); return; }
 if (n === me.name) { addSys('That is already your name.'); return; }
-if (!/^[\w .'-]{2,16}$/.test(n)) { addSys('A name is 2–16 letters, numbers, spaces or . \' -'); return; }
+if (!NAME_RE.test(n)) { addSys('A name is 2–16 letters (any language), numbers, spaces or . \' -'); return; }
 var r = await sb.rpc('claim_name', { p_name: n });
 if (r.error) { addSys('Could not change your name: ' + r.error.message); return; }
 if (r.data && r.data.ok === false) {
@@ -926,6 +937,73 @@ if (r.error) { addSys('Could not send report: ' + r.error.message); return; }
 addSys('Report sent. Thank you — an admin will review it.');
 }
 
+/* ---------- reports queue (admins only) ----------
+   report() above already worked client-side; it just had nowhere to write to until the reports
+   table existed (see supabase/reports_feature.sql). This is the review side: a badge on a
+   status-bar button, a modal listing open reports, and Dismiss / Ban actions right on each row --
+   Ban reuses the existing kick() below rather than duplicating the bans upsert + broadcast. */
+function refreshReportsBadge() {
+if (!isAdmin || !reportsBadge || !sb) return;
+sb.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'open').then(function (r) {
+if (r.error) return;
+var n = r.count || 0;
+reportsBadge.textContent = String(n > 99 ? '99+' : n);
+reportsBadge.classList.toggle('hidden', n === 0);
+});
+}
+function renderReports(rows) {
+if (!reportsList) return;
+if (!rows.length) { reportsList.innerHTML = '<div class="empty">No open reports.</div>'; return; }
+reportsList.innerHTML = rows.map(function (r) {
+var when = new Date(r.created_at).toLocaleString();
+return '<div class="report-row" data-id="' + r.id + '">' +
+'<div class="rr-hd">' + esc(when) + ' — <b>' + esc(r.reporter_name || '?') + '</b> reported <b>' + esc(r.reported_name || '?') + '</b></div>' +
+'<div class="rr-reason">' + esc(r.reason) + '</div>' +
+'<div class="rr-actions"><button type="button" class="btn rr-dismiss" data-id="' + r.id + '">Dismiss</button>' +
+'<button type="button" class="btn rr-ban" data-id="' + r.id + '" data-uid="' + esc(r.reported_id) + '" data-name="' + esc(r.reported_name || '') + '">Ban / Kick</button></div>' +
+'</div>';
+}).join('');
+}
+async function loadReports() {
+if (!isAdmin || !reportsList) return;
+var r = await sb.from('reports').select('*').eq('status', 'open').order('created_at', { ascending: false }).limit(100);
+if (r.error) { reportsList.innerHTML = '<div class="empty">Could not load reports: ' + esc(r.error.message) + '</div>'; return; }
+renderReports(r.data || []);
+}
+async function resolveReport(id, status) {
+var r = await sb.from('reports').update({ status: status, resolved_by: me.id, resolved_at: new Date().toISOString() }).eq('id', id);
+if (r.error) { addSys('Could not update the report: ' + r.error.message); return; }
+var row = reportsList && reportsList.querySelector('.report-row[data-id="' + id + '"]');
+if (row) row.remove();
+if (reportsList && !reportsList.querySelector('.report-row')) reportsList.innerHTML = '<div class="empty">No open reports.</div>';
+refreshReportsBadge();
+}
+if (reportsList) {
+reportsList.addEventListener('click', function (e) {
+var dBtn = e.target.closest('.rr-dismiss');
+if (dBtn) { resolveReport(dBtn.dataset.id, 'dismissed'); return; }
+var bBtn = e.target.closest('.rr-ban');
+if (bBtn) {
+kick(bBtn.dataset.uid, bBtn.dataset.name || 'them', 'Reported and banned by ' + me.name);
+resolveReport(bBtn.dataset.id, 'actioned');
+}
+});
+}
+if (reportsBtn) reportsBtn.onclick = function () { reportsOverlay.classList.remove('hidden'); loadReports(); };
+if (reportsClose) reportsClose.onclick = function () { reportsOverlay.classList.add('hidden'); };
+function subscribeReports() {
+if (reportsChannel || !isAdmin) return;
+reportsChannel = sb.channel('reports-queue');
+reportsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reports' }, function () {
+refreshReportsBadge();
+if (reportsOverlay && !reportsOverlay.classList.contains('hidden')) loadReports();
+});
+reportsChannel.subscribe();
+}
+function unsubscribeReports() {
+if (reportsChannel) { reportsChannel.unsubscribe(); reportsChannel = null; }
+}
+
 /* ---------- friends (a persistent, grouped buddy list, independent of the current room) ---------- */
 async function loadFriends() {
 var r = await sb.from('friends').select('friend_id, friend_name, group_name'); if (r.error) return;
@@ -958,6 +1036,9 @@ if (isAdmin) {
 var b = await sb.from('bans').select('user_id, banned_name, expires_at'); if (!b.error) b.data.forEach(function (x) { bans[x.user_id] = x; });
 var mu = await sb.from('chat_moderation').select('user_id, user_name, muted, muted_permanent, offense_count').eq('muted', true);
 if (!mu.error) mu.data.forEach(function (x) { mutedUsers[x.user_id] = x; });
+if (reportsBtn) reportsBtn.classList.remove('hidden');
+refreshReportsBadge();
+subscribeReports();
 }
 }
 async function loadMyModeration() {
@@ -997,6 +1078,10 @@ delete bans[id]; addSys(name + ' may return.');
 function kicked(reason) {
 if (channel) { channel.unsubscribe(); channel = null; }
 unsubscribeThreads();
+unsubscribeReports();
+if (reportsBtn) reportsBtn.classList.add('hidden');
+if (reportsBadge) reportsBadge.classList.add('hidden');
+if (reportsOverlay) reportsOverlay.classList.add('hidden');
 if (threadsPanel) { threadsPanel.classList.remove('ready'); }
 if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
 if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('signed-on'); }
@@ -1680,6 +1765,121 @@ if ($('rouletteBack')) $('rouletteBack').onclick = function () { closeMobileRoul
    the same as the side panel, which visitors already see before they enter */
 if (rouletteToggleBtn) rouletteToggleBtn.classList.add('ready');
 
+/* ---------- draggable / sweepable fab bubbles ----------
+   Either bubble can be dragged anywhere on screen, and dragged most of the way off the left or
+   right edge to sweep it out of the way -- only a small tab is left peeking in from that edge,
+   and tapping the tab brings the whole bubble back to right where it was. The two bubbles are
+   independent of one another: moving or sweeping one never touches the other's position.
+   Position (and docked/undocked state) is remembered per browser, the same way the Online/
+   Friends panel's size is above -- one localStorage key per bubble (gc_fab_thread /
+   gc_fab_roulette).
+
+   Positioning strategy: until the very first drag, a bubble is left entirely alone -- it keeps
+   whatever position the stylesheet gives it (including the "centred as a pair" rule at the
+   bottom of style.css). The first pointerdown that turns into an actual drag switches it to
+   inline left/top, with right/bottom/transform cleared so nothing in the stylesheet can fight
+   the JS-driven position (an explicit inline style always wins over a stylesheet rule, media
+   queries included). From that point on this bubble is on its own. */
+function makeFabDraggable(btn, storageKey) {
+if (!btn) return;
+var SIZE = 46, TAB = 14, MARGIN = 6, DOCK_FRACTION = 0.55;
+var dragging = false, moved = false, docked = false, edge = null;
+var startX = 0, startY = 0, startLeft = 0, startTop = 0;
+var freeX = null, freeY = null; // last undocked position -- what a tap on the docked tab restores
+var savedLabel = null; // aria-label at the moment of docking (the toggle handlers keep this current while undocked, e.g. "Open threads board" vs "Back to chat"), restored verbatim on undock
+
+function clampFree(x, y) {
+var maxX = window.innerWidth - SIZE - MARGIN, maxY = window.innerHeight - SIZE - MARGIN;
+return { x: Math.max(MARGIN, Math.min(maxX, x)), y: Math.max(MARGIN, Math.min(maxY, y)) };
+}
+function applyPos(x, y) {
+btn.style.left = x + 'px'; btn.style.top = y + 'px';
+btn.style.right = 'auto'; btn.style.bottom = 'auto'; btn.style.transform = 'none';
+}
+function save() {
+try { localStorage.setItem(storageKey, JSON.stringify({ x: freeX, y: freeY, docked: docked, edge: edge })); } catch (e) {}
+}
+function setFree(x, y, skipSave) {
+var c = clampFree(x, y);
+docked = false; edge = null; freeX = c.x; freeY = c.y;
+applyPos(c.x, c.y);
+btn.classList.remove('fab-docked');
+if (savedLabel) { btn.setAttribute('aria-label', savedLabel); savedLabel = null; }
+if (!skipSave) save();
+}
+function setDocked(which, y, skipSave) {
+if (!docked) savedLabel = btn.getAttribute('aria-label'); // capture the live label once, not on every reflow
+docked = true; edge = which;
+var cy = clampFree(0, y).y;
+applyPos(which === 'left' ? -(SIZE - TAB) : window.innerWidth - TAB, cy);
+btn.classList.add('fab-docked');
+btn.setAttribute('aria-label', 'Bring back the ' + (storageKey.indexOf('roulette') >= 0 ? 'roulette' : 'threads') + ' button');
+if (!skipSave) save();
+}
+
+btn.addEventListener('pointerdown', function (e) {
+if (e.isPrimary === false) return;
+var r = btn.getBoundingClientRect();
+startX = e.clientX; startY = e.clientY; startLeft = r.left; startTop = r.top;
+moved = false; dragging = true;
+try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+});
+btn.addEventListener('pointermove', function (e) {
+if (!dragging) return;
+var dx = e.clientX - startX, dy = e.clientY - startY;
+if (!moved) {
+if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+moved = true; btn.classList.add('fab-dragging');
+}
+e.preventDefault();
+var x = Math.max(-SIZE, Math.min(window.innerWidth, startLeft + dx));
+var y = Math.max(MARGIN, Math.min(window.innerHeight - SIZE - MARGIN, startTop + dy));
+applyPos(x, y);
+});
+function endDrag(e) {
+if (!dragging) return;
+dragging = false;
+try { btn.releasePointerCapture(e.pointerId); } catch (err) {}
+btn.classList.remove('fab-dragging');
+if (!moved) return; // a plain tap -- the click handler below decides what that means
+var r = btn.getBoundingClientRect();
+if (r.left <= -(SIZE * DOCK_FRACTION)) setDocked('left', r.top);
+else if (r.right >= window.innerWidth + SIZE * DOCK_FRACTION) setDocked('right', r.top);
+else setFree(r.left, r.top);
+}
+btn.addEventListener('pointerup', endDrag);
+btn.addEventListener('pointercancel', endDrag);
+
+/* The click that follows a drag's pointerup has to be told apart from a genuine tap: swallow
+   it once (and reset) when this gesture just moved the bubble, and treat a tap on an already-
+   docked tab as "bring it back" instead of running the normal open/close toggle. Wrapping the
+   existing onclick (rather than adding a second listener) sidesteps any question of which
+   listener on the same element would run first. */
+var originalClick = btn.onclick;
+btn.onclick = function (e) {
+if (moved) { moved = false; return; }
+if (docked) { setFree(freeX != null ? freeX : startLeft, freeY != null ? freeY : startTop); return; }
+if (originalClick) originalClick.call(btn, e);
+};
+
+function reflow() {
+if (docked) setDocked(edge, btn.getBoundingClientRect().top, true);
+else if (freeX != null) setFree(freeX, freeY, true);
+}
+window.addEventListener('resize', reflow);
+
+try {
+var saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+freeX = saved.x; freeY = saved.y;
+if (saved.docked) setDocked(saved.edge === 'right' ? 'right' : 'left', saved.y, true);
+else setFree(saved.x, saved.y, true);
+}
+} catch (e) {}
+}
+makeFabDraggable(threadToggleBtn, 'gc_fab_thread');
+makeFabDraggable(rouletteToggleBtn, 'gc_fab_roulette');
+
 /* ---------- saving an anonymous character with an email ----------
    An anonymous account is only ever as durable as this browser's localStorage: a different
    device, a private window, or a cleared history means a brand new account id, which is why
@@ -1844,7 +2044,7 @@ async function join() {
    Email sign-on is exempt: that account's real name is looked up after authenticating. */
 var n = (!emailMode && lockedName) ? lockedName : $('sn').value.trim(); fail('');
 if (!n) n = randomName();
-if (!/^[\w .'-]{2,16}$/.test(n)) { fail('2–16 letters, numbers, spaces or . \' -'); return; }
+if (!NAME_RE.test(n)) { fail('2–16 letters (any language), numbers, spaces or . \' -'); return; }
 if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0) { fail('Backend not configured — edit js/config.js.'); return; }
 if (!window.supabase) { fail('Could not load the chat library. Check your connection.'); return; }
 var adminEmailVal, adminPasswordVal;
@@ -2015,7 +2215,59 @@ $('join').onclick = join;
 $('sn').onkeydown = function (e) { if (e.key === 'Enter') join(); };
 if (adminEmail) adminEmail.onkeydown = function (e) { if (e.key === 'Enter') join(); };
 if (adminPassword) adminPassword.onkeydown = function (e) { if (e.key === 'Enter') join(); };
+
+/* ---------- access-key gate ----------
+   Testing is invite-only right now: #joinFields (the character-name/sign-in form) stays hidden
+   behind #gateFields until an access code checks out against the access_keys table (see
+   supabase/access_keys_feature.sql). Verification goes through the verify-access-key edge
+   function rather than a direct table read -- that table has no client-facing RLS policies at
+   all, so it isn't readable OR writable by anon/authenticated clients, only by the function's
+   service-role key. Codes are reusable until an admin flips a row's `revoked` flag to true in
+   the Supabase table editor: there's no single-use consumption and no in-app key-management UI. */
+function gateFail(t) { if (gateErr) gateErr.textContent = t; }
+function unlockGate() {
+if (gateFields) gateFields.classList.add('hidden');
+if (joinFields) joinFields.classList.remove('hidden');
+}
+async function verifyAccessCode(code) {
+if (!C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0 || !window.supabase) return { ok: false, reason: 'unconfigured' };
+try {
+sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+var res = await sb.functions.invoke('verify-access-key', { body: { code: code } });
+if (res.error) return { ok: false, reason: 'server_error' };
+return res.data || { ok: false, reason: 'invalid' };
+} catch (e) { return { ok: false, reason: 'server_error' }; }
+}
+if (gateGo) {
+gateGo.onclick = async function () {
+var code = (accessCode.value || '').trim();
+gateFail('');
+if (!code) { gateFail('Enter your invite code.'); return; }
+gateGo.disabled = true; gateGo.textContent = 'Checking...';
+var r = await verifyAccessCode(code);
+gateGo.disabled = false; gateGo.textContent = 'Continue';
+if (r && r.ok) {
+try { localStorage.setItem('gc_access_code', code); } catch (e) {}
+unlockGate();
 $('sn').focus();
+} else {
+gateFail(r && r.reason === 'revoked' ? 'This code has been revoked.' : 'Invalid invite code.');
+}
+};
+}
+if (accessCode) accessCode.onkeydown = function (e) { if (e.key === 'Enter') gateGo.click(); };
+/* Silently re-check any code this device already unlocked with, so a returning tester doesn't
+   have to retype it every visit -- unless it's been revoked since, in which case the gate stays
+   up and the stale code is dropped rather than left to fail forever on every future load. */
+(function checkStoredAccessCode() {
+var stored = null;
+try { stored = localStorage.getItem('gc_access_code'); } catch (e) {}
+if (!stored) { if (accessCode) accessCode.focus(); return; }
+verifyAccessCode(stored).then(function (r) {
+if (r && r.ok) { unlockGate(); $('sn').focus(); }
+else { try { localStorage.removeItem('gc_access_code'); } catch (e) {} if (accessCode) accessCode.focus(); }
+});
+})();
 
 /* ---------- PWA service worker ---------- */
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
