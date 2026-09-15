@@ -1,11 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs><radialGradient id="g" cx="50%" cy="20%" r="80%"><stop offset="0" stop-color="#2e261d"/><stop offset="1" stop-color="#0b0a09"/></radialGradient>
-  <radialGradient id="r" cx="35%" cy="35%" r="70%"><stop offset="0" stop-color="#ff6b5a"/><stop offset=".6" stop-color="#8a0f0a"/><stop offset="1" stop-color="#3a0402"/></radialGradient></defs>
-  <rect width="512" height="512" fill="url(#g)"/>
-  <rect x="40" y="40" width="432" height="432" fill="none" stroke="#c9a24a" stroke-width="10"/>
-  <rect x="58" y="58" width="396" height="396" fill="none" stroke="#6e5323" stroke-width="4"/>
-  <path d="M40 40h70v10H50v60H40zM472 40v70h-10V50h-60V40zM40 472v-70h10v60h60v10zM472 472h-70v-10h60v-60h10z" fill="#f1d98a"/>
-  <rect x="222" y="222" width="68" height="68" transform="rotate(45 256 256)" fill="url(#r)" stroke="#6e5323" stroke-width="6"/>
-  <text x="256" y="150" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-weight="700" font-size="74" fill="#c9a24a">GC</text>
-  <text x="256" y="405" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-weight="700" font-size="74" fill="#c9a24a">2000</text>
+<defs>
+<radialGradient id="bgGlow" cx="50%" cy="60%" r="68%">
+<stop offset="0%" stop-color="#3a2f22"/>
+<stop offset="55%" stop-color="#221b14"/>
+<stop offset="100%" stop-color="#120f0d"/>
+</radialGradient>
+<radialGradient id="ltFlame" cx="50%" cy="74%" r="74%">
+<stop offset="0%" stop-color="#e58bff"/><stop offset="38%" stop-color="#c33cff"/>
+<stop offset="72%" stop-color="#8f1fe0"/><stop offset="100%" stop-color="#5c0fa6"/>
+</radialGradient>
+<radialGradient id="ltCore" cx="50%" cy="72%" r="72%">
+<stop offset="0%" stop-color="#f7d4ff"/><stop offset="55%" stop-color="#e072ff"/>
+<stop offset="100%" stop-color="#c33cff"/>
+</radialGradient>
+</defs>
+<rect width="512" height="512" fill="url(#bgGlow)"/>
+<g transform="translate(166,106) scale(10)">
+<path d="M9 4.2V2.9" fill="none" stroke="#c9a24a" stroke-width="1.1"/>
+<circle cx="9" cy="2.1" r="1.25" fill="none" stroke="#c9a24a" stroke-width="1.1"/>
+<path d="M5.6 4.2h6.8l1.5 3H4.1z" fill="#c9a24a" stroke="#6e5323" stroke-width="0.6" stroke-linejoin="round"/>
+<rect x="4.6" y="7.2" width="8.8" height="16.4" rx="0.6" fill="rgba(186,70,255,.3)"/>
+<path fill="url(#ltFlame)" d="M9 12.2c2.7 2.7 3.2 4.6 3.2 6.1 0 2.1-1.5 3.6-3.2 3.6s-3.2-1.5-3.2-3.6c0-1.5.5-3.4 3.2-6.1z"/>
+<path fill="url(#ltCore)" d="M9 15.4c1.4 1.6 1.7 2.7 1.7 3.5 0 1.2-.8 2-1.7 2s-1.7-.8-1.7-2c0-.8.3-1.9 1.7-3.5z"/>
+<rect x="4.6" y="7.2" width="8.8" height="16.4" rx="0.6" fill="none" stroke="#c9a24a" stroke-width="1.1"/>
+<path d="M4.6 11.3h8.8M4.6 19.5h8.8" fill="none" stroke="#6e5323" stroke-width="0.7"/>
+<path d="M4.9 23.6h8.2l1.4 3H3.5z" fill="#c9a24a" stroke="#6e5323" stroke-width="0.6" stroke-linejoin="round"/>
+</g>
 </svg>
