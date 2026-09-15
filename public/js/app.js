@@ -2582,6 +2582,17 @@ if (document.hidden) bumpTitle();
 });
 channel.on('presence', { event: 'leave' }, function (p) { if (p.leftPresences[0]) addSys(p.leftPresences[0].name + ' has left the room.'); });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + (C.ROOM || 'main') }, function (p) { handleMessage(p.new); });
+/* Main-room housekeeping (messages_trim_room, see schema.sql) deletes the oldest room message
+   every time the 100-cap is exceeded by a new one, so everyone else's log needs to drop that row
+   live too, not just on next reload. DELETE payloads only ever carry the primary key under default
+   replica identity, so there's no room/recipient_id to filter server-side on here -- harmless,
+   since the trigger only ever deletes room messages and removing an id that isn't on screen (a
+   whisper, or nothing at all) is a no-op. */
+channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, function (p) {
+var mid = p.old && p.old.id; if (mid == null) return;
+var el = log.querySelector('.m[data-mid="' + mid + '"]'); if (el) el.remove();
+delete msgCache[mid];
+});
 /* Read receipts: rows naming me as the peer are marks other people set after reading what I sent
    them. INSERT covers the first time someone reads a given whisper conversation, UPDATE covers
    every time after that (dm_reads has one row per pair, upserted in place, not a new row each
