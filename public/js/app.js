@@ -3310,7 +3310,7 @@ channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user
 var prevLevel = userStats[p.new.user_id] ? userStats[p.new.user_id].level : null;
 userStats[p.new.user_id] = p.new;
 refreshLevelBadges(p.new.user_id);
-console.log('[gc-levelup-debug]', { userId: p.new.user_id, prevLevel: prevLevel, newLevel: p.new.level, hasPeople: !!people[p.new.user_id] });
+console.log('[gc-levelup-debug] ' + JSON.stringify({ userId: p.new.user_id, prevLevel: prevLevel, newLevel: p.new.level, hasPeople: !!people[p.new.user_id], meId: me && me.id }));
 if (prevLevel != null && p.new.level > prevLevel && people[p.new.user_id]) {
 addSys('🎉 ' + people[p.new.user_id].name + ' reached Level ' + p.new.level + '!');
 }
