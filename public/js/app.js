@@ -1060,6 +1060,10 @@ if (leaderboardList) {
    overlay (z-index 70) required. */
 leaderboardList.addEventListener('click', function (e) {
 var row = e.target.closest('.lb-row[data-id]'); if (!row || row.dataset.id === me.id) return;
+/* Without this, the same click that opens the menu also bubbles up to the document-level
+   "click outside closes the menu" listener (see openMenu below), which would strip the 'open'
+   class in the same tick and make the menu flash open and shut. ulist/flist do the same. */
+e.stopPropagation();
 openMenu(row.dataset.id, row, row.dataset.name);
 });
 leaderboardList.addEventListener('keydown', function (e) {
