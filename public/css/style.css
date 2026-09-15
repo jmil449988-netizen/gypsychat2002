@@ -121,12 +121,13 @@ border-bottom:1px solid var(--gold-lo);text-shadow:0 1px 0 #000}
 .users .list div.on{color:#e2c4ff}
 .users .list div.blocked{color:#5f5648;text-decoration:line-through}
 .users .list div.blocked::before{background:#3a3026;box-shadow:none}
-.nmenu{position:fixed;z-index:60;display:none;min-width:140px;padding:4px;
+.nmenu{position:fixed;z-index:60;display:none;min-width:190px;padding:4px;
 background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double var(--gold-lo);box-shadow:0 0 0 1px #000,0 8px 24px #000}
 .nmenu.open{display:block}
-.nmenu .hd{display:flex;align-items:center;justify-content:center;gap:8px;font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);padding:6px 10px 8px;border-bottom:1px solid var(--gold-lo);margin-bottom:3px;text-align:center}
-.nmenu .hd .hd-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.nmenu .hd .ava-menu{width:30px;height:30px;font-size:14px;margin-right:0;flex:none;border-width:2px}
+.nmenu .hd{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 8px;font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);padding:8px 10px 10px;border-bottom:1px solid var(--gold-lo);margin-bottom:3px;text-align:center}
+.nmenu .hd .hd-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.nmenu .hd .ava-menu{width:54px;height:54px;font-size:22px;margin-right:0;flex:none;border-width:3px}
+.nmenu .hd .lvl{margin-left:0}
 .nmenu button{display:block;width:100%;text-align:left;font:inherit;color:var(--bone);background:none;border:1px solid transparent;padding:5px 8px;cursor:pointer}
 .nmenu button:hover,.nmenu button:focus-visible{color:var(--gold-hi);border-color:var(--gold-lo);background:rgba(201,162,74,.1);outline:none}
 .nmenu button.danger{color:#e07a7a}
@@ -374,11 +375,11 @@ background:linear-gradient(180deg,#0f0d0b,#171310);border:1px solid var(--gold-l
    it full-size in the lightbox (openLightbox in app.js). */
 .log img.gif,.im .ilog img.gif{max-width:160px;max-height:160px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000;cursor:zoom-in;transition:filter .15s ease}
 .log img.gif:hover,.im .ilog img.gif:hover{filter:brightness(1.15)}
-.ava{width:18px;height:18px;border-radius:50%;object-fit:cover;vertical-align:-4px;margin-right:4px;display:inline-block;border:1px solid var(--gold-lo)}
-.ava-fallback{width:18px;height:18px;border-radius:50%;background:#2b2521;color:var(--gold);font:700 10px Cinzel,Georgia,serif;display:inline-flex;align-items:center;justify-content:center;vertical-align:-4px;margin-right:4px;border:1px solid var(--gold-lo)}
-.users .list div .ava,.users .list div .ava-fallback{width:15px;height:15px;font-size:9px;vertical-align:-3px}
+.ava{width:23px;height:23px;border-radius:50%;object-fit:cover;vertical-align:-6px;margin-right:5px;display:inline-block;border:1px solid var(--gold-lo)}
+.ava-fallback{width:23px;height:23px;border-radius:50%;background:#2b2521;color:var(--gold);font:700 12px Cinzel,Georgia,serif;display:inline-flex;align-items:center;justify-content:center;vertical-align:-6px;margin-right:5px;border:1px solid var(--gold-lo)}
+.users .list div .ava,.users .list div .ava-fallback{width:19px;height:19px;font-size:11px;vertical-align:-5px}
 .wava{display:inline-flex;vertical-align:middle;margin-right:2px}
-.wava .ava,.wava .ava-fallback{width:16px;height:16px;font-size:9px;margin-right:0;border-color:#7a4bb0}
+.wava .ava,.wava .ava-fallback{width:21px;height:21px;font-size:11px;margin-right:0;border-color:#7a4bb0}
 .mention{color:var(--gold-hi);font-weight:700}
 .m.mention-me{background:rgba(201,162,74,.14);box-shadow:inset 2px 0 0 var(--gold)}
 .mention-menu{position:fixed;z-index:56;display:none;flex-direction:column;min-width:150px;max-width:240px;max-height:190px;overflow-y:auto;
@@ -654,6 +655,22 @@ box-shadow:0 0 0 1px #000}
 .report-row .rr-select{height:26px;font-size:12px;background:rgba(0,0,0,.35);color:var(--bone);border:1px solid var(--gold-lo);border-radius:4px;padding:0 4px;max-width:100%}
 .report-row .rr-actions .rr-apply{color:#e07a7a;border-color:#7a2a2a}
 .report-row .rr-actions .rr-apply:hover{color:#ff9c9c;border-color:#7a2a2a;background:rgba(179,38,30,.15)}
+
+/* Leaderboard -- top players by reactions received, reusing .reports-modal/.reports-list for the
+   dialog chrome (see index.html). Rows are their own thing (.lb-row) since they show an avatar,
+   name, level badge and a count rather than a report's quote/reason/actions. */
+.leaderboard-modal{max-width:440px}
+.lb-row{display:flex;align-items:center;gap:8px;border:1px solid var(--gold-lo);background:rgba(0,0,0,.25);padding:7px 10px;margin-bottom:6px;cursor:pointer}
+.lb-row:hover,.lb-row:focus-visible{background:rgba(201,162,74,.12);outline:none}
+.lb-row.lb-top{background:rgba(201,162,74,.09);border-color:var(--gold-hi)}
+.lb-row.lb-top:hover{background:rgba(201,162,74,.18)}
+.lb-rank{flex:none;width:28px;text-align:center;font:700 12px Cinzel,Georgia,serif;color:#8f8371}
+.lb-medal{flex:none;width:28px;text-align:center;font-size:18px}
+.lb-row .lb-ava{margin-right:0}
+.lb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bone);font-weight:700}
+.lb-name.admin{color:var(--admin);text-shadow:0 0 7px rgba(209,59,47,.4)}
+.lb-row .lvl{flex:none}
+.lb-count{flex:none;font-size:11px;color:#8f8371;white-space:nowrap}
 
 /* "Report a bug" -- composer (.bug-report-modal, reached from the status-bar "..." popover) and
    the admin review queue (.bug-reports-modal, same .reports-modal/.report-row shape as the abuse
