@@ -2678,7 +2678,7 @@ sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
 if (!emailMode && !resuming) {
 var kv = await verifyAccessCode(keyCode);
 if (!kv || !kv.ok) {
-throw new Error(kv && kv.reason === 'revoked' ? 'This key has been revoked.' : 'Invalid key.');
+throw new Error(kv && kv.reason === 'revoked' ? 'This key has been revoked.' : kv && kv.reason === 'ip_locked' ? 'This key is already in use on another network.' : 'Invalid key.');
 }
 try { localStorage.setItem('gc_access_code', keyCode); } catch (e) {}
 }
@@ -2883,7 +2883,9 @@ if (adminPassword) adminPassword.onkeydown = function (e) { if (e.key === 'Enter
    read -- that table has no client-facing RLS policies at all, so it isn't readable OR
    writable by anon/authenticated clients, only by the function's service-role key. Codes are
    reusable until an admin flips a row's `revoked` flag to true in the Supabase table editor:
-   there's no single-use consumption and no in-app key-management UI.
+   there's no single-use consumption and no in-app key-management UI. Each code is also locked
+   to whichever IP first redeems it (see the edge function), so a 'revoked'-shaped rejection can
+   also come back as 'ip_locked' if someone else's code is being tried on this network.
 
    NOTE for when this goes live and the key requirement comes out: remove the #gateFields block
    from index.html, drop the keyCode/verifyAccessCode bits from join() (both the empty-check
