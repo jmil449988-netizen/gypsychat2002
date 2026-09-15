@@ -19,6 +19,9 @@ body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-i
 --stone:#141210; --stone-2:#1f1b17; --stone-3:#2b2521;
 --gold:#c9a24a; --gold-hi:#f1d98a; --gold-lo:#6e5323;
 --bone:#d8c9a6; --ash:#8f8371; --blood:#b3261e; --ember:#e08a2c; --leaf:#5aa15a;
+/* Level-badge tiers, ten levels wide -- see levelTier() in app.js for which level maps to which. */
+--lvl-1:#eef0e6; --lvl-2:#4d79e6; --lvl-3:#a259e6; --lvl-4:#f1d98a; --lvl-5:#ff5fa8; --lvl-6:#2ed3e0;
+--lvl-7:#39ff6a; --lvl-8:#ff8a2b; --lvl-9:#c9d6f2; --lvl-10:#f5f8ff; --lvl-11:#ffdf7e;
 --me:#f1d98a; --them:#e6b25a; --sys:#8f8371;
 }
 *{box-sizing:border-box}
@@ -339,6 +342,21 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
    (see levelBadgeHtml); [hidden] keeps the node in the DOM so a live level-up just reveals and
    updates it rather than needing new markup spliced in. */
 .lvl{font-size:9px;color:var(--gold);border:1px solid var(--gold-lo);padding:0 3px;margin-left:4px;letter-spacing:.5px;vertical-align:1px}
+/* Ten-wide color tiers (1-9 through 90-99), then a gold eleventh for 100+ -- see levelTier() in
+   app.js. Glow grows with the tiers so a high level reads as "more" even before you parse the
+   number, capping with both a text glow and a soft box-shadow on the crescent/full/gold-moon tiers
+   to make the moon icon actually look lit rather than just tinted. */
+.lvl-t1{color:var(--lvl-1);border-color:rgba(238,240,230,.4)}
+.lvl-t2{color:var(--lvl-2);border-color:rgba(77,121,230,.5)}
+.lvl-t3{color:var(--lvl-3);border-color:rgba(162,89,230,.5)}
+.lvl-t4{color:var(--lvl-4);border-color:rgba(241,217,138,.6)}
+.lvl-t5{color:var(--lvl-5);border-color:rgba(255,95,168,.5)}
+.lvl-t6{color:var(--lvl-6);border-color:rgba(46,211,224,.5)}
+.lvl-t7{color:var(--lvl-7);border-color:rgba(57,255,106,.5);text-shadow:0 0 4px rgba(57,255,106,.6)}
+.lvl-t8{color:var(--lvl-8);border-color:rgba(255,138,43,.6);text-shadow:0 0 4px rgba(255,138,43,.55)}
+.lvl-t9{color:var(--lvl-9);border-color:rgba(201,214,242,.55);text-shadow:0 0 4px rgba(201,214,242,.5)}
+.lvl-t10{color:var(--lvl-10);border-color:rgba(245,248,255,.65);text-shadow:0 0 5px rgba(245,248,255,.65)}
+.lvl-t11{color:var(--lvl-11);border-color:var(--gold-hi);text-shadow:0 0 6px rgba(255,223,126,.75);box-shadow:0 0 6px rgba(255,223,126,.35)}
 .gifpicker{position:fixed;z-index:56;display:none;flex-direction:column;width:280px;max-width:calc(100vw - 20px);
 background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double var(--gold-lo);box-shadow:0 0 0 1px #000,0 8px 24px #000}
 .gifpicker.open{display:flex}
