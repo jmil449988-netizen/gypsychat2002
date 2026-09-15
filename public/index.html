@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=47">
+<link rel="stylesheet" href="./css/style.css?v=48">
 </head>
 <body>
 <div class="gc-root">
@@ -76,6 +76,7 @@
 <button class="btn emo" id="emoBtn" aria-label="Insert emoji" title="Emoji">😊</button>
 <button class="btn gif" id="gifBtn" aria-label="Search GIFs" title="GIF">GIF</button>
 <div class="cooldown hidden" id="cooldownMsg" role="status" aria-live="polite"></div>
+<div class="typing-indicator hidden" id="typingIndicator" aria-live="polite"></div>
 <textarea id="msg" class="sunk" maxlength="140" placeholder="Speak... Enter to send"></textarea>
 <button class="btn" id="send">Send</button>
 </div>
@@ -226,6 +227,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=1"></script>
-<script src="./js/app.js?v=61"></script>
+<script src="./js/app.js?v=62"></script>
 </body>
 </html>
