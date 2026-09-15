@@ -202,6 +202,13 @@ outline:1px solid #000;box-shadow:0 0 0 2px var(--gold),0 0 0 3px #000,0 0 28px 
 .modal-hd{font:700 16px Cinzel,"Trajan Pro",Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-shadow:0 0 10px rgba(201,162,74,.55);margin-bottom:8px}
 .modal-body{font:14px "IM Fell English",Georgia,serif;color:var(--bone);line-height:1.5;margin-bottom:14px}
 .modal .btn{min-width:90px}
+/* Image lightbox -- reuses .modal-overlay for the full-screen dark backdrop and centering, but
+   skips the .modal card: just the picture at (almost) full size, tap/click-outside or ✕ to close. */
+.lightbox-overlay{z-index:90;background:rgba(0,0,0,.88);padding:40px 16px}
+.lightbox-img{max-width:92vw;max-height:88vh;display:block;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000,0 0 40px #000}
+.lightbox-close{position:fixed;top:14px;right:16px;width:34px;height:32px;line-height:28px;font:700 15px Cinzel,Georgia,serif;
+color:var(--gold);background:#0f0d0b;border:1px solid var(--gold-lo);cursor:pointer;padding:0}
+.lightbox-close:hover,.lightbox-close:focus-visible{color:var(--gold-hi);border-color:var(--gold);outline:none}
 .btn{font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);cursor:pointer;min-width:66px;padding:0 12px;
 background:linear-gradient(180deg,#3a3026,#1c1712);border:1px solid var(--gold-lo);
 box-shadow:inset 0 1px 0 rgba(241,217,138,.25),inset 0 -2px 4px #000,0 0 0 1px #000;text-shadow:0 1px 0 #000}
@@ -228,7 +235,10 @@ background:linear-gradient(180deg,#0f0d0b,#171310);border:1px solid var(--gold-l
 .gifpicker .gresults button:hover,.gifpicker .gresults button:focus-visible{border-color:var(--gold);box-shadow:0 0 8px rgba(201,162,74,.6);outline:none}
 .gifpicker .gresults img{width:100%;height:100%;object-fit:contain;background:#0f0d0b;display:block}
 .gifpicker .gmsg{grid-column:1 / -1;padding:10px 4px;color:var(--ash);font-style:italic;font-size:12px;text-align:center}
-.log img.gif,.im .ilog img.gif{max-width:220px;max-height:220px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
+/* Posted pictures show as small thumbnails everywhere, never at native size -- click one to see
+   it full-size in the lightbox (openLightbox in app.js). */
+.log img.gif,.im .ilog img.gif{max-width:160px;max-height:160px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000;cursor:zoom-in;transition:filter .15s ease}
+.log img.gif:hover,.im .ilog img.gif:hover{filter:brightness(1.15)}
 .ava{width:18px;height:18px;border-radius:50%;object-fit:cover;vertical-align:-4px;margin-right:4px;display:inline-block;border:1px solid var(--gold-lo)}
 .ava-fallback{width:18px;height:18px;border-radius:50%;background:#2b2521;color:var(--gold);font:700 10px Cinzel,Georgia,serif;display:inline-flex;align-items:center;justify-content:center;vertical-align:-4px;margin-right:4px;border:1px solid var(--gold-lo)}
 .users .list div .ava,.users .list div .ava-fallback{width:15px;height:15px;font-size:9px;vertical-align:-3px}
@@ -323,24 +333,25 @@ pointer-events:none;user-select:none;filter:brightness(1.3)}
 .title .lantern:last-of-type{animation-duration:2.7s;animation-delay:-1.1s}
 }
 
-/* ---------- threads board (desktop-only side panel; blank space to the right of the room) ---------- */
-.threads-panel{position:fixed;top:6px;bottom:6px;left:calc(50% + 394px);width:260px;display:none;flex-direction:column;
-background:linear-gradient(180deg,var(--stone-2),var(--stone));border:3px double var(--gold-lo);outline:1px solid #000;
-box-shadow:0 0 0 2px var(--gold-lo),0 0 0 3px #000,0 0 24px #000,inset 0 0 30px #000;
-transition:width .22s ease;overflow:hidden;z-index:8}
-@media (min-width:1340px){.threads-panel.ready{display:flex}}
-.win{transition:opacity .22s ease, transform .22s ease}
-.gc-root.thread-open .win{opacity:.28;filter:saturate(.4);transform:scale(.98);pointer-events:none}
-.gc-root.thread-open .threads-panel{width:min(640px,calc(50vw - 402px))}
-.tp-hd{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 10px 6px;flex:none;
+/* ---------- threads board: a standalone "/gen/ — General" board page ----------
+   One single board, no category tabs (per the brief, that can come later). It always opens as a
+   full-page takeover -- replacing the chat window entirely, at EVERY viewport width -- rather
+   than living in a cramped sidebar next to a dimmed chat. That used to be two different things
+   (a persistent 260px sidebar above 1340px that widened when a thread was open, versus a
+   full-screen swap below that width); now it's the one full-page layout everywhere, so a wide
+   desktop window gets a proper 4chan-style catalog (a wrapping grid of small-thumbnail tiles)
+   instead of a squeezed column, and a phone gets exactly what it already got. */
+.threads-panel{display:none;flex-direction:column;
+background:linear-gradient(180deg,var(--stone-2),var(--stone));overflow:hidden;z-index:8}
+.tp-hd{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 10px 8px;flex:none;
 background:linear-gradient(180deg,#2e261d,#1a1511);border-bottom:2px solid var(--gold-lo);box-shadow:0 2px 0 #000;
-font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-shadow:0 0 8px rgba(201,162,74,.5)}
+font:700 15px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-shadow:0 0 8px rgba(201,162,74,.5)}
 .tp-back{font:700 13px Cinzel,Georgia,serif;color:var(--gold);background:none;border:1px solid var(--gold-lo);width:24px;height:22px;line-height:18px;cursor:pointer;padding:0;flex:none}
 .tp-back:hover{color:var(--gold-hi);border-color:var(--gold)}
 .tp-list,.tp-detail{display:flex;flex-direction:column;flex:1;min-height:0}
-.tp-newwrap{padding:8px;flex:none}
+.tp-newwrap{padding:10px;flex:none;width:100%;max-width:700px;margin:0 auto;box-sizing:border-box}
 .tp-new{width:100%}
-.tp-newpost{padding:0 8px 8px;display:flex;flex-direction:column;gap:6px;flex:none}
+.tp-newpost{padding:0 10px 10px;display:flex;flex-direction:column;gap:6px;flex:none;width:100%;max-width:700px;margin:0 auto;box-sizing:border-box}
 .tp-newpost textarea,.tp-reply textarea{font:inherit;color:var(--bone);resize:none;padding:6px 8px;outline:none;caret-color:var(--gold-hi)}
 .tp-newpost textarea{height:64px}
 .tp-newpost textarea:focus,.tp-reply textarea:focus{box-shadow:inset 0 0 18px #000,0 0 0 1px var(--gold)}
@@ -352,41 +363,50 @@ font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-s
 background:var(--blood);border:1px solid #000;border-radius:50%;cursor:pointer}
 .tp-img-remove:hover{background:#d33}
 .tp-newactions{display:flex;gap:6px;justify-content:flex-end}
-.tp-items{flex:1;overflow-y:auto;padding:0 6px 8px;display:flex;flex-direction:column;gap:6px;scrollbar-color:var(--gold-lo) #0f0d0b}
-.tp-item{display:block;width:100%;text-align:left;padding:8px;cursor:pointer;font:inherit;color:var(--bone);background:#0f0d0b;border:1px solid #3a3026}
+/* Catalog grid, like 4chan's board index: small fixed-width tiles that wrap to fill however much
+   width the page has, instead of one narrow full-width column. */
+.tp-items{flex:1;overflow-y:auto;padding:12px;display:flex;flex-wrap:wrap;align-content:flex-start;justify-content:center;gap:10px;scrollbar-color:var(--gold-lo) #0f0d0b}
+.tp-item{display:flex;flex-direction:column;width:150px;text-align:left;padding:6px;cursor:pointer;font:inherit;color:var(--bone);background:#0f0d0b;border:1px solid #3a3026}
 .tp-item:hover,.tp-item:focus-visible{border-color:var(--gold);box-shadow:0 0 8px rgba(201,162,74,.4);outline:none}
-.tp-op{font:700 12px Cinzel,Georgia,serif;letter-spacing:.5px;color:var(--gold-hi);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tp-preview{font-size:12px;line-height:1.4;color:var(--bone);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
-.tp-meta{font-size:10px;color:var(--ash);margin-top:4px;font-style:italic}
-.tp-empty{padding:16px 8px;text-align:center;color:#5f5648;font-style:italic;font-size:12px}
-.tp-posts{flex:1;overflow-y:auto;padding:8px 10px;line-height:1.5;word-wrap:break-word;scrollbar-color:var(--gold-lo) #0f0d0b}
+.tp-op{font:700 11px Cinzel,Georgia,serif;letter-spacing:.5px;color:var(--gold-hi);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-preview{font-size:11px;line-height:1.35;color:var(--bone);overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical}
+.tp-meta{font-size:9px;color:var(--ash);margin-top:4px;font-style:italic}
+.tp-empty{padding:16px 8px;text-align:center;color:#5f5648;font-style:italic;font-size:12px;width:100%}
+.tp-posts{flex:1;overflow-y:auto;padding:10px 14px;line-height:1.5;word-wrap:break-word;scrollbar-color:var(--gold-lo) #0f0d0b;
+width:100%;max-width:900px;margin:0 auto;box-sizing:border-box}
 .tp-posts .tp-post{margin-bottom:8px}
 .tp-posts .tp-post b{font-weight:normal;font-family:Cinzel,Georgia,serif;font-size:12px;letter-spacing:.5px;color:var(--them)}
 .tp-posts .tp-post.op b{color:var(--me)}
 .tp-posts .tp-post .t{color:#5f5648;font-size:11px;margin-right:6px}
 .tp-posts .tp-loading{color:#5f5648;font-style:italic;font-size:12px;padding:8px}
-.tp-posts img.gif,.tp-posts img.tp-posted-img{max-width:200px;max-height:200px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
+/* Reply/OP pictures are thumbnails too -- click to open the lightbox (openLightbox in app.js) --
+   sized to match the room/whisper thumbnails (.log img.gif) rather than their old, larger 200px cap. */
+.tp-posts img.gif,.tp-posts img.tp-posted-img{max-width:160px;max-height:160px;display:block;margin-top:3px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000;cursor:zoom-in;transition:filter .15s ease}
+.tp-posts img.gif:hover,.tp-posts img.tp-posted-img:hover{filter:brightness(1.15)}
 .tp-del{display:inline-block;margin-left:8px;font-size:10px;line-height:14px;color:#e07a7a;background:none;border:1px solid #7a2a2a;padding:0 4px;cursor:pointer;vertical-align:middle}
 .tp-del:hover,.tp-del:focus-visible{color:#ff9c9c;border-color:#b3261e;background:rgba(179,38,30,.15);outline:none}
-.tp-thumb{width:100%;max-height:120px;object-fit:cover;display:block;margin-top:4px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
-.tp-reply{display:flex;gap:6px;padding:8px;border-top:1px solid var(--gold-lo);flex:none;align-items:flex-end}
+/* Catalog-tile thumbnail: small and fixed-size (like 4chan's ~125px tiles), not the old full-width
+   banner -- clicking it pops the lightbox directly rather than opening the thread (see the
+   tpItems click handler in app.js), same as 4chan's catalog. */
+.tp-thumb{width:100%;height:110px;object-fit:cover;display:block;margin-bottom:5px;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000;cursor:zoom-in;transition:filter .15s ease}
+.tp-thumb:hover{filter:brightness(1.15)}
+.tp-reply{display:flex;gap:6px;padding:8px;border-top:1px solid var(--gold-lo);flex:none;align-items:flex-end;width:100%;max-width:900px;margin:0 auto;box-sizing:border-box}
 .tp-reply-compose{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
 .tp-reply-compose textarea{height:44px}
 
-/* threads board — mobile toggle (no blank space on narrow viewports, so a floating button swaps
-   the whole screen between the chat window and the threads board instead of showing both) */
+/* threads board toggle: one floating button, at every viewport width, that swaps the whole screen
+   between the chat window and the threads board (see .mobile-threads-open below -- the class name
+   predates this being a desktop behaviour too, but nothing about it is mobile-specific anymore). */
 .thread-toggle-fab{display:none;position:fixed;right:12px;bottom:104px;z-index:55;width:46px;height:46px;padding:0;
 border-radius:50%;align-items:center;justify-content:center;font-size:20px;cursor:pointer;color:var(--gold-hi);
 background:radial-gradient(circle at 35% 30%,#3a3026,#1a1511 70%);border:2px solid var(--gold-lo);
 box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 10px rgba(201,162,74,.35)}
 .thread-toggle-fab:hover,.thread-toggle-fab:focus-visible{border-color:var(--gold);box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 16px rgba(201,162,74,.7);outline:none}
 .thread-toggle-fab.open{color:#fff;border-color:var(--gold)}
-@media (max-width:1339px){
-  .thread-toggle-fab.ready{display:flex}
-  .gc-root.mobile-threads-open .win{display:none}
-  .gc-root.mobile-threads-open .threads-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
-  height:100%;border-width:0;border-radius:0;z-index:40;transition:none}
-}
+.thread-toggle-fab.ready{display:flex}
+.gc-root.mobile-threads-open .win{display:none}
+.gc-root.mobile-threads-open .threads-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
+height:100%;border-width:0;border-radius:0;z-index:40}
 @media (max-width:500px){.thread-toggle-fab{bottom:100px;right:8px}}
 
 /* option to hide the whisper "tray" tabs (and any open whisper windows) entirely — a purely
