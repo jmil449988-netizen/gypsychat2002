@@ -486,7 +486,26 @@ if (e.key !== 'Escape') return;
 if (!$('warnOverlay').classList.contains('hidden')) $('warnOk').click();
 if (!$('infoOverlay').classList.contains('hidden')) $('infoOk').click();
 if ($('saveOverlay') && !$('saveOverlay').classList.contains('hidden')) $('saveOverlay').classList.add('hidden');
+if ($('imgLightbox') && !$('imgLightbox').classList.contains('hidden')) closeLightbox();
 });
+
+/* ---------- image lightbox: click any posted picture (room, whispers, threads) to see it full
+   size -- everywhere a picture is posted it's shown as a small thumbnail (see the img.gif/.tp-thumb/
+   .tp-posted-img size rules in the CSS), never at its native size, so this is the only way to see
+   the whole thing without leaving the page. Shared by every image click handler below rather than
+   each one building its own popup. */
+function openLightbox(src) {
+if (!src || !$('imgLightbox')) return;
+$('imgLightboxImg').src = src;
+$('imgLightbox').classList.remove('hidden');
+}
+function closeLightbox() {
+if (!$('imgLightbox')) return;
+$('imgLightbox').classList.add('hidden');
+$('imgLightboxImg').src = '';
+}
+if ($('imgLightboxClose')) $('imgLightboxClose').onclick = closeLightbox;
+if ($('imgLightbox')) $('imgLightbox').onclick = function (e) { if (e.target === $('imgLightbox')) closeLightbox(); };
 
 /* Giphy CDN links, or our own "thread-images" Storage bucket (see uploadImage below), only —
    keeps the message body allowlist tight so we never turn arbitrary pasted URLs into <img> tags.
@@ -707,6 +726,7 @@ var f = imgFile.files && imgFile.files[0]; imgFile.value = '';
 if (f) sendIMImage(id, f);
 };
 win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') minimizeIM(id); };
+win.log.onclick = function (e) { var img = e.target.closest('img.gif'); if (img) openLightbox(img.src); };
 el.addEventListener('pointerdown', function () { front(el); });
 var bar = el.querySelector('.bar');
 bar.addEventListener('pointerdown', function (e) {
@@ -911,6 +931,7 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clos
 /* Click a name right in the chat log to bring up the same menu (Whisper/Block/Report/Friend, plus
    Kick/Mute for admins) — no need to go hunting for them in the Online list first. */
 log.onclick = function (e) {
+var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
 var b = e.target.closest('.who[data-id]'); if (!b || b.dataset.id === me.id) return;
 e.stopPropagation(); openMenu(b.dataset.id, b, b.dataset.name);
 };
@@ -1484,8 +1505,11 @@ tpItems.innerHTML = threadsOrder.map(function (id) {
 var t = threadsCache[id]; if (!t) return '';
 var n = t.reply_count || 0;
 var preview = t.body ? '<div class="tp-preview">' + esc(String(t.body).slice(0, 180)) + '</div>' : '';
+/* Catalog-tile order (thumbnail first, like 4chan's catalog) rather than the old text-then-image
+   list layout -- see the .tp-thumb size rule in the CSS for why it's a fixed small square now
+   instead of a full-width banner. */
 var thumb = t.image_url ? '<img class="tp-thumb" src="' + esc(t.image_url) + '" alt="" loading="lazy">' : '';
-return '<button type="button" class="tp-item" data-id="' + id + '"><div class="tp-op">' + esc(t.op_name) + '</div>' + preview + thumb +
+return '<button type="button" class="tp-item" data-id="' + id + '">' + thumb + '<div class="tp-op">' + esc(t.op_name) + '</div>' + preview +
 '<div class="tp-meta">' + n + ' repl' + (n === 1 ? 'y' : 'ies') + ' · ' + timeAgo(t.bumped_at) + '</div></button>';
 }).join('');
 }
@@ -1549,6 +1573,7 @@ addSys('Reply deleted.');
 }
 if (tpPosts) {
 tpPosts.onclick = function (e) {
+var img = e.target.closest('img.gif, img.tp-posted-img'); if (img) { openLightbox(img.src); return; }
 var b = e.target.closest('.tp-del'); if (!b) return;
 e.stopPropagation();
 var tid = Number(b.dataset.thread);
@@ -1561,6 +1586,7 @@ if (!threadsCache[id]) return;
 closeGif();
 openThreadId = id; threadPostsSeen = {};
 tpList.classList.add('hidden'); tpDetail.classList.remove('hidden');
+var tpDetailHd = tpDetail.querySelector('.tp-hd span'); if (tpDetailHd) tpDetailHd.textContent = '/gen/ — No.' + id;
 if (gcRoot) gcRoot.classList.add('thread-open');
 tpPosts.innerHTML = '<div class="tp-loading">Loading…</div>';
 var t = threadsCache[id];
@@ -1647,7 +1673,12 @@ tpNewBtn.onclick = function () { tpNewPost.classList.remove('hidden'); tpNewBtn.
 tpNewCancel.onclick = function () { tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden'); tpNewBody.value = ''; clearPendingImage('new'); };
 tpNewSubmit.onclick = submitNewThread;
 tpNewBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitNewThread(); } };
-tpItems.onclick = function (e) { var b = e.target.closest('.tp-item'); if (!b) return; openThread(Number(b.dataset.id)); };
+tpItems.onclick = function (e) {
+/* Clicking the thumbnail itself pops the full image (4chan's catalog does the same) --
+   clicking anywhere else on the tile opens the thread. */
+var img = e.target.closest('.tp-thumb'); if (img) { e.stopPropagation(); openLightbox(img.src); return; }
+var b = e.target.closest('.tp-item'); if (!b) return; openThread(Number(b.dataset.id));
+};
 tpBack.onclick = closeThread;
 tpReplySend.onclick = submitReply;
 tpReplyBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitReply(); } };
