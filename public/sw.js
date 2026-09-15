@@ -3,8 +3,8 @@ Chat itself always needs a connection; this only makes the UI load offline.
 v2: bumped the cache name and hardened the fetch/install paths to bypass the HTTP cache — iOS
 Safari in particular can hold onto an old app.js/index.html far more stubbornly than desktop
 Chrome, which silently ran stale code (missing new features) even though the deploy succeeded. */
-var CACHE = 'gc2000-v95';
-var SHELL = ['./', './index.html', './css/style.css?v=55', './js/appconfig.js?v=2', './js/app.js?v=80', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
+var CACHE = 'gc2000-v96';
+var SHELL = ['./', './index.html', './css/style.css?v=55', './js/appconfig.js?v=2', './js/app.js?v=81', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png'];
 self.addEventListener('install', function (e) {
 e.waitUntil(
 caches.open(CACHE).then(function (c) {
@@ -50,7 +50,13 @@ return self.registration.showNotification(title, {
 body: body,
 tag: tag,
 icon: './icons/icon-192.png',
-badge: './icons/icon-192.png',
+/* NOT icon-192.png here -- Android renders `badge` using ONLY that image's alpha channel
+   (every opaque pixel becomes solid white, regardless of color), so handing it a full-color icon
+   that's opaque almost edge-to-edge produced a plain white square instead of a recognizable
+   shape. badge-96.png is a dedicated silhouette built for exactly this: one solid white lantern
+   shape on a transparent background, with the color/detail-heavy icon reserved for `icon` (the
+   large image shown in the notification body, which isn't put through this alpha-only treatment). */
+badge: './icons/badge-96.png',
 silent: false, // explicit, not just the default -- some WebKit versions have been inconsistent about treating an unset `silent` as audible
 data: { url: url }
 });
