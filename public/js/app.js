@@ -504,7 +504,7 @@ function fail(t) { $('err').textContent = t; }
    trg_gc_enforce_moderation trigger on `messages`) so it can't be bypassed by editing this file:
    this client-side state just mirrors what the server told us, to disable the compose box and
    show a countdown without waiting on a round trip for every keystroke. */
-var moderation = { cooldownUntil: 0, muted: false, mutedPermanent: false, offenseCount: 0 };
+var moderation = { cooldownUntil: 0, muted: false, mutedPermanent: false, mutedUntil: 0, offenseCount: 0 };
 var modTimer = null;
 function clearModTimer() { if (modTimer) { clearInterval(modTimer); modTimer = null; } }
 function lockThreadCompose(locked) {
@@ -517,7 +517,10 @@ function updateComposeLock() {
 var bar = $('cooldownMsg'), now = Date.now();
 if (moderation.muted) {
 msg.disabled = true; $('send').disabled = true; lockThreadCompose(true);
-bar.textContent = '🔇 Muted for repeated spam. Only an admin can lift this.';
+/* mutedUntil is only set for a timed admin mute (see muteUser()'s durationMs) -- a mute from
+   repeated spam, or one an admin imposed with no duration, is permanent and has no expiry. */
+bar.textContent = moderation.mutedPermanent ? '🔇 Muted. Only an admin can lift this.' :
+(moderation.mutedUntil > now ? '🔇 Muted until ' + fmt(moderation.mutedUntil) + '.' : '🔇 Muted. Only an admin can lift this.');
 bar.classList.remove('hidden'); bar.classList.add('muted');
 clearModTimer();
 return;
@@ -535,6 +538,7 @@ clearModTimer();
 function applyModeration(state) {
 moderation.muted = !!state.muted;
 moderation.mutedPermanent = !!state.mutedPermanent;
+moderation.mutedUntil = state.mutedUntil || 0;
 moderation.offenseCount = state.offenseCount || 0;
 moderation.cooldownUntil = state.cooldownUntil || 0;
 updateComposeLock();
@@ -1116,8 +1120,40 @@ if (rr) report(mm.senderId, mm.senderName, rr, mid, mm.body);
 /* ---------- reports queue (admins only) ----------
    report() above already worked client-side; it just had nowhere to write to until the reports
    table existed (see supabase/reports_feature.sql). This is the review side: a badge on a
-   status-bar button, a modal listing open reports, and Dismiss / Ban actions right on each row --
-   Ban reuses the existing kick() below rather than duplicating the bans upsert + broadcast. */
+   status-bar button, a modal listing open reports, and Dismiss / Discipline actions right on each
+   row -- the discipline picker below reuses the existing kick()/muteUser() (see further down,
+   both now take an optional duration) rather than duplicating the bans/chat_moderation writes. */
+var DISCIPLINE_OPTIONS = [
+['warn', 'Warn only (no punishment)'],
+['mute1h', 'Mute — 1 hour'],
+['mute24h', 'Mute — 24 hours'],
+['mutePerm', 'Mute — permanent'],
+['ban24h', 'Kick — 24 hours'],
+['ban7d', 'Kick — 7 days'],
+['banPerm', 'Kick — permanent']
+];
+function humanDuration(ms) {
+if (ms >= 86400000) { var d = Math.round(ms / 86400000); return d + ' day' + (d === 1 ? '' : 's'); }
+var h = Math.round(ms / 3600000); return h + ' hour' + (h === 1 ? '' : 's');
+}
+/* Applies whichever tier the admin picked in a report row's <select> and then resolves the
+   report as 'actioned'. 'warn' takes no punitive action at all -- it exists so an admin can
+   close out a report that had merit without muting/banning, distinct from Dismiss (which implies
+   the report didn't hold up). */
+async function applyDiscipline(action, id, name, reportId) {
+var HOUR = 3600000, DAY = 86400000;
+switch (action) {
+case 'warn': addSys('Noted -- ' + name + ' was warned (no punishment applied).'); break;
+case 'mute1h': await muteUser(id, name, HOUR); break;
+case 'mute24h': await muteUser(id, name, DAY); break;
+case 'mutePerm': await muteUser(id, name); break;
+case 'ban24h': await kick(id, name, 'Reported and kicked by ' + me.name, DAY); break;
+case 'ban7d': await kick(id, name, 'Reported and kicked by ' + me.name, 7 * DAY); break;
+case 'banPerm': await kick(id, name, 'Reported and banned by ' + me.name); break;
+default: return;
+}
+resolveReport(reportId, 'actioned');
+}
 function refreshReportsBadge() {
 if (!isAdmin || !reportsBadge || !sb) return;
 sb.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'open').then(function (r) {
@@ -1141,7 +1177,10 @@ return '<div class="report-row" data-id="' + r.id + '">' +
 quote +
 '<div class="rr-reason">' + esc(r.reason) + '</div>' +
 '<div class="rr-actions"><button type="button" class="btn rr-dismiss" data-id="' + r.id + '">Dismiss</button>' +
-'<button type="button" class="btn rr-ban" data-id="' + r.id + '" data-uid="' + esc(r.reported_id) + '" data-name="' + esc(r.reported_name || '') + '">Ban / Kick</button></div>' +
+'<select class="rr-select" data-id="' + r.id + '" aria-label="Disciplinary action for ' + esc(r.reported_name || 'this user') + '">' +
+DISCIPLINE_OPTIONS.map(function (o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('') +
+'</select>' +
+'<button type="button" class="btn rr-apply" data-id="' + r.id + '" data-uid="' + esc(r.reported_id) + '" data-name="' + esc(r.reported_name || '') + '">Apply</button></div>' +
 '</div>';
 }).join('');
 }
@@ -1163,10 +1202,11 @@ if (reportsList) {
 reportsList.addEventListener('click', function (e) {
 var dBtn = e.target.closest('.rr-dismiss');
 if (dBtn) { resolveReport(dBtn.dataset.id, 'dismissed'); return; }
-var bBtn = e.target.closest('.rr-ban');
-if (bBtn) {
-kick(bBtn.dataset.uid, bBtn.dataset.name || 'them', 'Reported and banned by ' + me.name);
-resolveReport(bBtn.dataset.id, 'actioned');
+var aBtn = e.target.closest('.rr-apply');
+if (aBtn) {
+var row = aBtn.closest('.report-row');
+var sel = row && row.querySelector('.rr-select');
+applyDiscipline(sel ? sel.value : 'warn', aBtn.dataset.uid, aBtn.dataset.name || 'them', aBtn.dataset.id);
 }
 });
 }
@@ -1214,8 +1254,13 @@ adminIds = {};
 if (!a.error && a.data) a.data.forEach(function (x) { adminIds[x.user_id] = true; });
 isAdmin = isAdminId(me.id);
 if (isAdmin) {
-var b = await sb.from('bans').select('user_id, banned_name, expires_at'); if (!b.error) b.data.forEach(function (x) { bans[x.user_id] = x; });
-var mu = await sb.from('chat_moderation').select('user_id, user_name, muted, muted_permanent, offense_count').eq('muted', true);
+/* Only pull currently-active bans/mutes -- a temp ban or temp mute that already expired
+   shouldn't linger in these local maps (it would otherwise still show as banned/muted in the
+   admin UI, and a stale ban entry would wrongly re-kick the person the moment they rejoin). */
+var nowIso = new Date().toISOString();
+var b = await sb.from('bans').select('user_id, banned_name, expires_at').or('expires_at.is.null,expires_at.gt.' + nowIso);
+if (!b.error) b.data.forEach(function (x) { bans[x.user_id] = x; });
+var mu = await sb.from('chat_moderation').select('user_id, user_name, muted, muted_permanent, muted_until, offense_count').eq('muted', true).or('muted_permanent.eq.true,muted_until.gt.' + nowIso);
 if (!mu.error) mu.data.forEach(function (x) { mutedUsers[x.user_id] = x; });
 if (reportsBtn) reportsBtn.classList.remove('hidden');
 refreshReportsBadge();
@@ -1228,28 +1273,40 @@ if (r.error || !r.data) return;
 var row = r.data;
 applyModeration({
 muted: !!row.muted, mutedPermanent: !!row.muted_permanent, offenseCount: row.offense_count || 0,
-cooldownUntil: row.cooldown_until ? new Date(row.cooldown_until).getTime() : 0
+cooldownUntil: row.cooldown_until ? new Date(row.cooldown_until).getTime() : 0,
+mutedUntil: row.muted_until ? new Date(row.muted_until).getTime() : 0
 });
 }
 /* ---------- unmute (admins only) ---------- */
 async function unmute(id, name) {
-var r = await sb.from('chat_moderation').update({ muted: false, muted_permanent: false, cooldown_until: null, cooldown_seconds: 0, offense_count: 0, window_count: 0, window_start: null }).eq('user_id', id);
+var r = await sb.from('chat_moderation').update({ muted: false, muted_permanent: false, muted_until: null, cooldown_until: null, cooldown_seconds: 0, offense_count: 0, window_count: 0, window_start: null }).eq('user_id', id);
 if (r.error) { addSys('Could not unmute: ' + r.error.message); return; }
 delete mutedUsers[id]; addSys(name + ' has been unmuted.');
 }
 /* ---------- mute (admins only) — muting someone who has never tripped the spam filter has no
-   row in chat_moderation yet, so this upserts one straight to muted=permanent. ---------- */
-async function muteUser(id, name) {
-var r = await sb.from('chat_moderation').upsert({ user_id: id, user_name: name, muted: true, muted_permanent: true, muted_at: new Date().toISOString() }, { onConflict: 'user_id' });
+   row in chat_moderation yet, so this upserts one straight in. durationMs is optional: omitted
+   (or falsy) means permanent, same as before; a duration sets muted_until instead and leaves
+   muted_permanent false, so it lifts on its own (both gc_check_and_record_send() and the
+   is_muted_or_cooling() RLS check honor muted_until the same way they already honor
+   cooldown_until -- see supabase/disciplinary_actions_feature.sql). ---------- */
+async function muteUser(id, name, durationMs) {
+var permanent = !durationMs;
+var untilIso = permanent ? null : new Date(Date.now() + durationMs).toISOString();
+var r = await sb.from('chat_moderation').upsert({ user_id: id, user_name: name, muted: true, muted_permanent: permanent, muted_until: untilIso, muted_at: new Date().toISOString() }, { onConflict: 'user_id' });
 if (r.error) { addSys('Could not mute: ' + r.error.message); return; }
-mutedUsers[id] = { user_id: id, user_name: name, muted: true, muted_permanent: true };
-addSys(name + ' has been muted. Only an admin can lift it.');
+mutedUsers[id] = { user_id: id, user_name: name, muted: true, muted_permanent: permanent, muted_until: untilIso };
+addSys(name + ' has been muted' + (permanent ? '. Only an admin can lift it.' : ' for ' + humanDuration(durationMs) + '.'));
 }
-async function kick(id, name, reason) {
-var r = await sb.from('bans').upsert({ user_id: id, banned_name: name, reason: reason || null, banned_by: me.id });
+/* durationMs optional: omitted (or falsy) means a permanent ban (expires_at left null), same as
+   before; a duration sets expires_at instead. Enforcement already fully honors expires_at
+   server-side via public.is_banned() (see schema.sql) -- no migration needed for temp bans. */
+async function kick(id, name, reason, durationMs) {
+var expiresAt = durationMs ? new Date(Date.now() + durationMs).toISOString() : null;
+var r = await sb.from('bans').upsert({ user_id: id, banned_name: name, reason: reason || null, banned_by: me.id, expires_at: expiresAt });
 if (r.error) { addSys('Could not kick: ' + r.error.message); return; }
-bans[id] = { user_id: id, banned_name: name };
+bans[id] = { user_id: id, banned_name: name, expires_at: expiresAt };
 await channel.send({ type: 'broadcast', event: 'kick', payload: { user_id: id, name: name, reason: reason || '', by: me.name } });
+addSys(name + ' has been ' + (expiresAt ? 'kicked for ' + humanDuration(durationMs) : 'banned permanently') + '.');
 }
 async function unban(id, name) {
 var r = await sb.from('bans').delete().eq('user_id', id);
@@ -1292,7 +1349,7 @@ if (chk.error) { addSys('Your words were lost: ' + chk.error.message); return; }
 var d = chk.data || {};
 if (!d.ok) {
 var cdUntil = d.retry_at ? new Date(d.retry_at).getTime() : (Date.now() + (d.cooldown_seconds || 0) * 1000);
-applyModeration({ muted: d.reason === 'muted', mutedPermanent: !!d.permanent, offenseCount: d.offense_count || moderation.offenseCount, cooldownUntil: cdUntil });
+applyModeration({ muted: d.reason === 'muted', mutedPermanent: !!d.permanent, offenseCount: d.offense_count || moderation.offenseCount, cooldownUntil: cdUntil, mutedUntil: d.muted_until ? new Date(d.muted_until).getTime() : 0 });
 warnPopup(d.offense_count || moderation.offenseCount, d.reason === 'muted', !!d.permanent, d.cooldown_seconds || 0);
 return;
 }
@@ -1798,7 +1855,7 @@ if (chk.error) { addSys('Your words were lost: ' + chk.error.message); return fa
 var d = chk.data || {};
 if (!d.ok) {
 var cdUntil = d.retry_at ? new Date(d.retry_at).getTime() : (Date.now() + (d.cooldown_seconds || 0) * 1000);
-applyModeration({ muted: d.reason === 'muted', mutedPermanent: !!d.permanent, offenseCount: d.offense_count || moderation.offenseCount, cooldownUntil: cdUntil });
+applyModeration({ muted: d.reason === 'muted', mutedPermanent: !!d.permanent, offenseCount: d.offense_count || moderation.offenseCount, cooldownUntil: cdUntil, mutedUntil: d.muted_until ? new Date(d.muted_until).getTime() : 0 });
 warnPopup(d.offense_count || moderation.offenseCount, d.reason === 'muted', !!d.permanent, d.cooldown_seconds || 0);
 return false;
 }
