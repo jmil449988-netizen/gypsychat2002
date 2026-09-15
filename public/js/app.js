@@ -291,6 +291,28 @@ try { localStorage.setItem('gc_sound_muted', soundMuted ? '1' : '0'); } catch (e
 updateSoundBtn();
 };
 }
+/* iOS Safari (and other WebKit browsers) only lets an AudioContext leave its initial "suspended"
+   state when resume() runs synchronously inside a real, direct user gesture -- a click/tap event
+   handler, nothing async in between. The join-button flow below (search "warm up audio on this
+   user gesture") covers a fresh sign-on, but most visits never go through it: restoreIdentity()
+   auto-resumes returning devices straight from page load with no user gesture at all, so the
+   context it creates is born suspended and stays that way for the rest of the session -- every
+   playSound() afterward runs without error but is silently inaudible. Resuming on the very first
+   real tap/click anywhere on the page (compose box, a message, anything) catches that case too,
+   without needing to know in advance which element the user will touch first. */
+(function () {
+var unlocked = false;
+function unlockAudioOnce() {
+if (unlocked) return; unlocked = true;
+ensureAudioCtx();
+document.removeEventListener('pointerdown', unlockAudioOnce);
+document.removeEventListener('touchend', unlockAudioOnce);
+document.removeEventListener('click', unlockAudioOnce);
+}
+document.addEventListener('pointerdown', unlockAudioOnce, { passive: true });
+document.addEventListener('touchend', unlockAudioOnce, { passive: true });
+document.addEventListener('click', unlockAudioOnce, { passive: true });
+})();
 
 /* ---------- option to completely hide DM (whisper) tabs and windows ----------
    Purely a client-side/visual toggle, same pattern as sound mute: whispers still arrive and are
@@ -3278,7 +3300,20 @@ channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'dm_r
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reactions' }, function (p) { applyReactionRow(p.new, true); });
 channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reactions' }, function (p) { applyReactionRow(p.old, false); });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_stats' }, function (p) { userStats[p.new.user_id] = p.new; refreshLevelBadges(p.new.user_id); });
-channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_stats' }, function (p) { userStats[p.new.user_id] = p.new; refreshLevelBadges(p.new.user_id); });
+/* Level-up announcement: level is a generated column (floor(sqrt(reactions_received/3))+1), so an
+   UPDATE with a higher level than what was cached a moment ago is a genuine level-up, not just a
+   reaction count ticking up within the same level. Only announced when the person is someone
+   currently present in this room (people[] is this room's live presence list) -- user_stats isn't
+   scoped to a room server-side (see the comment above), so without that check anyone accumulating
+   reactions in a thread anywhere would spam every open room with a name nobody here recognizes. */
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_stats' }, function (p) {
+var prevLevel = userStats[p.new.user_id] ? userStats[p.new.user_id].level : null;
+userStats[p.new.user_id] = p.new;
+refreshLevelBadges(p.new.user_id);
+if (prevLevel != null && p.new.level > prevLevel && people[p.new.user_id]) {
+addSys('🎉 ' + people[p.new.user_id].name + ' reached Level ' + p.new.level + '!');
+}
+});
 
 var firstSub = true;
 await new Promise(function (res, rej) {
