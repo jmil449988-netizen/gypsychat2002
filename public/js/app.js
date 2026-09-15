@@ -31,6 +31,15 @@ var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','�
    rule lives in claim_name() -- see supabase/international_names_feature.sql. */
 var NAME_RE = /^[\p{L}\p{N}\p{M}_ .'-]{2,16}$/u;
 
+/* The public-facing version shown to players (login footer + room watermark) -- deliberately
+   separate from the ?v=NN cache-busting numbers on app.js/style.css in index.html/sw.js, which
+   bump on every small deploy and would be a meaningless, constantly-churning number to show
+   someone in the room. Bump this by hand only for a release worth calling out. Single source of
+   truth: both spots below read this rather than having the string baked into index.html twice. */
+var APP_VERSION = '1.0';
+if ($('madeBy')) $('madeBy').textContent = 'created by Yogg Squad © 2027 · v' + APP_VERSION;
+if ($('roomWatermark')) $('roomWatermark').textContent = 'Yogg Squad © 2027 · v' + APP_VERSION;
+
 var sb = null, me = null, channel = null;
 var people = {}; // user id -> presence object {name, status, awayMsg} (from presence)
 var wins = {}, unread = {}, seen = {};
@@ -1088,6 +1097,7 @@ if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('m
 openThreadId = null;
 clearTimeout(idleTimer);
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
+if ($('roomWatermark')) $('roomWatermark').classList.add('hidden');
 if ($('statusBtn')) $('statusBtn').classList.add('hidden');
 if ($('avaBtn')) $('avaBtn').classList.add('hidden');
 if ($('saveBtn')) $('saveBtn').classList.add('hidden');
@@ -2195,6 +2205,7 @@ if (h.error) throw h.error;
    scrollTop on a box whose scrollHeight was 0, so all of it was silently discarded and the log
    was revealed sitting at the very top, on the oldest message in the backlog. */
 $('login').classList.add('hidden'); log.classList.remove('hidden'); $('users').classList.remove('hidden'); $('compose').classList.remove('hidden');
+if ($('roomWatermark')) $('roomWatermark').classList.remove('hidden');
 replayingHistory = true;
 h.data.reverse().forEach(handleMessage);
 replayingHistory = false;
