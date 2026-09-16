@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=68">
+<link rel="stylesheet" href="./css/style.css?v=69">
 </head>
 <body>
 <div class="gc-root">
@@ -179,6 +179,56 @@
 </svg></div>
 <button class="btn rp-back" type="button" id="rouletteBack">Back to chat</button>
 <div class="room-watermark" id="rouletteWatermark" aria-hidden="true"></div>
+</aside>
+
+<!-- The Ballot Box: the right-hand gutter's counterpart to the roulette teaser on the left, on the
+     wide layout only (>=1340px, see .ballot-panel in style.css), and only the TOP half of that
+     gutter. Drop a short note in, no name attached; the notes take turns scrolling across the
+     parchment strip along the bottom of the panel, one every 15 seconds. ballot_box_feature.sql
+     has the table; the client side is the "ballot box" section of app.js. -->
+<aside class="ballot-panel hidden" id="ballotPanel" aria-label="The Ballot Box — anonymous notes">
+<div class="rp-eyebrow">Anonymous</div>
+<div class="bp-title">The Ballot<br>Box</div>
+<div class="bp-blurb">Say it without your name on it.</div>
+<div class="bp-box" id="ballotBox" aria-hidden="true">
+<svg viewBox="0 0 160 120" focusable="false">
+<defs>
+<linearGradient id="bpWood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a5c32"/><stop offset=".55" stop-color="#5e3d20"/><stop offset="1" stop-color="#3a2411"/></linearGradient>
+<linearGradient id="bpWoodSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4a2f18"/><stop offset="1" stop-color="#2c1a0c"/></linearGradient>
+<linearGradient id="bpLid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a8733f"/><stop offset="1" stop-color="#6b4726"/></linearGradient>
+<linearGradient id="bpBrass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1d98a"/><stop offset=".5" stop-color="#c9a24a"/><stop offset="1" stop-color="#7a5a1e"/></linearGradient>
+<linearGradient id="bpPaper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#efe3c2"/><stop offset="1" stop-color="#cdb98a"/></linearGradient>
+</defs>
+<!-- the slip of paper: sits above the slot at rest, drops through it when a note is cast (.casting) -->
+<g class="bp-slip"><path d="M70 22 h30 l-3 26 h-24 z" fill="url(#bpPaper)" stroke="#6b5a35" stroke-width=".8"/><path d="M76 29h18M76 34h14M76 39h16" stroke="#7d6a45" stroke-width="1" stroke-linecap="round" opacity=".7"/></g>
+<!-- body -->
+<path d="M28 52 L80 42 L132 52 L132 102 L80 112 L28 102 Z" fill="url(#bpWood)" stroke="#1c1108" stroke-width="1.2" stroke-linejoin="round"/>
+<path d="M80 62 L132 52 L132 102 L80 112 Z" fill="url(#bpWoodSide)" opacity=".85"/>
+<path d="M28 52 L80 62 L80 112 L28 102 Z" fill="#000" opacity=".12"/>
+<!-- lid -->
+<path d="M24 50 L80 39 L136 50 L80 61 Z" fill="url(#bpLid)" stroke="#1c1108" stroke-width="1.2" stroke-linejoin="round"/>
+<!-- slot with a brass surround -->
+<path d="M62 47 L98 40.5 L104 42 L68 48.5 Z" fill="url(#bpBrass)" stroke="#3a2a0a" stroke-width=".6"/>
+<path d="M65 46.8 L97 41.2 L100 41.8 L68 47.4 Z" fill="#0d0905"/>
+<!-- brass corner straps and lock plate -->
+<path d="M28 52v50M132 52v50" stroke="url(#bpBrass)" stroke-width="3" stroke-linecap="round" opacity=".9"/>
+<path d="M28 76 L80 86 L132 76" fill="none" stroke="url(#bpBrass)" stroke-width="2.4" opacity=".85"/>
+<rect x="74" y="86" width="12" height="14" rx="1.5" fill="url(#bpBrass)" stroke="#3a2a0a" stroke-width=".6"/>
+<circle cx="80" cy="91.5" r="1.6" fill="#1c1108"/><path d="M80 92.5v4" stroke="#1c1108" stroke-width="1.4"/>
+<!-- the same four-point star as the roulette wheel's hub, stamped on the lid -->
+<path d="M46 52.5 L47.6 55.4 L50.6 56.2 L47.6 57 L46 60 L44.4 57 L41.4 56.2 L44.4 55.4 Z" fill="#f1d98a" opacity=".8"/>
+</svg>
+</div>
+<div class="bp-compose">
+<textarea id="ballotBody" class="sunk" maxlength="140" rows="2" placeholder="Drop a note in the box..." aria-label="Your anonymous note"></textarea>
+<div class="bp-row"><span class="bp-count" id="ballotCount" aria-live="polite">140</span><button class="btn" type="button" id="ballotCast">Cast it</button></div>
+<div class="bp-note" id="ballotNote" aria-live="polite"></div>
+</div>
+<!-- the parchment strip: one note at a time scrolls across, right to left, 15s per note -->
+<div class="bp-strip" id="ballotStrip" aria-live="off" aria-label="Notes from the box">
+<div class="bp-scroll" id="ballotScroll"><span class="bp-text" id="ballotText">The box is empty. Be the first to drop a note in.</span></div>
+<button type="button" class="bp-remove hidden" id="ballotRemove" title="Remove this note (admin)" aria-label="Remove this note">✕</button>
+</div>
 </aside>
 
 <div class="threads-panel" id="threadsPanel" role="complementary" aria-label="Threads board">
@@ -356,6 +406,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=96"></script>
+<script src="./js/app.js?v=97"></script>
 </body>
 </html>
