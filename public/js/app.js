@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 92;
+var BUILD_NUMBER = 93;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -3831,8 +3831,14 @@ await sb.auth.refreshSession(); // updateUser() above doesn't rotate the JWT; re
    makes the "name taken" check real -- it used to be browser-only. Claims go stale after 30
    days of not signing on and are released automatically, so an abandoned anonymous session
    can't squat a name forever. Fails CLOSED on purpose: without a claim, sending wouldn't work
-   anyway, so letting someone into the room would just strand them. */
-var claim = await sb.rpc('claim_name', { p_name: n });
+   anyway, so letting someone into the room would just strand them.
+
+   keyCode (the invite key verified above, blank on resume/admin) rides along so a beta tester
+   signing on fresh on a second device -- a brand new anonymous auth.uid with no link to their
+   other device's -- can reclaim their own name immediately instead of hitting the 30-day-stale
+   wait: see supabase/beta_key_name_reclaim.sql, which only allows the early release when both
+   accounts were claimed with the same invite key. */
+var claim = await sb.rpc('claim_name', { p_name: n, p_key: keyCode || null });
 if (claim.error) throw claim.error;
 if (claim.data && claim.data.ok === false) {
 /* A pinned name can only fail here if it went stale (30 days away) and somebody else took it
