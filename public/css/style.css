@@ -921,8 +921,14 @@ transition:opacity .15s ease,background .15s ease}
 /* ---------- friend requests: a bell + dropdown inbox, siblings of .win (see the comment on
    #ims/#imTray in index.html for why -- same reasoning applies here). z-index 46 sits in the
    whisper-window band (41-54) since neither one needs to beat the other; both stay under
-   .nmenu (60) and modals (70). */
-.friendreq-btn{position:fixed;top:8px;right:8px;z-index:46;width:34px;height:34px;padding:0;
+   .nmenu (60) and modals (70).
+   --frq-right: on a wide screen .win is centered and capped at max-width:760px (see .win), so it
+   stops well short of the actual browser edge -- plain `right:8px` here would strand the button out
+   in that empty margin, nowhere near the card it belongs to. calc(50% - 380px + 8px) targets the
+   card's own right edge instead (380 = half of .win's 760px cap; +8 tucks the icon in over the
+   corner like a badge); max() falls back to a flat 8px once the viewport is narrow enough that .win
+   is no longer capped and genuinely fills it (the calc() side goes negative right around there). */
+.friendreq-btn{position:fixed;top:8px;right:max(8px,calc(50% - 380px + 8px));z-index:46;width:34px;height:34px;padding:0;
 font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;
 color:var(--ash);background:linear-gradient(180deg,#2e261d,#1a1511);border:2px double var(--gold-lo);
 outline:1px solid #000;box-shadow:0 0 0 1px #000,0 4px 10px #000;cursor:pointer}
@@ -932,7 +938,7 @@ outline:1px solid #000;box-shadow:0 0 0 1px #000,0 4px 10px #000;cursor:pointer}
 .friendreq-btn.has-requests{color:var(--gold-hi);border-color:var(--gold);animation:frq-pulse 1.6s ease-in-out infinite}
 @keyframes frq-pulse{0%,100%{box-shadow:0 0 0 1px #000,0 4px 10px #000}50%{box-shadow:0 0 0 1px #000,0 4px 10px #000,0 0 10px rgba(201,162,74,.8)}}
 
-.friendreq-panel{position:fixed;top:46px;right:8px;z-index:46;width:280px;max-width:calc(100vw - 16px);
+.friendreq-panel{position:fixed;top:46px;right:max(8px,calc(50% - 380px + 8px));z-index:46;width:280px;max-width:calc(100vw - 16px);
 max-height:min(60vh,420px);display:none;flex-direction:column;overflow:hidden;
 background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double var(--gold-lo);
 box-shadow:0 0 0 1px #000,0 8px 24px #000}
@@ -963,4 +969,4 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
 .frq-accept:hover,.frq-accept:focus-visible{background:rgba(90,161,90,.35);outline:none}
 .frq-decline{color:#f3c9c6;background:rgba(179,38,30,.18);border:1px solid var(--blood)}
 .frq-decline:hover,.frq-decline:focus-visible{background:rgba(179,38,30,.35);outline:none}
-@media (max-width:500px){.friendreq-panel{top:44px;right:6px;width:calc(100vw - 12px)}}
+@media (max-width:500px){.friendreq-panel{top:44px;width:calc(100vw - 12px)}}
