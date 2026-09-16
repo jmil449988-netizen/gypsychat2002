@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 98;
+var BUILD_NUMBER = 99;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -3588,6 +3588,7 @@ if (wasEmpty || !ballotNotes.length) { ballotIdx = -1; showBallotNote(); }
 }
 function startBallot() {
 if (ballotPanel) ballotPanel.classList.remove('hidden');
+if (ballotStrip) ballotStrip.classList.remove('hidden'); // the parchment header over the chat window (desktop)
 loadBallot();
 clearInterval(ballotTimer); ballotTimer = setInterval(loadBallot, 60000);
 startMobileBallot();
@@ -3596,6 +3597,7 @@ function stopBallot() {
 clearInterval(ballotTimer); ballotTimer = null;
 ballotNotes = []; ballotIdx = -1; ballotShowing = null;
 if (ballotPanel) ballotPanel.classList.add('hidden');
+if (ballotStrip) ballotStrip.classList.add('hidden');
 stopMobileBallot();
 }
 function setBallotNote(text, isErr) { if (!ballotNote) return; ballotNote.textContent = text || ''; ballotNote.classList.toggle('err', !!isErr); }
