@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 102;
+var BUILD_NUMBER = 103;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -2978,6 +2978,7 @@ gifQ.oninput = function () { clearTimeout(gifTimer); var v = gifQ.value.trim(); 
 document.addEventListener('click', function (e) {
 if (gifPicker.contains(e.target)) return;
 if (e.target === gifBtn || e.target === tpNewGifBtn || e.target === tpReplyGifBtn) return;
+if (e.target.closest && e.target.closest('.im .icomp .gif')) return; // a whisper's own GIF button toggles it itself
 closeGif();
 });
 
