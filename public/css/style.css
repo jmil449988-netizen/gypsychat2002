@@ -810,10 +810,12 @@ box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 16px rgba(201,162,74,.7);outline:n
 }
 @media (max-width:500px){.roulette-toggle-fab{bottom:154px;right:8px}}
 
-/* "Signed on as ..." doubles as the rename control once you're in the room */
-.status #st.renamable{cursor:pointer;text-decoration:underline;text-decoration-color:var(--gold-lo);
-text-underline-offset:3px}
-.status #st.renamable:hover{color:var(--gold-hi);text-decoration-color:var(--gold)}
+/* The status bar doubles as the rename control once you're in the room -- it reads "Change name"
+   rather than restating who you are (that moved to a hover tooltip, see setSignedOnStatus() in
+   app.js), lit up neon orange with a glow so the affordance reads as a live control rather than
+   plain status text. */
+.status #st.renamable{cursor:pointer;color:#ff7a1a;text-shadow:0 0 4px rgba(255,122,26,.85),0 0 10px rgba(255,90,0,.55)}
+.status #st.renamable:hover{color:#ffa64d;text-shadow:0 0 6px rgba(255,166,77,.95),0 0 14px rgba(255,122,26,.75)}
 
 /* Float the two bubbles at the vertical middle of the screen rather than down by the composer:
    easier to reach one-handed mid-scroll, and clear of the Send button and the iOS home bar.
