@@ -25,6 +25,7 @@ var bugReportsBtn = $('bugReportsBtn'), bugReportsBadge = $('bugReportsBadge'), 
 var leaderboardBtn = $('leaderboardBtn'), leaderboardPanel = $('leaderboardPanel'), leaderboardList = $('leaderboardList'), leaderboardBack = $('leaderboardBack');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
+var friendReqBtn = $('friendReqBtn'), friendReqBadge = $('friendReqBadge'), friendReqPanel = $('friendReqPanel'), friendReqList = $('friendReqList');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
 
@@ -55,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 89;
+var BUILD_NUMBER = 90;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -218,6 +219,16 @@ function alreadyRead(id, created) { return !!dmRead[id] && new Date(created).get
 var replayingHistory = false;
 var blocked = {}; // user id -> name (people I've blocked)
 var friends = {}; // user id -> {name, group} (my buddy list; persists across sessions, independent of who's here now)
+/* ---------- friend requests ----------
+   Adding a friend used to write straight into `friends` with no involvement from the other person
+   at all. These three maps back the request/accept flow that replaced that: incomingRequests is
+   what shows up in the inbox dropdown (someone else asked ME), outgoingPending is requests I've
+   sent that nobody has answered yet (so "Add Friend" doesn't get re-sent every time the menu
+   reopens), and friendReqChannel is the realtime subscription that keeps both live without a
+   reload -- see subscribeFriendRequests. */
+var incomingRequests = {}; // request id -> {id, senderId, senderName, createdAt}
+var outgoingPending = {}; // recipient id -> request id
+var friendReqChannel = null;
 var isAdmin = false, bans = {}, mutedUsers = {}; // bans/mutedUsers only loaded for admins
 /* Every admin's user id, so their names can be shown in red to everyone. Read from the admins
    table rather than carried in presence on purpose: presence is written by each client, so a
@@ -1798,7 +1809,11 @@ if (reachable && !blocked[id]) items.push(['Whisper', function () { unread[id] =
 if (reachable && !blocked[id]) items.push(['Tag in Chat', function () { tagInChat(name); }]);
 items.push(blocked[id] ? ['Unblock', function () { unblock(id); }] : ['Block', function () { block(id, name); }]);
 items.push(['Report', async function () { var rr = await showPromptModal('Report ' + name, { placeholder: 'e.g. spam, harassment', maxLength: 300 }); if (rr) report(id, name, rr); }]);
-items.push(friends[id] ? ['Remove Friend', function () { removeFriend(id, name); }] : ['Add Friend', function () { addFriend(id, name); }]);
+var incomingReqId = friends[id] ? null : incomingRequestIdFrom(id);
+if (friends[id]) items.push(['Remove Friend', function () { removeFriend(id, name); }]);
+else if (incomingReqId) items.push(['Accept Friend Request', function () { acceptFriendRequest(incomingReqId, id, name); }]);
+else if (outgoingPending[id]) items.push(['Friend Request Sent', function () { addSys('Your friend request to ' + name + ' is still pending.'); }]);
+else items.push(['Add Friend', function () { sendFriendRequest(id, name); }]);
 if (friends[id]) items.push(['Move to Group', async function () { var g = await showPromptModal('Move to Group', { value: friends[id].group || '', placeholder: 'blank for none', maxLength: 40 }); if (g !== null) moveFriendGroup(id, g); }]);
 /* Kick/Mute/Unmute don't require the target to still be online — most of the time an admin is
    acting on something said in the chat log by someone who has since left the room. */
@@ -2174,11 +2189,6 @@ async function loadFriends() {
 var r = await sb.from('friends').select('friend_id, friend_name, group_name'); if (r.error) return;
 friends = {}; r.data.forEach(function (f) { friends[f.friend_id] = { name: f.friend_name || '?', group: f.group_name || null }; });
 }
-async function addFriend(id, name) {
-var r = await sb.from('friends').insert({ owner_id: me.id, friend_id: id, friend_name: name });
-if (r.error) { addSys('Could not add friend: ' + r.error.message); return; }
-friends[id] = { name: name, group: null }; addSys(name + ' was added to your friends list.'); renderPeople();
-}
 async function removeFriend(id, name) {
 var r = await sb.from('friends').delete().eq('owner_id', me.id).eq('friend_id', id);
 if (r.error) { addSys('Could not remove friend: ' + r.error.message); return; }
@@ -2189,6 +2199,178 @@ var g = group || null;
 var r = await sb.from('friends').update({ group_name: g }).eq('owner_id', me.id).eq('friend_id', id);
 if (r.error) { addSys('Could not update group: ' + r.error.message); return; }
 friends[id].group = g; addSys(friends[id].name + ' moved to ' + (g || 'Friends') + '.'); renderPeople();
+}
+
+/* ---------- friend requests: "Add Friend" needs the other person's say-so now, not just a click.
+   See friend_requests_feature.sql for the table/RLS this all rests on, and the big comment there
+   for the two-sided mirror-insert dance that turns an accepted request into a real friendship. */
+async function loadFriendRequests() {
+incomingRequests = {}; outgoingPending = {};
+var inc = await sb.from('friend_requests').select('id, sender_id, sender_name, created_at').eq('recipient_id', me.id).eq('status', 'pending');
+if (!inc.error) inc.data.forEach(function (r) { incomingRequests[r.id] = { id: r.id, senderId: r.sender_id, senderName: r.sender_name || '?', createdAt: r.created_at }; });
+var out = await sb.from('friend_requests').select('id, recipient_id').eq('sender_id', me.id).eq('status', 'pending');
+if (!out.error) out.data.forEach(function (r) { outgoingPending[r.recipient_id] = r.id; });
+updateFriendReqBadge(); renderFriendReqPanel();
+}
+function subscribeFriendRequests() {
+if (friendReqChannel) return;
+friendReqChannel = sb.channel('friend-requests-' + me.id);
+/* Someone sent ME a request -- straight into the inbox, live, the same way a whisper arrives. */
+friendReqChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'friend_requests', filter: 'recipient_id=eq.' + me.id }, function (p) {
+var row = p.new; if (row.status !== 'pending') return;
+incomingRequests[row.id] = { id: row.id, senderId: row.sender_id, senderName: row.sender_name || '?', createdAt: row.created_at };
+playSound('ding');
+notifyDesktop((row.sender_name || 'Someone') + ' wants to be friends', 'Tap to see your friend requests', 'gc-friendreq-' + row.id, function () { openFriendReqPanel(); });
+addSys((row.sender_name || 'Someone') + ' sent you a friend request. 🤝');
+updateFriendReqBadge(); renderFriendReqPanel();
+});
+/* A request I sent got answered elsewhere (their client, or my own other tab/device). Accepting
+   is a two-sided mirror: THEIR client already inserted their half of `friends` before flipping
+   this row to accepted (see acceptFriendRequest), so all my side has to do is insert my own half
+   naming them -- the RLS on `friends` only ever lets me insert a row with owner_id = myself, which
+   is exactly what this is. Declined/cancelled just needs the pending state cleared, quietly. */
+friendReqChannel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friend_requests', filter: 'sender_id=eq.' + me.id }, function (p) {
+var row = p.new; if (!outgoingPending[row.recipient_id] || outgoingPending[row.recipient_id] !== row.id) return;
+delete outgoingPending[row.recipient_id];
+if (row.status === 'accepted' && !friends[row.recipient_id]) {
+sb.from('friends').insert({ owner_id: me.id, friend_id: row.recipient_id, friend_name: row.recipient_name || '?' }).then(function (r2) {
+if (r2.error) return;
+friends[row.recipient_id] = { name: row.recipient_name || '?', group: null };
+addSys((row.recipient_name || 'They') + ' accepted your friend request!'); renderPeople();
+});
+}
+});
+/* Multi-tab/device tidiness: if the SAME account handles a request from somewhere else, drop it
+   from this tab's inbox too instead of leaving a stale accept/decline row sitting there. */
+friendReqChannel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friend_requests', filter: 'recipient_id=eq.' + me.id }, function (p) {
+var row = p.new; if (row.status === 'pending' || !incomingRequests[row.id]) return;
+delete incomingRequests[row.id]; updateFriendReqBadge(); renderFriendReqPanel();
+});
+friendReqChannel.subscribe();
+}
+function unsubscribeFriendRequests() {
+if (friendReqChannel) { friendReqChannel.unsubscribe(); friendReqChannel = null; }
+}
+/* Shared by sendFriendRequest and the "Add Friend" menu item -- finds the pending incoming
+   request (if any) from a given sender, so both places can offer "Accept" instead of sending a
+   redundant second request in the other direction. */
+function incomingRequestIdFrom(senderId) {
+return Object.keys(incomingRequests).filter(function (k) { return incomingRequests[k].senderId === senderId; })[0] || null;
+}
+async function sendFriendRequest(id, name) {
+if (friends[id]) { addSys(name + ' is already on your friends list.'); return; }
+if (outgoingPending[id]) { addSys('You already sent ' + name + ' a friend request.'); return; }
+var pendingFromThem = incomingRequestIdFrom(id);
+if (pendingFromThem) {
+addSys(name + ' already sent you a request -- accepting it instead.');
+acceptFriendRequest(pendingFromThem, id, name);
+return;
+}
+var r = await sb.from('friend_requests').insert({ sender_id: me.id, sender_name: me.name, recipient_id: id, recipient_name: name, status: 'pending' }).select().single();
+if (r.error) {
+if (r.error.code === '23505') addSys('You already sent ' + name + ' a friend request.');
+else addSys('Could not send friend request: ' + r.error.message);
+return;
+}
+outgoingPending[id] = r.data.id;
+addSys('Friend request sent to ' + name + '.');
+}
+async function acceptFriendRequest(reqId, senderId, senderName) {
+var req = incomingRequests[reqId]; var name = senderName || (req && req.senderName) || '?';
+var fr = await sb.from('friends').insert({ owner_id: me.id, friend_id: senderId, friend_name: name });
+if (fr.error) { addSys('Could not accept: ' + fr.error.message); return; }
+var ur = await sb.from('friend_requests').update({ status: 'accepted', responded_at: new Date().toISOString() }).eq('id', reqId);
+if (ur.error) { addSys('Added ' + name + ', but could not update the request: ' + ur.error.message); }
+friends[senderId] = { name: name, group: null };
+delete incomingRequests[reqId];
+addSys('You and ' + name + ' are now friends.');
+updateFriendReqBadge(); renderFriendReqPanel(); renderPeople();
+}
+async function declineFriendRequest(reqId) {
+var ur = await sb.from('friend_requests').update({ status: 'declined', responded_at: new Date().toISOString() }).eq('id', reqId);
+if (ur.error) { addSys('Could not decline: ' + ur.error.message); return; }
+delete incomingRequests[reqId];
+updateFriendReqBadge(); renderFriendReqPanel();
+}
+function updateFriendReqBadge() {
+if (!friendReqBadge || !friendReqBtn) return;
+var n = Object.keys(incomingRequests).length;
+friendReqBadge.textContent = n > 9 ? '9+' : String(n);
+friendReqBadge.classList.toggle('hidden', !n);
+friendReqBtn.classList.toggle('has-requests', !!n);
+}
+function closeFriendReqPanel() {
+if (!friendReqPanel) return;
+friendReqPanel.classList.remove('open');
+if (friendReqBtn) friendReqBtn.setAttribute('aria-expanded', 'false');
+}
+function openFriendReqPanel() {
+if (!friendReqPanel) return;
+renderFriendReqPanel();
+friendReqPanel.classList.add('open');
+if (friendReqBtn) friendReqBtn.setAttribute('aria-expanded', 'true');
+}
+if (friendReqBtn) {
+friendReqBtn.onclick = function (e) { e.stopPropagation(); if (friendReqPanel.classList.contains('open')) closeFriendReqPanel(); else openFriendReqPanel(); };
+}
+document.addEventListener('click', function (e) {
+if (!friendReqPanel || !friendReqPanel.classList.contains('open')) return;
+if (!friendReqPanel.contains(e.target) && e.target !== friendReqBtn) closeFriendReqPanel();
+});
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeFriendReqPanel(); });
+/* Renders the inbox list and wires up each row's swipe gesture -- right = accept, left = decline,
+   matching the request, with Accept/Decline buttons on every row too since a swipe-only control
+   would shut out a mouse user or anyone on a screen reader. */
+function renderFriendReqPanel() {
+if (!friendReqList) return;
+var ids = Object.keys(incomingRequests).sort(function (a, b) { return new Date(incomingRequests[b].createdAt) - new Date(incomingRequests[a].createdAt); });
+if (!ids.length) { friendReqList.innerHTML = '<div class="frq-empty">No pending requests.</div>'; return; }
+friendReqList.innerHTML = ids.map(function (reqId) {
+var req = incomingRequests[reqId];
+return '<div class="frq-row" data-req="' + esc(reqId) + '">' +
+'<div class="frq-bg accept">✓ Accept</div><div class="frq-bg decline">✕ Decline</div>' +
+'<div class="frq-content">' + avatarHtml(req.senderId, req.senderName) +
+'<span class="frq-name">' + esc(req.senderName) + '</span>' +
+'<span class="frq-actions"><button type="button" class="frq-accept">Accept</button><button type="button" class="frq-decline">Decline</button></span>' +
+'</div></div>';
+}).join('');
+friendReqList.querySelectorAll('.frq-row').forEach(wireFriendReqRow);
+}
+var FRQ_SWIPE_THRESHOLD = 72;
+function wireFriendReqRow(row) {
+var reqId = row.dataset.req;
+var content = row.querySelector('.frq-content'), bgAccept = row.querySelector('.frq-bg.accept'), bgDecline = row.querySelector('.frq-bg.decline');
+function respond(accept) {
+var req = incomingRequests[reqId];
+row.style.transition = 'transform .18s ease, opacity .18s ease';
+content.style.transform = 'translateX(' + (accept ? '120%' : '-120%') + ')';
+row.style.opacity = '0';
+setTimeout(function () { if (accept && req) acceptFriendRequest(reqId, req.senderId, req.senderName); else declineFriendRequest(reqId); }, 160);
+}
+row.querySelector('.frq-accept').onclick = function (e) { e.stopPropagation(); respond(true); };
+row.querySelector('.frq-decline').onclick = function (e) { e.stopPropagation(); respond(false); };
+var startX = null, dx = 0, dragging = false;
+content.addEventListener('pointerdown', function (e) {
+if (e.target.closest('button')) return;
+startX = e.clientX; dx = 0; dragging = true; content.style.transition = 'none'; content.setPointerCapture(e.pointerId);
+});
+content.addEventListener('pointermove', function (e) {
+if (!dragging) return;
+dx = e.clientX - startX;
+content.style.transform = 'translateX(' + dx + 'px)';
+var t = Math.min(Math.abs(dx) / FRQ_SWIPE_THRESHOLD, 1);
+bgAccept.style.opacity = dx > 0 ? String(t) : '0';
+bgDecline.style.opacity = dx < 0 ? String(t) : '0';
+});
+function endDrag() {
+if (!dragging) return;
+dragging = false; content.style.transition = 'transform .18s ease';
+if (dx > FRQ_SWIPE_THRESHOLD) respond(true);
+else if (dx < -FRQ_SWIPE_THRESHOLD) { respond(false); }
+else { content.style.transform = 'translateX(0)'; bgAccept.style.opacity = '0'; bgDecline.style.opacity = '0'; }
+}
+content.addEventListener('pointerup', endDrag);
+content.addEventListener('pointercancel', endDrag);
 }
 
 /* ---------- kick (admins only; a kick is a ban) ---------- */
@@ -2276,6 +2458,10 @@ if (reportsBtn) reportsBtn.classList.add('hidden');
 if (reportsBadge) reportsBadge.classList.add('hidden');
 if (reportsOverlay) reportsOverlay.classList.add('hidden');
 unsubscribeBugReports();
+unsubscribeFriendRequests();
+if (friendReqBtn) friendReqBtn.classList.add('hidden');
+closeFriendReqPanel();
+incomingRequests = {}; outgoingPending = {};
 if (bugBtn) bugBtn.classList.add('hidden');
 if (bugReportsBtn) bugReportsBtn.classList.add('hidden');
 if (bugReportsBadge) bugReportsBadge.classList.add('hidden');
@@ -2444,7 +2630,7 @@ case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); retur
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
 case 'blocks': var bl = Object.keys(blocked).map(function (k) { return blocked[k]; }); addSys(bl.length ? 'Blocked: ' + bl.join(', ') : 'You have blocked no one.'); return true;
-case 'addfriend': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot add yourself as a friend.'); return true; } if (friends[id]) { addSys(people[id].name + ' is already on your friends list.'); return true; } addFriend(id, people[id].name); return true;
+case 'addfriend': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot add yourself as a friend.'); return true; } sendFriendRequest(id, people[id].name); return true;
 case 'removefriend': id = Object.keys(friends).filter(function (k) { return (friends[k].name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not added a friend named ' + arg + '.'); return true; } removeFriend(id, friends[id].name); return true;
 case 'movegroup': id = Object.keys(friends).filter(function (k) { return (friends[k].name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not added a friend named ' + arg + '.'); return true; } moveFriendGroup(id, rest); return true;
 case 'friends': var fl = Object.keys(friends).map(function (k) { return friends[k].name + (people[k] ? ' (online)' : ' (offline)') + (friends[k].group ? ' [' + friends[k].group + ']' : ''); }); addSys(fl.length ? 'Friends: ' + fl.join(', ') : 'You have no friends added yet.'); return true;
@@ -3761,7 +3947,8 @@ await new Promise(function (r) { setTimeout(r, 400); }); // let presence sync so
 if (nameTaken(n)) { await channel.unsubscribe(); channel = null; throw new Error('That name is already taken.'); }
 var ban = await sb.from('bans').select('reason, expires_at').eq('user_id', me.id).maybeSingle();
 if (ban.data && (!ban.data.expires_at || new Date(ban.data.expires_at) > new Date())) { await channel.unsubscribe(); channel = null; throw new Error('You have been removed from this room.' + (ban.data.reason ? ' Reason: ' + ban.data.reason : '')); }
-await loadBlocks(); await loadAdmin(); await loadMyModeration(); await loadFriends(); await loadDmReads(); await loadUserStats();
+await loadBlocks(); await loadAdmin(); await loadMyModeration(); await loadFriends(); await loadFriendRequests(); await loadDmReads(); await loadUserStats();
+subscribeFriendRequests();
 await channel.track({ name: n, status: 'online', awayMsg: '', avatarUrl: me.avatarUrl || '' });
 
 // history: recent room messages plus my recent whispers (RLS makes the server only return what I may see)
@@ -3789,6 +3976,7 @@ updateUsersStacked(); // the panel only has a size now that it is no longer hidd
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
 if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
 if (bugBtn) bugBtn.classList.remove('hidden');
+if (friendReqBtn) friendReqBtn.classList.remove('hidden');
 if ($('moreBtn')) $('moreBtn').classList.remove('hidden');
 /* Anonymous accounts live in this browser's storage and nowhere else, so the 🔑 (and the nudge
    below) are only offered to them -- an account with an email attached is already portable. */
