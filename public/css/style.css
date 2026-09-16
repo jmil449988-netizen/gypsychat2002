@@ -203,7 +203,7 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 #moreBtn{display:inline-flex;align-items:center;justify-content:center}
 #statusPopover{display:none;flex-direction:column;gap:6px;position:absolute;right:8px;bottom:32px;
 background:linear-gradient(180deg,#2a2118,#171310);border:2px double var(--gold-lo);outline:1px solid #000;
-padding:8px;border-radius:4px;z-index:40;box-shadow:0 0 0 1px #000,0 6px 18px #000;min-width:190px}
+padding:8px;border-radius:4px;z-index:48;box-shadow:0 0 0 1px #000,0 6px 18px #000;min-width:190px} /* 48: above the Messages dock's pill (45), which floats right where this opens */
 #statusPopover.open{display:flex}
 #statusPopover .cell{width:100%;display:flex;align-items:center;gap:8px;text-align:left}
 #statusPopover .popover-label{display:inline;font-size:11px}
@@ -1097,7 +1097,7 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
    typical laptop (1280-1440 wide) a 340px panel in the corner would sit over the card's right
    column and its Send button. clamp() sizes the panel to the gap beside the card instead --
    (50vw - 380px) is that gap, minus the 8px inset on each side -- never narrower than 260px. */
-.dm-dock{position:fixed;right:8px;bottom:8px;z-index:45;width:clamp(260px,calc(50vw - 396px),340px);height:min(480px,calc(100vh - 16px));
+.dm-dock{position:fixed;right:4px;bottom:4px;z-index:45;width:clamp(260px,calc(50vw - 396px),340px);height:min(480px,calc(100vh - 16px));
 display:flex;flex-direction:column;
 background:linear-gradient(180deg,#221a26,#120e14);border:3px double #7a4bb0;outline:1px solid #000;
 box-shadow:0 0 0 2px #a67ad1,0 0 0 3px #000,0 10px 30px #000,inset 0 0 30px #000;color:var(--bone)}
@@ -1129,7 +1129,7 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
    of the composer and the folded roster bar beneath it; expanded, the dock takes the screen
    below the title bar, since a 340px panel would cover most of the room anyway. */
 @media (max-width:500px){
-  .dm-dock.collapsed{width:auto;max-width:200px;right:8px;bottom:150px;border-width:2px}
+  .dm-dock.collapsed{width:auto;max-width:200px;right:6px;bottom:142px;border-width:2px}
   .dm-dock.collapsed .dm-bar{padding:7px 10px;font-size:12px}
   .dm-dock:not(.collapsed){left:6px;right:6px;top:50px;bottom:6px;width:auto;height:auto}
   .dm-dock:not(.collapsed) .dm-bar{padding:10px 12px}
@@ -1204,3 +1204,52 @@ color:#6b5323;background:rgba(255,255,255,.35);border:1px solid #6b5323;border-r
    up under the ballot box when expanded */
 /* (the panel's own height is max(50vh - 9px, 400px): on a short screen it takes a little more than half) */
 @media (min-width:1340px){.dm-dock:not(.collapsed){height:min(480px,calc(100vh - max(calc(50vh - 9px),400px) - 22px))}}
+
+/* ==================== the Ballot Box as a scroll (v70) ====================
+   Every screen WITHOUT the right-hand gutter (below 1340px -- phones first, but a narrow desktop
+   window too): a rolled-up parchment tucked into the top-right corner of the chat log. Once a
+   minute (app.js showMobileNote) it unrolls leftward across the log, one note rides it, and it
+   rolls back up. It's absolutely positioned over the log, never in the flow, so the chat doesn't
+   move when it appears; .body gets position:relative purely to anchor it. */
+.body{position:relative}
+.bp-mscroll{position:absolute;top:14px;right:14px;left:14px;height:44px;z-index:5;pointer-events:none}
+@media (min-width:501px){.bp-mscroll{right:calc(var(--users-w,160px) + 24px);top:18px;left:18px}}
+@media (min-width:1340px){.bp-mscroll{display:none !important}}
+/* the roller: a wooden rod with a brass cap, all that shows while rolled up */
+.bp-mroller{position:absolute;top:0;right:0;width:18px;height:44px;padding:0;cursor:pointer;pointer-events:auto;
+border:1px solid #1c1108;border-radius:9px;
+background:linear-gradient(90deg,#3a2411,#8a5c32 40%,#c48a52 50%,#8a5c32 60%,#3a2411);
+box-shadow:0 0 0 1px #000,0 4px 10px #000,inset 0 0 6px rgba(0,0,0,.5);opacity:.9}
+.bp-mroller:hover,.bp-mroller:focus-visible{opacity:1;box-shadow:0 0 0 1px #000,0 4px 10px #000,0 0 10px rgba(201,162,74,.6);outline:none}
+.bp-mroller-cap{position:absolute;left:2px;right:2px;height:5px;top:-1px;border-radius:3px;background:linear-gradient(90deg,#7a5a1e,#f1d98a,#7a5a1e);box-shadow:0 0 0 1px #000}
+.bp-mroller-cap::after{content:"";position:absolute;left:0;right:0;top:40px;height:5px;border-radius:3px;background:inherit;box-shadow:inherit}
+/* the parchment unrolls out of the roller, leftward */
+.bp-mparch{position:absolute;right:16px;top:4px;bottom:4px;width:0;overflow:hidden;pointer-events:auto;cursor:pointer;
+background:
+ radial-gradient(ellipse at 20% 30%,rgba(255,255,255,.18),transparent 45%),
+ radial-gradient(ellipse at 80% 70%,rgba(90,60,20,.25),transparent 40%),
+ linear-gradient(180deg,#e2cf9f,#cbb279 60%,#b89d66);
+border-top:2px solid #6b5323;border-bottom:2px solid #6b5323;border-left:2px solid #6b5323;border-radius:4px 0 0 4px;
+box-shadow:inset 0 0 14px rgba(90,60,20,.55),0 4px 12px #000;
+transition:width .5s ease}
+.bp-mscroll.open .bp-mparch{width:calc(100% - 16px)}
+.bp-mscroll.held .bp-mparch{box-shadow:inset 0 0 14px rgba(90,60,20,.55),0 4px 12px #000,0 0 0 2px rgba(201,162,74,.7)}
+.bp-mtext{position:absolute;left:12px;top:50%;transform:translateY(-50%);white-space:nowrap;
+font:15px "IM Fell English",Georgia,serif;color:#3a2a10;text-shadow:0 1px 0 rgba(255,255,255,.35)}
+.bp-mtext .who{color:#5a1c14;font:inherit;font-weight:700;cursor:pointer}
+.bp-mtext .who:hover,.bp-mtext .who:focus-visible{text-decoration:underline;outline:none}
+/* a note wider than the parchment glides leftward by exactly its overflow (--bp-glide, set in
+   app.js), then holds at the end so the tail can be read */
+@keyframes bp-mglide{from{transform:translate(0,-50%)}to{transform:translate(var(--bp-glide,0),-50%)}}
+.bp-mparch .bp-remove{top:50%;transform:translateY(-50%);right:6px}
+@media (prefers-reduced-motion:reduce){.bp-mparch{transition:none}.bp-mtext{animation:none !important}}
+/* tagged names on the desktop strip get the same treatment */
+.bp-text .who{color:#5a1c14;font:inherit;font-weight:700;cursor:pointer}
+.bp-text .who:hover,.bp-text .who:focus-visible{text-decoration:underline;outline:none}
+/* the 📜 "drop a note" button lives in the status bar (inside the "..." menu on a phone); on the
+   wide layout the panel has its own composer, so the button steps aside there */
+@media (min-width:1340px){#ballotBtn{display:none}}
+.status .ballotbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
+.status .ballotbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+/* the @ menu has to clear the prompt dialog (z-index 70) when it's serving that dialog's field */
+.mention-menu.above-modal{z-index:75}
