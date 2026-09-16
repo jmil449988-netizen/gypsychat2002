@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=67">
+<link rel="stylesheet" href="./css/style.css?v=68">
 </head>
 <body>
 <div class="gc-root">
@@ -101,8 +101,27 @@
      Keeping them as direct children of .gc-root instead -- siblings of .win and the takeover panels --
      means they're never inside anything that gets display:none'd by those panels, so the z-index
      range above (see the .im comment) is what actually decides stacking, exactly as intended. -->
-<div id="ims"></div>
+<!-- The Messages dock (v96): every whisper now lives in this one panel, anchored to the bottom-right
+     corner the way Instagram's web inbox is, instead of as separate draggable windows plus a tray
+     of tabs. Three states, all driven by syncDock() in app.js: collapsed to just the bar
+     (.collapsed), expanded on the inbox list (neither class), or expanded on one conversation
+     (.thread) -- in which case the conversation's own header (.im .bar, with its back arrow)
+     stands in for .dm-bar. #imTray still holds one .im-tab per conversation (they're the inbox
+     rows now) and #ims still holds the .im conversation views, so the existing whisper code keeps
+     addressing the same ids. Hidden until signed on; .gc-root.no-dms hides it on request. -->
+<div class="dm-dock collapsed hidden" id="dmDock" aria-label="Messages">
+<div class="dm-bar" id="dmBar" role="button" tabindex="0" aria-expanded="false" aria-controls="dmBody">
+<span class="dm-bar-ico" aria-hidden="true">✉</span><span class="dm-bar-title">Messages</span><span class="rbadge dm-bar-badge hidden" id="dmBarBadge">0</span>
+<span class="dm-bar-chev" aria-hidden="true">⌃</span>
+</div>
+<div class="dm-body" id="dmBody">
+<div class="dm-inbox" id="dmInbox">
 <div id="imTray" class="im-tray"></div>
+<div class="dm-empty" id="dmEmpty">No whispers yet.<br>Tap a name in the room and choose <b>Whisper</b>.</div>
+</div>
+<div id="ims"></div>
+</div>
+</div>
 
 <!-- Friend-request inbox: same reasoning as #ims/#imTray just above -- a sibling of .win, not a
      child of it, so the bell and its dropdown stay usable even while Threads/Leaderboard/Roulette
@@ -337,6 +356,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=95"></script>
+<script src="./js/app.js?v=96"></script>
 </body>
 </html>
