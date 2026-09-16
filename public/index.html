@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=64">
+<link rel="stylesheet" href="./css/style.css?v=65">
 </head>
 <body>
 <div class="gc-root">
@@ -46,11 +46,14 @@
 <div id="joinFields">
 <div id="gateFields">
 <label for="accessCode">Enter key here</label>
-<input id="accessCode" class="sunk" autocomplete="off" maxlength="40" placeholder="Your invite key">
+<!-- autocapitalize/autocorrect/spellcheck off: phone keyboards otherwise capitalise, "correct"
+     and red-underline an invite code or a character name, and the wrong-case key then fails.
+     enterkeyhint labels the keyboard's return key for the step it actually performs. -->
+<input id="accessCode" class="sunk" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" maxlength="40" placeholder="Your invite key">
 </div>
 <div id="nameFields">
 <label for="sn">Character name</label>
-<input id="sn" class="sunk" maxlength="16" autocomplete="off" placeholder="e.g. xXsk8rXx">
+<input id="sn" class="sunk" maxlength="16" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="e.g. xXsk8rXx">
 <div class="sn-note hidden" id="snNote">This device already has a character — you can rename it once you're in. <button type="button" class="sn-reset" id="snReset">Start over as someone new</button></div>
 </div>
 <div class="admin-fields hidden" id="adminFields">
@@ -71,14 +74,14 @@
 </div>
 
 <div class="log sunk hidden" id="log" aria-live="polite" aria-label="Chat messages"></div>
-<div class="users sunk hidden" id="users"><span class="uz" id="usersResize" role="separator" aria-orientation="vertical" aria-label="Resize the online and friends panel" tabindex="0"></span><span class="uzv" id="usersResizeV" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the online and friends panel" tabindex="0"></span><div class="hd">Online<button type="button" class="umin" id="usersMin" aria-expanded="true" aria-label="Hide the online and friends list" title="Hide the online and friends list">▼</button></div><div class="list" id="ulist"></div><div class="hd frhd">Friends</div><div class="list" id="flist"></div><div class="hint">Tap a name for options</div></div>
+<div class="users sunk hidden" id="users"><span class="uz" id="usersResize" role="separator" aria-orientation="vertical" aria-label="Resize the online and friends panel" tabindex="0"></span><span class="uzv" id="usersResizeV" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the online and friends panel" tabindex="0"></span><div class="hd">Online<span class="ucount" id="ucount"></span><button type="button" class="umin" id="usersMin" aria-expanded="true" aria-label="Hide the online and friends list" title="Hide the online and friends list">▼</button></div><div class="list" id="ulist"></div><div class="hd frhd">Friends</div><div class="list" id="flist"></div><div class="hint">Tap a name for options</div></div>
 
 <div class="compose hidden" id="compose">
 <button class="btn emo" id="emoBtn" aria-label="Insert emoji" title="Emoji">😊</button>
 <button class="btn gif" id="gifBtn" aria-label="Search GIFs" title="GIF">GIF</button>
 <div class="cooldown hidden" id="cooldownMsg" role="status" aria-live="polite"></div>
 <div class="typing-indicator hidden" id="typingIndicator" aria-live="polite"></div>
-<textarea id="msg" class="sunk" maxlength="140" placeholder="Speak... Enter to send"></textarea>
+<textarea id="msg" class="sunk" maxlength="140" enterkeyhint="send" placeholder="Speak... Enter to send"></textarea>
 <button class="btn" id="send">Send</button>
 </div>
 </div>
@@ -302,6 +305,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=94"></script>
+<script src="./js/app.js?v=95"></script>
 </body>
 </html>
