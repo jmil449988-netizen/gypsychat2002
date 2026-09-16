@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 97;
+var BUILD_NUMBER = 98;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -962,6 +962,7 @@ $('infoOverlay').onclick = function (e) { if (e.target === $('infoOverlay')) $('
    it shows up tucked in near the address bar, looking like it belongs to the browser chrome rather
    than the room), so this keeps the same one-question-one-answer flow but inside a window styled
    like the rest of the app. Returns a Promise: the trimmed string, or null if cancelled. */
+var promptMentions = false;
 function showPromptModal(title, opts) {
 opts = opts || {};
 return new Promise(function (resolve) {
@@ -973,20 +974,30 @@ else { body.textContent = ''; body.classList.add('hidden'); }
 input.value = opts.value || '';
 input.placeholder = opts.placeholder || '';
 input.maxLength = opts.maxLength || 100;
+/* opts.mentions: the field gets the composer's @Name autocomplete for as long as the dialog is up
+   (the Ballot Box uses this on phones) */
+promptMentions = !!opts.mentions;
+if (promptMentions) mentionTa = input;
 overlay.classList.remove('hidden');
 input.focus(); input.select();
 function done(val) {
 overlay.classList.add('hidden');
 okBtn.onclick = null; cancelBtn.onclick = null; overlay.onclick = null; input.onkeydown = null;
+if (promptMentions) { closeMention(); mentionTa = null; promptMentions = false; }
 resolve(val);
 }
 okBtn.onclick = function () { done(input.value.trim()); };
 cancelBtn.onclick = function () { done(null); };
 overlay.onclick = function (e) { if (e.target === overlay) done(null); };
-input.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); okBtn.onclick(); } };
+input.onkeydown = function (e) { if (promptMentions && mentionKeydown(e)) return; if (e.key === 'Enter') { e.preventDefault(); okBtn.onclick(); } };
 });
 }
 
+/* the prompt dialog's field drives the @ menu only while a caller asked for it (opts.mentions) */
+if ($('promptInput')) {
+$('promptInput').addEventListener('input', function () { if (promptMentions) updateMentionMenu(); });
+$('promptInput').addEventListener('click', function () { if (promptMentions) updateMentionMenu(); });
+}
 document.addEventListener('keydown', function (e) {
 if (e.key !== 'Escape') return;
 if (!$('warnOverlay').classList.contains('hidden')) $('warnOk').click();
@@ -2705,27 +2716,36 @@ msg.value = ''; sendTyping(null, false); closeMention(); await post(t); msg.focu
 }
 $('send').onclick = send;
 msg.onkeydown = function (e) {
-if (mentionMenu.classList.contains('open')) {
-if (e.key === 'ArrowDown') { e.preventDefault(); mentionIndex = (mentionIndex + 1) % mentionItems.length; renderMentionMenu(); return; }
-if (e.key === 'ArrowUp') { e.preventDefault(); mentionIndex = (mentionIndex - 1 + mentionItems.length) % mentionItems.length; renderMentionMenu(); return; }
-if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(mentionItems[mentionIndex]); return; }
-if (e.key === 'Escape') { e.preventDefault(); closeMention(); return; }
-}
+if (mentionKeydown(e)) return;
 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 };
 
-/* ---------- @mention autocomplete (main chat only) ----------
+/* ---------- @mention autocomplete ----------
    One dropdown, shared the same way the emoji/GIF pickers are: created once, repositioned to the
-   textarea via positionPicker(). Matches against recentPeopleEntries() -- the same 30-minute
+   field via positionPicker(). Matches against recentPeopleEntries() -- the same 30-minute
    reachable pool the whisper picker and mentionableNames() use, not just people live in the room
-   this instant, so someone who just stepped away is still suggested and still gets pushed. */
+   this instant, so someone who just stepped away is still suggested and still gets pushed.
+   mentionTa is whichever field the menu is currently serving: the main composer by default, or a
+   Ballot Box field (the desktop note textarea, or the prompt dialog on a phone) while that has
+   focus -- see attachMentions(). */
 var mentionMenu = document.createElement('div'); mentionMenu.className = 'mention-menu'; mentionMenu.setAttribute('role', 'listbox'); document.body.appendChild(mentionMenu);
-var mentionStart = -1, mentionItems = [], mentionIndex = 0;
+var mentionStart = -1, mentionItems = [], mentionIndex = 0, mentionTa = null;
 function closeMention() { mentionMenu.classList.remove('open'); mentionItems = []; mentionStart = -1; }
+/* Arrow/Enter/Tab/Escape while the menu is open. Returns true when the key was the menu's to
+   handle, so the field's own keydown (send, cast, ...) knows to stand down. */
+function mentionKeydown(e) {
+if (!mentionMenu.classList.contains('open')) return false;
+if (e.key === 'ArrowDown') { e.preventDefault(); mentionIndex = (mentionIndex + 1) % mentionItems.length; renderMentionMenu(); return true; }
+if (e.key === 'ArrowUp') { e.preventDefault(); mentionIndex = (mentionIndex - 1 + mentionItems.length) % mentionItems.length; renderMentionMenu(); return true; }
+if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(mentionItems[mentionIndex]); return true; }
+if (e.key === 'Escape') { e.preventDefault(); closeMention(); return true; }
+return false;
+}
 function currentMentionToken() {
-var s = msg.selectionStart, e = msg.selectionEnd;
+var ta = mentionTa || msg;
+var s = ta.selectionStart, e = ta.selectionEnd;
 if (s !== e) return null;
-var v = msg.value;
+var v = ta.value;
 var at = v.lastIndexOf('@', s - 1);
 if (at === -1) return null;
 if (at > 0 && !/\s/.test(v[at - 1])) return null; // must start a word, not be mid-token (e.g. an email-like string)
@@ -2758,20 +2778,31 @@ if (!items.length) { closeMention(); return; }
 mentionStart = tok.start; mentionItems = items; mentionIndex = 0;
 renderMentionMenu();
 mentionMenu.classList.add('open');
-positionPicker(mentionMenu, msg);
+mentionMenu.classList.toggle('above-modal', promptMentions); // the prompt dialog sits at z-index 70, above the menu's usual tier
+positionPicker(mentionMenu, mentionTa || msg);
 }
 function selectMention(name) {
-var end = msg.selectionStart;
-var v = msg.value;
-msg.value = v.slice(0, mentionStart) + '@' + name + ' ' + v.slice(end);
+var ta = mentionTa || msg;
+var end = ta.selectionStart;
+var v = ta.value;
+ta.value = v.slice(0, mentionStart) + '@' + name + ' ' + v.slice(end);
 var newPos = mentionStart + name.length + 2;
 closeMention();
-msg.focus(); msg.selectionStart = msg.selectionEnd = newPos;
+ta.focus(); ta.selectionStart = ta.selectionEnd = newPos;
+ta.dispatchEvent(new Event('input')); // counters and the like that watch the field
 }
-msg.addEventListener('input', updateMentionMenu);
+/* Wires a field up to the shared menu: it becomes mentionTa while focused, and typing/clicking in
+   it drives the suggestions. The field's own keydown should call mentionKeydown(e) first. */
+function attachMentions(ta) {
+if (!ta) return;
+ta.addEventListener('focus', function () { mentionTa = ta; });
+ta.addEventListener('input', updateMentionMenu);
+ta.addEventListener('click', updateMentionMenu);
+}
+attachMentions(msg);
+msg.addEventListener('focus', function () { mentionTa = null; }); // the default; keeps `msg` first
 msg.addEventListener('input', function () { sendTyping(null, !!msg.value); });
-msg.addEventListener('click', updateMentionMenu);
-document.addEventListener('click', function (e) { if (!mentionMenu.contains(e.target) && e.target !== msg) closeMention(); });
+document.addEventListener('click', function (e) { if (!mentionMenu.contains(e.target) && e.target !== (mentionTa || msg)) closeMention(); });
 
 /* ---------- emoji picker ----------
    Shared by the main chat compose box and every whisper window's compose bar (one picker element,
@@ -3495,46 +3526,77 @@ var ballotPanel = $('ballotPanel'), ballotBody = $('ballotBody'), ballotCast = $
 var ballotNote = $('ballotNote'), ballotText = $('ballotText'), ballotStrip = $('ballotStrip'), ballotRemove = $('ballotRemove'), ballotBox = $('ballotBox');
 var ballotNotes = [], ballotIdx = -1, ballotShowing = null, ballotTimer = null;
 var BALLOT_EMPTY = 'The box is empty. Be the first to drop a note in.', BALLOT_MAX = 140;
-/* Puts text on the strip and restarts its crossing from the right edge, so a swap never lands
-   mid-scroll. animationiteration (below) is what calls for the next note each time a crossing
-   completes -- 15s, the animation's own duration in style.css. */
-function setStrip(text) {
+/* @Name inside a note: same matching as chat mentions (mentionableNames -- longest name first,
+   word-boundary guarded), but each hit is rendered as the same tappable .who element a name is
+   everywhere else in the room, carrying the id so a tap opens the Get Info / Whisper / Block menu.
+   Names that don't resolve to anyone seen recently stay plain text. */
+function ballotHtml(body) {
+var html = esc(body);
+var pool = recentPeopleEntries();
+var ids = Object.keys(pool).filter(function (id) { return pool[id] && pool[id].name; })
+.sort(function (a, b) { return pool[b].name.length - pool[a].name.length; });
+ids.forEach(function (id) {
+var n = pool[id].name;
+var re = new RegExp('@' + escRe(esc(n)) + '(?![\\w-])', 'g');
+html = html.replace(re, '<b class="who mention" data-id="' + esc(id) + '" data-name="' + esc(n) + '" tabindex="0">@' + esc(n) + '</b>');
+});
+return html;
+}
+/* a tap on a tagged name, on either layout's parchment */
+function ballotTagClick(e) {
+var who = e.target.closest('.who[data-id]'); if (!who) return false;
+if (who.dataset.id === (me && me.id)) return true;
+e.stopPropagation(); openMenu(who.dataset.id, who, who.dataset.name); return true;
+}
+/* Puts a note on the desktop strip and restarts its crossing from the right edge, so a swap never
+   lands mid-scroll. animationiteration (below) is what calls for the next note each time a
+   crossing completes -- 15s, the animation's own duration in style.css. */
+function setStrip(html) {
 if (!ballotText) return;
-ballotText.textContent = text;
+ballotText.innerHTML = html;
 ballotText.style.animation = 'none'; void ballotText.offsetWidth; ballotText.style.animation = '';
 }
+function nextBallotNote() {
+if (!ballotNotes.length) { ballotShowing = null; ballotIdx = -1; return null; }
+ballotIdx = (ballotIdx + 1) % ballotNotes.length; ballotShowing = ballotNotes[ballotIdx]; return ballotShowing;
+}
 function showBallotNote() {
-if (!ballotNotes.length) { ballotShowing = null; ballotIdx = -1; setStrip(BALLOT_EMPTY); }
-else { ballotIdx = (ballotIdx + 1) % ballotNotes.length; ballotShowing = ballotNotes[ballotIdx]; setStrip(ballotShowing.body); }
+var n = nextBallotNote();
+setStrip(n ? ballotHtml(n.body) : esc(BALLOT_EMPTY));
 if (ballotRemove) ballotRemove.classList.toggle('hidden', !(isAdmin && ballotShowing));
 }
 if (ballotText) ballotText.addEventListener('animationiteration', showBallotNote);
-/* reading a long one? hovering the strip holds it still */
 if (ballotStrip) {
+/* reading a long one? hovering the strip holds it still */
 ballotStrip.addEventListener('mouseenter', function () { ballotStrip.classList.add('paused'); });
 ballotStrip.addEventListener('mouseleave', function () { ballotStrip.classList.remove('paused'); });
+ballotStrip.addEventListener('click', ballotTagClick);
+ballotStrip.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('.who[data-id]')) { e.preventDefault(); ballotTagClick(e); } });
 }
 async function loadBallot() {
-if (!sb || !me || !ballotPanel) return;
+if (!sb || !me) return;
 var r = await sb.from('ballot_notes').select('id,created_at,body').order('created_at', { ascending: false }).limit(60);
 if (r.error) { console.warn('ballot box:', r.error.message); return; }
 var wasEmpty = !ballotNotes.length;
 ballotNotes = r.data || [];
-/* First fill (or the box going from empty to not): start the rotation right away rather than
-   letting the "box is empty" line finish its crossing. Otherwise the refreshed list just takes
-   over from the next crossing on; ballotIdx keeps counting modulo whatever the new length is. */
+/* First fill (or the box going from empty to not): start the desktop rotation right away rather
+   than letting the "box is empty" line finish its crossing. Otherwise the refreshed list just
+   takes over from the next crossing on; ballotIdx keeps counting modulo whatever the new length
+   is. (The phone scroll runs its own once-a-minute clock -- see showMobileNote -- off the same
+   list and index.) */
 if (wasEmpty || !ballotNotes.length) { ballotIdx = -1; showBallotNote(); }
 }
 function startBallot() {
-if (!ballotPanel) return;
-ballotPanel.classList.remove('hidden');
+if (ballotPanel) ballotPanel.classList.remove('hidden');
 loadBallot();
 clearInterval(ballotTimer); ballotTimer = setInterval(loadBallot, 60000);
+startMobileBallot();
 }
 function stopBallot() {
 clearInterval(ballotTimer); ballotTimer = null;
 ballotNotes = []; ballotIdx = -1; ballotShowing = null;
 if (ballotPanel) ballotPanel.classList.add('hidden');
+stopMobileBallot();
 }
 function setBallotNote(text, isErr) { if (!ballotNote) return; ballotNote.textContent = text || ''; ballotNote.classList.toggle('err', !!isErr); }
 function updateBallotCount() {
@@ -3542,40 +3604,148 @@ if (!ballotCount || !ballotBody) return;
 var left = BALLOT_MAX - ballotBody.value.length;
 ballotCount.textContent = String(left); ballotCount.classList.toggle('low', left < 20);
 }
-async function castBallot() {
-if (!me || !ballotBody) return;
-var t = ballotBody.value.trim(); if (!t) return;
+/* Writes a note to the box. Shared by the desktop panel's composer and the phone's prompt dialog.
+   Resolves to { ok, note } or { ok:false, message }. On success, any @Name in it that resolves to
+   someone recently seen (not yourself) is recorded in ballot_tags -- the database refuses the row
+   once that person has been tagged 10 times in the hour -- and each accepted tag sends them a
+   push that says only that someone tagged them, never who. */
+async function castBallotText(t) {
+t = String(t || '').trim(); if (!t || !me) return { ok: false, message: '' };
 if (t.length > BALLOT_MAX) t = t.slice(0, BALLOT_MAX);
-ballotCast.disabled = true; setBallotNote('');
 /* author_id is the only identifying thing written, and only the database ever sees it again;
    .select() names its columns so the returned row stays inside what the API allows us to read */
 var r = await sb.from('ballot_notes').insert({ author_id: me.id, body: t }).select('id,created_at,body').single();
-ballotCast.disabled = false;
 if (r.error) {
 /* the insert policy is also the rate limit (one a minute) and the ban check, both of which come
    back as a bare row-level-security refusal */
-setBallotNote(/row-level security|policy/i.test(r.error.message) ? 'One note a minute — give it a moment.' : 'The box wouldn’t take it: ' + r.error.message, true);
-return;
+return { ok: false, message: /row-level security|policy/i.test(r.error.message) ? 'One note a minute — give it a moment.' : 'The box wouldn’t take it: ' + r.error.message };
 }
+if (r.data) { ballotNotes.unshift(r.data); ballotIdx = -1; showBallotNote(); } // your own note takes the strip next
+var tagged = mentionedUserIds(t);
+if (r.data && tagged.length) {
+tagged.forEach(function (id) {
+sb.from('ballot_tags').insert({ note_id: r.data.id, tagged_id: id }).then(function (tr) {
+if (tr.error) return; // over their hourly cap (or some other refusal): no push, quietly
+triggerPush(id, 'The Ballot Box', 'Someone tagged you in an anonymous note.', 'gc-ballot-tag');
+});
+});
+}
+return { ok: true, note: r.data };
+}
+async function castBallot() {
+if (!me || !ballotBody) return;
+var t = ballotBody.value.trim(); if (!t) return;
+ballotCast.disabled = true; setBallotNote('');
+var res = await castBallotText(t);
+ballotCast.disabled = false;
+if (!res.ok) { if (res.message) setBallotNote(res.message, true); return; }
 ballotBody.value = ''; updateBallotCount();
 if (ballotBox) { ballotBox.classList.remove('casting'); void ballotBox.offsetWidth; ballotBox.classList.add('casting'); }
-if (r.data) { ballotNotes.unshift(r.data); ballotIdx = -1; showBallotNote(); } // your own note takes the strip next
 setBallotNote('Your note is in the box.');
 setTimeout(function () { if (ballotNote && ballotNote.textContent === 'Your note is in the box.') setBallotNote(''); }, 6000);
 }
 if (ballotCast) ballotCast.onclick = castBallot;
 if (ballotBody) {
 ballotBody.addEventListener('input', updateBallotCount);
-ballotBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); castBallot(); } };
+attachMentions(ballotBody);
+ballotBody.onkeydown = function (e) { if (mentionKeydown(e)) return; if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); castBallot(); } };
 }
-/* admin: pull the note that's on the strip right now out of the box */
-if (ballotRemove) ballotRemove.onclick = async function () {
-if (!isAdmin || !ballotShowing) return;
-var gone = ballotShowing;
+/* admin: pull the note that's on the strip right now out of the box (both layouts share this) */
+async function removeBallotNote(gone) {
+if (!isAdmin || !gone) return false;
 var r = await sb.from('ballot_notes').delete().eq('id', gone.id);
-if (r.error) { setBallotNote('Could not remove it: ' + r.error.message, true); return; }
+if (r.error) { setBallotNote('Could not remove it: ' + r.error.message, true); return false; }
 ballotNotes = ballotNotes.filter(function (n) { return n.id !== gone.id; });
-ballotIdx = Math.max(-1, ballotIdx - 1); showBallotNote();
+ballotIdx = Math.max(-1, ballotIdx - 1);
+return true;
+}
+if (ballotRemove) ballotRemove.onclick = async function () { if (await removeBallotNote(ballotShowing)) showBallotNote(); };
+
+/* ---------- the Ballot Box on a phone (and any screen without the gutter panel) ----------
+   No gutter to keep a panel in, so the box becomes a scroll: a rolled-up parchment tucked into the
+   top-right corner of the chat log (#ballotMobile, .bp-mscroll in style.css). Once a minute it
+   unrolls across the top of the log, one note glides over it (or just sits there if it's short
+   enough to fit), and it rolls itself back up out of the way -- on screen for roughly ten seconds
+   in sixty. The first note comes a few seconds after signing on rather than a full minute later.
+   Tap the open parchment to hold it (tap again to let it go); tap the rolled-up end to peek at
+   the last note now. Casting from here goes through the 📜 button (#ballotBtn -- in the "..." menu
+   on a phone) and the prompt dialog. */
+var ballotMobile = $('ballotMobile'), ballotMobileText = $('ballotMobileText'), ballotMobileParch = $('ballotMobileParch');
+var ballotMobileRoller = $('ballotMobileRoller'), ballotMobileRemove = $('ballotMobileRemove'), ballotBtn = $('ballotBtn');
+var mobileBallotTimer = null, mobileBallotHide = null, mobileBallotHeld = false, mobileBallotShowing = null;
+var MOBILE_BALLOT_EVERY = 60000, MOBILE_BALLOT_FIRST = 5000, MOBILE_BALLOT_HOLD = 6000, MOBILE_BALLOT_GLIDE_PX_PER_S = 45;
+function mobileBallotActive() { return !!ballotMobile && window.matchMedia('(max-width:1339px)').matches; }
+function rollUpMobileBallot() {
+clearTimeout(mobileBallotHide); mobileBallotHide = null;
+if (!ballotMobile) return;
+ballotMobile.classList.remove('open', 'held');
+mobileBallotHeld = false;
+if (ballotMobileText) { ballotMobileText.style.animation = ''; ballotMobileText.style.animationPlayState = ''; }
+}
+/* Unroll, show `note` (or the "empty" line), and schedule the roll-up -- unless held. */
+function showMobileNote(note) {
+if (!ballotMobile || !ballotMobileText) return;
+mobileBallotShowing = note || null;
+ballotMobileText.innerHTML = note ? ballotHtml(note.body) : esc(BALLOT_EMPTY);
+ballotMobileText.style.animation = 'none'; ballotMobileText.style.animationPlayState = '';
+if (ballotMobileRemove) ballotMobileRemove.classList.toggle('hidden', !(isAdmin && note));
+clearTimeout(mobileBallotHide);
+ballotMobile.classList.add('open');
+/* once unrolled (transition in style.css, ~.5s), decide whether the text needs to glide */
+mobileBallotHide = setTimeout(function () {
+var room = ballotMobileParch ? ballotMobileParch.clientWidth - 24 : 0;
+var need = ballotMobileText.scrollWidth;
+var hold = MOBILE_BALLOT_HOLD;
+if (need > room && room > 0) {
+var dist = need - room + 24, secs = Math.max(4, dist / MOBILE_BALLOT_GLIDE_PX_PER_S);
+ballotMobileText.style.setProperty('--bp-glide', '-' + dist + 'px');
+ballotMobileText.style.animation = 'bp-mglide ' + secs + 's linear 1s 1 forwards';
+hold = (secs + 1) * 1000 + 2500;
+}
+mobileBallotHide = setTimeout(function () { if (!mobileBallotHeld) rollUpMobileBallot(); }, hold);
+}, 550);
+}
+function tickMobileBallot() {
+if (!mobileBallotActive() || mobileBallotHeld) return;
+showMobileNote(nextBallotNote());
+}
+function startMobileBallot() {
+if (!ballotMobile) return;
+ballotMobile.classList.remove('hidden');
+clearInterval(mobileBallotTimer);
+setTimeout(tickMobileBallot, MOBILE_BALLOT_FIRST);
+mobileBallotTimer = setInterval(tickMobileBallot, MOBILE_BALLOT_EVERY);
+}
+function stopMobileBallot() {
+clearInterval(mobileBallotTimer); mobileBallotTimer = null;
+rollUpMobileBallot();
+if (ballotMobile) ballotMobile.classList.add('hidden');
+}
+if (ballotMobileParch) ballotMobileParch.addEventListener('click', function (e) {
+if (ballotTagClick(e)) return;
+if (e.target.closest('.bp-remove')) return;
+/* tap to hold, tap again to let it roll up */
+if (mobileBallotHeld) { rollUpMobileBallot(); return; }
+mobileBallotHeld = true; ballotMobile.classList.add('held'); clearTimeout(mobileBallotHide);
+if (ballotMobileText) ballotMobileText.style.animationPlayState = 'paused';
+});
+if (ballotMobileRoller) ballotMobileRoller.onclick = function () {
+if (ballotMobile.classList.contains('open')) { rollUpMobileBallot(); return; }
+showMobileNote(mobileBallotShowing || nextBallotNote());
+};
+if (ballotMobileRemove) ballotMobileRemove.onclick = async function (e) {
+e.stopPropagation();
+if (await removeBallotNote(mobileBallotShowing)) rollUpMobileBallot();
+};
+/* the 📜 button: a note by way of the prompt dialog, with the same @autocomplete as the composer */
+if (ballotBtn) ballotBtn.onclick = async function () {
+closeMoreMenu();
+var t = await showPromptModal('Drop a note in the box', { placeholder: 'No name goes on it. @ someone to tag them.', maxLength: BALLOT_MAX, mentions: true });
+if (t === null || !t.trim()) return;
+var res = await castBallotText(t);
+if (!res.ok) { if (res.message) addSys(res.message); return; }
+addSys('Your note is in the box.');
+if (mobileBallotActive() && res.note) showMobileNote(res.note);
 };
 
 /* ---------- draggable / sweepable fab bubbles ----------
