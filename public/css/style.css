@@ -402,9 +402,17 @@ background:linear-gradient(180deg,#0f0d0b,#171310);border:1px solid var(--gold-l
 .gifpicker .gsearch input:focus{box-shadow:inset 0 0 10px #000,0 0 0 1px var(--gold)}
 .gifpicker .gsearch .btn{min-width:40px;padding:0 8px}
 .gifpicker .gresults{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:0 6px 6px;max-height:220px;overflow-y:auto;scrollbar-color:var(--gold-lo) #0f0d0b}
-.gifpicker .gresults button{padding:0;border:1px solid #3a3026;background:#0f0d0b;cursor:pointer;overflow:hidden;aspect-ratio:1/1}
+/* Square thumbnail cells are sized with the classic padding-top:100% box (height:0, padding-top
+   pegged to width) rather than the `aspect-ratio` CSS property. Newer iOS Safari (seen on 26.6.1)
+   has a timing bug where an <img> inside an aspect-ratio-sized box can paint using the box's
+   not-yet-resolved intrinsic size on first layout -- the row already visible on screen (the top
+   row of results) renders with the image cropped against the wrong box, while rows that lay out
+   after the picture already has a settled size (effectively everything below the fold) come out
+   fine. padding-top:100% has given every browser, iOS included, a fixed pixel height before the
+   image ever starts loading, so there's no not-yet-resolved size for it to race against. */
+.gifpicker .gresults button{position:relative;display:block;width:100%;height:0;padding:0 0 100%;border:1px solid #3a3026;background:#0f0d0b;cursor:pointer;overflow:hidden}
 .gifpicker .gresults button:hover,.gifpicker .gresults button:focus-visible{border-color:var(--gold);box-shadow:0 0 8px rgba(201,162,74,.6);outline:none}
-.gifpicker .gresults img{width:100%;height:100%;object-fit:contain;background:#0f0d0b;display:block}
+.gifpicker .gresults img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#0f0d0b;display:block}
 .gifpicker .gmsg{grid-column:1 / -1;padding:10px 4px;color:var(--ash);font-style:italic;font-size:12px;text-align:center}
 /* Posted pictures show as small thumbnails everywhere, never at native size -- click one to see
    it full-size in the lightbox (openLightbox in app.js). */
