@@ -55,7 +55,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 86;
+var BUILD_NUMBER = 87;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1725,13 +1725,18 @@ var menu = document.createElement('div'); menu.className = 'nmenu'; menu.setAttr
 function closeMenu() { menu.classList.remove('open'); }
 /* Drops "@Name " into the main chat box and focuses it -- the requested shortcut for tagging
    someone straight from their context menu instead of hand-typing "@" and their name. Always
-   targets the main room composer (every entry point that can open this menu -- online list,
-   friends list, leaderboard, chat log -- lives on the main room screen, never inside a whisper
-   window), so there's no ambiguity about which box gets the mention. Inserts at the cursor rather
-   than always appending, and adds a leading space only if the text before the cursor needs one,
-   so tagging mid-sentence doesn't run words together or clobber whatever was already being typed. */
+   targets the main room composer, which every entry point that can open this menu (online list,
+   friends list, leaderboard, threads board, chat log) can reach -- but the threads board and
+   leaderboard are full-screen takeovers on mobile that hide the composer entirely (see
+   threadToggleBtn/closeLeaderboard), so tagging from inside either of them first switches back to
+   the chat view -- same toggle those panels' own close buttons use -- otherwise the mention would
+   land in a box nobody can see. Inserts at the cursor rather than always appending, and
+   adds a leading space only if the text before the cursor needs one, so tagging mid-sentence
+   doesn't run words together or clobber whatever was already being typed. */
 function tagInChat(name) {
   if (!msg) return;
+  if (gcRoot.classList.contains('mobile-threads-open') && threadToggleBtn) threadToggleBtn.click();
+  if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
   var v = msg.value;
   var s = typeof msg.selectionStart === 'number' ? msg.selectionStart : v.length;
   var e = typeof msg.selectionEnd === 'number' ? msg.selectionEnd : v.length;
@@ -2816,6 +2821,37 @@ threadsCache = {}; threadsOrder = [];
 r.data.forEach(function (t) { threadsCache[t.id] = t; threadsOrder.push(t.id); });
 renderThreadList();
 }
+/* Status dot next to a name in the threads board: green/yellow/red mirror the exact same live
+   status the Online list shows (online/away/busy; auto-idle gets the same grey-blue the Online
+   list gives it too), straight from `people`. Grey means the person isn't in `people` right now
+   but was seen within the last 30 minutes -- recentPeopleEntries(), the identical reachable pool
+   Whisper/tagging/@mention push already key off of, so "recently online" means the same thing
+   everywhere in this app. No dot at all means neither -- most threads are read long after the OP
+   or repliers were anywhere near that window. */
+function threadStatusDotClass(id) {
+var p = people[id];
+if (p) return 'tp-dot tp-dot-' + (p.status || 'online');
+if (recentPeopleEntries()[id]) return 'tp-dot tp-dot-recent';
+return '';
+}
+function threadStatusDotHtml(id) {
+var cls = threadStatusDotClass(id);
+return cls ? '<span class="' + cls + '"></span>' : '';
+}
+/* Re-stamps every already-rendered name's dot in the open thread whenever presence changes --
+   called alongside renderPeople() from the presence 'sync' handler -- so someone going away/busy/
+   offline (or coming back) while you're sitting in a thread updates live instead of only reflecting
+   whatever their status happened to be the moment their post first rendered. */
+function refreshThreadStatusDots() {
+if (!tpPosts) return;
+tpPosts.querySelectorAll('.who[data-id]').forEach(function (el) {
+var dot = el.querySelector('.tp-dot');
+var cls = threadStatusDotClass(el.dataset.id);
+if (!cls) { if (dot) dot.remove(); return; }
+if (dot) dot.className = cls;
+else el.insertAdjacentHTML('afterbegin', '<span class="' + cls + '"></span>');
+});
+}
 function appendThreadPost(p, isOp) {
 if (threadPostsSeen[p.id]) return; threadPostsSeen[p.id] = 1;
 var postIsAdmin = isAdminId(p.sender_id);
@@ -2827,7 +2863,10 @@ d.dataset.postId = String(p.id);
    target 'thread_post'/their own real id. */
 var reactType = isOp ? 'thread' : 'thread_post';
 var reactId = isOp ? p.thread_id : p.id;
-var html = '<span class="t">' + fmt(p.created_at) + '</span><b data-id="' + esc(p.sender_id) + '">' + esc(p.sender_name) + levelBadgeHtml(p.sender_id) + (isOp ? ' (OP)' : '') + ':</b> ';
+/* class="who" + data-name wires this into the same name-menu click handling (see tpPosts.onclick
+   below) that the main chat log and leaderboard already use, so tapping a name in a thread opens
+   the familiar Get Info / Whisper / Tag in Chat / Block menu instead of doing nothing. */
+var html = '<span class="t">' + fmt(p.created_at) + '</span><b class="who" data-id="' + esc(p.sender_id) + '" data-name="' + esc(p.sender_name) + '" tabindex="0">' + threadStatusDotHtml(p.sender_id) + esc(p.sender_name) + levelBadgeHtml(p.sender_id) + (isOp ? ' (OP)' : '') + ':</b> ';
 if (p.body) html += bodyHtml(p.body);
 if (p.image_url) html += (p.body ? '<br>' : '') + '<img class="tp-posted-img" src="' + esc(p.image_url) + '" alt="Image" loading="lazy">';
 if (isAdmin) html += ' <button type="button" class="tp-del" data-id="' + esc(String(p.id)) + '" data-op="' + (isOp ? '1' : '0') + '" data-thread="' + esc(String(p.thread_id)) + '" title="' + (isOp ? 'Delete thread' : 'Delete reply') + '" aria-label="' + (isOp ? 'Delete thread' : 'Delete reply') + '">🗑</button>';
@@ -2880,12 +2919,20 @@ tpPosts.onclick = function (e) {
 if (Date.now() < suppressClickUntil) return; // this click is the tail end of a long-press that already acted
 var img = e.target.closest('img.gif, img.tp-posted-img'); if (img) { openLightbox(img.src); return; }
 var rpill = e.target.closest('.react-pill'); if (rpill) { e.stopPropagation(); var rc2 = rpill.closest('.reactions'); toggleReaction(rc2.dataset.rtype, Number(rc2.dataset.rid), rpill.dataset.emoji); return; }
+/* Same Get Info / Whisper / Tag in Chat / Block menu a name click opens everywhere else in the
+   app (main chat log, online list, friends list, leaderboard) -- see openMenu. */
+var who = e.target.closest('.who[data-id]');
+if (who && who.dataset.id !== me.id) { e.stopPropagation(); openMenu(who.dataset.id, who, who.dataset.name); return; }
 var b = e.target.closest('.tp-del'); if (!b) return;
 e.stopPropagation();
 var tid = Number(b.dataset.thread);
 if (b.dataset.op === '1') deleteThread(tid);
 else deleteThreadPost(Number(b.dataset.id), tid);
 };
+tpPosts.addEventListener('keydown', function (e) {
+if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.closest('.who[data-id]')) return;
+e.preventDefault(); tpPosts.onclick(e);
+});
 }
 async function openThread(id) {
 if (!threadsCache[id]) return;
@@ -3582,6 +3629,7 @@ Object.keys(stt).forEach(function (k) { if (stt[k][0]) people[k] = stt[k][0]; })
 touchRecentPeople(); // refresh the mention-push grace-window cache with whoever's live right now
 Object.keys(wins).forEach(function (id) { if (people[id]) { renameWin(id, people[id].name); updateWinAvatar(id); } });
 renderPeople();
+refreshThreadStatusDots();
 });
 channel.on('presence', { event: 'join' }, function (p) {
 if (p.key !== me.id && p.newPresences[0] && !people[p.key]) {
