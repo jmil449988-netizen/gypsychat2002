@@ -969,4 +969,21 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
 .frq-accept:hover,.frq-accept:focus-visible{background:rgba(90,161,90,.35);outline:none}
 .frq-decline{color:#f3c9c6;background:rgba(179,38,30,.18);border:1px solid var(--blood)}
 .frq-decline:hover,.frq-decline:focus-visible{background:rgba(179,38,30,.35);outline:none}
-@media (max-width:500px){.friendreq-panel{top:44px;width:calc(100vw - 12px)}}
+/* Mobile: the in-app emoji picker (#emoBtn) is redundant next to the phone's own emoji keyboard,
+   so it's dropped entirely below 500px and the friend-request bell takes over that reclaimed spot
+   in the compose bar instead -- bottom-left, rather than its desktop home at the top-right corner
+   of the card, since that's where the emoji button used to sit. The bell/panel stay `position:fixed`
+   (not actually moved into #compose in the DOM) so they keep working the same way #ims/#imTray do:
+   still reachable even while Threads/Leaderboard/Roulette hide the rest of .win. The panel opens
+   upward from the bell now instead of downward, since the bell moved from the top of the screen to
+   the bottom. */
+@media (max-width:500px){
+  #emoBtn{display:none}
+  /* .compose's 4 explicit columns (emo/gif/textarea/send) assumed 4 items; with emoBtn gone that
+     would leave only 3 flowing into them and shove the textarea out of its 1fr track (see gifBtn
+     landing in column 1, textarea inheriting gifBtn's old auto-sized column 2, send ballooning
+     into the real 1fr column 3) -- drop to 3 columns here so gif/textarea/send land right. */
+  .compose{grid-template-columns:auto 1fr auto}
+  .friendreq-btn{top:auto;right:auto;bottom:8px;left:8px}
+  .friendreq-panel{top:auto;right:auto;bottom:50px;left:8px;width:calc(100vw - 16px)}
+}
