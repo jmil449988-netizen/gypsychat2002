@@ -208,32 +208,35 @@
 <div class="bp-title">The Ballot<br>Box</div>
 <div class="bp-blurb">Say it without your name on it.</div>
 <div class="bp-box" id="ballotBox" aria-hidden="true">
+<!-- A plain wooden ballot box in cabinet projection (front face straight-on, top and right side
+     receding at a fixed 22px/16px offset), drawn the way the lanterns are: flat fills with gold
+     line-work. Front 34-116 x 52-108; depth offset (+22,-16). The slip is drawn BEFORE the box so
+     that when it drops (.casting) it simply passes behind the top face -- into the slot. -->
 <svg viewBox="0 0 160 120" focusable="false">
 <defs>
-<linearGradient id="bpWood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a5c32"/><stop offset=".55" stop-color="#5e3d20"/><stop offset="1" stop-color="#3a2411"/></linearGradient>
-<linearGradient id="bpWoodSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4a2f18"/><stop offset="1" stop-color="#2c1a0c"/></linearGradient>
-<linearGradient id="bpLid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a8733f"/><stop offset="1" stop-color="#6b4726"/></linearGradient>
-<linearGradient id="bpBrass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1d98a"/><stop offset=".5" stop-color="#c9a24a"/><stop offset="1" stop-color="#7a5a1e"/></linearGradient>
-<linearGradient id="bpPaper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#efe3c2"/><stop offset="1" stop-color="#cdb98a"/></linearGradient>
+<linearGradient id="bpPaper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#efe3c2"/><stop offset="1" stop-color="#d6c397"/></linearGradient>
 </defs>
-<!-- the slip of paper: sits above the slot at rest, drops through it when a note is cast (.casting) -->
-<g class="bp-slip"><path d="M70 22 h30 l-3 26 h-24 z" fill="url(#bpPaper)" stroke="#6b5a35" stroke-width=".8"/><path d="M76 29h18M76 34h14M76 39h16" stroke="#7d6a45" stroke-width="1" stroke-linecap="round" opacity=".7"/></g>
-<!-- body -->
-<path d="M28 52 L80 42 L132 52 L132 102 L80 112 L28 102 Z" fill="url(#bpWood)" stroke="#1c1108" stroke-width="1.2" stroke-linejoin="round"/>
-<path d="M80 62 L132 52 L132 102 L80 112 Z" fill="url(#bpWoodSide)" opacity=".85"/>
-<path d="M28 52 L80 62 L80 112 L28 102 Z" fill="#000" opacity=".12"/>
-<!-- lid -->
-<path d="M24 50 L80 39 L136 50 L80 61 Z" fill="url(#bpLid)" stroke="#1c1108" stroke-width="1.2" stroke-linejoin="round"/>
-<!-- slot with a brass surround -->
-<path d="M62 47 L98 40.5 L104 42 L68 48.5 Z" fill="url(#bpBrass)" stroke="#3a2a0a" stroke-width=".6"/>
-<path d="M65 46.8 L97 41.2 L100 41.8 L68 47.4 Z" fill="#0d0905"/>
-<!-- brass corner straps and lock plate -->
-<path d="M28 52v50M132 52v50" stroke="url(#bpBrass)" stroke-width="3" stroke-linecap="round" opacity=".9"/>
-<path d="M28 76 L80 86 L132 76" fill="none" stroke="url(#bpBrass)" stroke-width="2.4" opacity=".85"/>
-<rect x="74" y="86" width="12" height="14" rx="1.5" fill="url(#bpBrass)" stroke="#3a2a0a" stroke-width=".6"/>
-<circle cx="80" cy="91.5" r="1.6" fill="#1c1108"/><path d="M80 92.5v4" stroke="#1c1108" stroke-width="1.4"/>
-<!-- the same four-point star as the roulette wheel's hub, stamped on the lid -->
-<path d="M46 52.5 L47.6 55.4 L50.6 56.2 L47.6 57 L46 60 L44.4 57 L41.4 56.2 L44.4 55.4 Z" fill="#f1d98a" opacity=".8"/>
+<g class="bp-slip">
+<rect x="74" y="12" width="24" height="33" fill="url(#bpPaper)" stroke="#6b5323" stroke-width="1"/>
+<path d="M78 19h16M78 24h12M78 29h15M78 34h9" stroke="#8a7a55" stroke-width="1" stroke-linecap="round"/>
+</g>
+<!-- right side (darkest) -->
+<path d="M116 52 L138 36 L138 92 L116 108 Z" fill="#3f2914" stroke="#c9a24a" stroke-width="1.2" stroke-linejoin="round"/>
+<!-- top (lightest) -->
+<path d="M34 52 L56 36 L138 36 L116 52 Z" fill="#8a5c32" stroke="#c9a24a" stroke-width="1.2" stroke-linejoin="round"/>
+<!-- slot: brass surround, black opening -->
+<path d="M58 45.5 L112 45.5 L115.5 43 L61.5 43 Z" fill="#c9a24a" stroke="#3a2a0a" stroke-width=".6"/>
+<path d="M60 44.8 L111 44.8 L113 43.6 L62 43.6 Z" fill="#0d0905"/>
+<!-- front -->
+<path d="M34 52 L116 52 L116 108 L34 108 Z" fill="#6b4726" stroke="#c9a24a" stroke-width="1.2" stroke-linejoin="round"/>
+<!-- painted panel: gold pinstripe with a red inner line, the same treatment as the wheel rim -->
+<rect x="41" y="59" width="68" height="42" fill="none" stroke="#c9a24a" stroke-width="1"/>
+<rect x="44" y="62" width="62" height="36" fill="none" stroke="#8a2a1e" stroke-width="1"/>
+<!-- corner plates -->
+<path d="M34 60v-8h8M108 52h8v8M34 100v8h8M116 100v8h-8" fill="none" stroke="#f1d98a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<!-- lock plate -->
+<rect x="69" y="72" width="12" height="16" rx="2" fill="#c9a24a" stroke="#3a2a0a" stroke-width=".7"/>
+<circle cx="75" cy="78" r="1.7" fill="#1c1108"/><path d="M75 79.5v4.5" stroke="#1c1108" stroke-width="1.6" stroke-linecap="round"/>
 </svg>
 </div>
 <div class="bp-compose">
