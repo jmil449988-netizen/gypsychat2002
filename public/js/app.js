@@ -55,7 +55,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 87;
+var BUILD_NUMBER = 88;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1421,7 +1421,7 @@ var zTop = 20, Z_WIN_MIN = 20, Z_WIN_MAX = 49, nWin = 0, lastBuzz = {};
 function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
-el.innerHTML = '<div class="bar"><span class="gem"></span><span class="wava" aria-hidden="true"></span><span class="nm"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" aria-label="Minimize">–</button></div>' +
+el.innerHTML = '<div class="bar"><span class="gem"></span><span class="wava" aria-hidden="true"></span><span class="nm" tabindex="0" role="button" aria-label="' + esc(name) + ' options"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" aria-label="Minimize">–</button></div>' +
 '<div class="ilog" aria-live="polite"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
@@ -1450,12 +1450,29 @@ if (f) sendIMImage(id, f);
 win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') minimizeIM(id); };
 win.log.onclick = function (e) {
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
-var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) reportMessage(rpt.dataset.mid);
+var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { reportMessage(rpt.dataset.mid); return; }
+/* Same Get Info / Whisper / Tag in Chat / Block menu a name click opens everywhere else (main
+   chat log, threads board, online/friends lists, leaderboard) -- see openMenu. */
+var who = e.target.closest('.who[data-id]');
+if (who && who.dataset.id !== me.id) { e.stopPropagation(); openMenu(who.dataset.id, who, who.dataset.name); }
 };
+win.log.addEventListener('keydown', function (e) {
+if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.closest('.who[data-id]')) return;
+e.preventDefault(); win.log.onclick(e);
+});
+/* The header name is a shortcut to the same menu, for the one person this whole window is
+   already about -- no need to go find their name in a message first. */
+var nmEl = el.querySelector('.nm');
+/* fallbackName keeps this working even for someone who's dropped out of both `people` and the
+   30-minute recentPeople pool and was never a friend -- without it openMenu has no name to fall
+   back on for them and silently declines to open at all (see its `if (!name) return`). The window
+   itself always still knows their last-known name (wins[id].name), whisper history or not. */
+nmEl.onclick = function (e) { e.stopPropagation(); openMenu(id, nmEl, wins[id] && wins[id].name); };
+nmEl.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nmEl.click(); } };
 el.addEventListener('pointerdown', function () { front(el); });
 var bar = el.querySelector('.bar');
 bar.addEventListener('pointerdown', function (e) {
-if (e.target.classList.contains('x') || e.target.classList.contains('buzz') || window.innerWidth <= 430) return;
+if (e.target.classList.contains('x') || e.target.classList.contains('buzz') || e.target.closest('.nm') || window.innerWidth <= 430) return;
 var sx = e.clientX - el.offsetLeft, sy = e.clientY - el.offsetTop; bar.setPointerCapture(e.pointerId);
 function mv(ev) { el.style.left = Math.max(0, Math.min(window.innerWidth - 60, ev.clientX - sx)) + 'px'; el.style.top = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - sy)) + 'px'; }
 function up() { bar.removeEventListener('pointermove', mv); bar.removeEventListener('pointerup', up); }
@@ -1463,7 +1480,7 @@ bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up);
 });
 makeResizable(el);
 $('ims').appendChild(el); wins[id] = win;
-makeTab(id); updateTab(id); updateWinAvatar(id); // tab starts visible (win starts minimized) regardless of who the first message is from
+makeTab(id); updateTab(id); updateWinAvatar(id); updateWinPresenceDot(id); // tab starts visible (win starts minimized) regardless of who the first message is from
 applyDmVisibility(); // a whisper was just opened -- show it even if the DM-tabs-off preference is on
 return win;
 }
@@ -1586,7 +1603,7 @@ function renameWin(id, name) {
 var w = wins[id]; if (!w || !name || w.name === name) return;
 w.name = name;
 w.el.setAttribute('aria-label', 'Whisper with ' + name);
-w.el.querySelector('.nm').textContent = name;
+var nmEl2 = w.el.querySelector('.nm'); nmEl2.textContent = name; nmEl2.setAttribute('aria-label', name + ' options');
 var buzzBtn = w.el.querySelector('.buzz'); if (buzzBtn) buzzBtn.setAttribute('aria-label', 'Buzz ' + name);
 w.ta.placeholder = 'Whisper to ' + name + '...';
 if (w.tab) {
@@ -1600,6 +1617,20 @@ function updateWinAvatar(id) {
 var w = wins[id]; if (!w) return;
 var span = w.el.querySelector('.wava'); if (!span) return;
 span.innerHTML = avatarHtml(id, w.name);
+}
+/* Keeps a whisper window's title-bar status dot in sync with presence -- same green/yellow/red/
+   grey vocabulary as the threads board (see presenceDotClass), just parked in the header instead
+   of next to every message, since a whisper is always with one specific person: this is the
+   at-a-glance answer to "are they actually going to see this right now." Called once when the
+   window is created and again on every presence sync via refreshPresenceDots(). */
+function updateWinPresenceDot(id) {
+var w = wins[id]; if (!w) return;
+var nm = w.el.querySelector('.nm'); if (!nm) return;
+var dot = w.el.querySelector('.bar .nm-dot');
+var cls = presenceDotClass(id);
+if (!cls) { if (dot) dot.remove(); return; }
+if (dot) dot.className = 'nm-dot ' + cls;
+else nm.insertAdjacentHTML('beforebegin', '<span class="nm-dot ' + cls + '"></span>');
 }
 function updateTab(id) {
 var w = wins[id]; if (!w || !w.tab) return;
@@ -1681,7 +1712,7 @@ var w = ensureWin(otherId, otherName); // never pops the window open on its own 
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them'); d.dataset.mid = m.id;
 if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b>' + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
 if (mine) updateSeenMark(otherId); // this may now be the new last message of mine -- move/(re)show the mark
 if (!mine && !alreadyRead(otherId, m.created_at)) {
@@ -2821,36 +2852,42 @@ threadsCache = {}; threadsOrder = [];
 r.data.forEach(function (t) { threadsCache[t.id] = t; threadsOrder.push(t.id); });
 renderThreadList();
 }
-/* Status dot next to a name in the threads board: green/yellow/red mirror the exact same live
-   status the Online list shows (online/away/busy; auto-idle gets the same grey-blue the Online
-   list gives it too), straight from `people`. Grey means the person isn't in `people` right now
-   but was seen within the last 30 minutes -- recentPeopleEntries(), the identical reachable pool
+/* Status dot next to a name -- used in the threads board and whisper windows alike (both the
+   header and each message's sender name): green/yellow/red mirror the exact same live status the
+   Online list shows (online/away/busy; auto-idle gets the same grey-blue the Online list gives it
+   too), straight from `people`. Grey means the person isn't in `people` right now but was seen
+   within the last 30 minutes -- recentPeopleEntries(), the identical reachable pool
    Whisper/tagging/@mention push already key off of, so "recently online" means the same thing
-   everywhere in this app. No dot at all means neither -- most threads are read long after the OP
-   or repliers were anywhere near that window. */
-function threadStatusDotClass(id) {
+   everywhere in this app. No dot at all means neither -- most threads (and old whisper histories)
+   are read long after whoever's named there was anywhere near that window. */
+function presenceDotClass(id) {
 var p = people[id];
-if (p) return 'tp-dot tp-dot-' + (p.status || 'online');
-if (recentPeopleEntries()[id]) return 'tp-dot tp-dot-recent';
+if (p) return 'presence-dot presence-dot-' + (p.status || 'online');
+if (recentPeopleEntries()[id]) return 'presence-dot presence-dot-recent';
 return '';
 }
-function threadStatusDotHtml(id) {
-var cls = threadStatusDotClass(id);
+function presenceDotHtml(id) {
+var cls = presenceDotClass(id);
 return cls ? '<span class="' + cls + '"></span>' : '';
 }
-/* Re-stamps every already-rendered name's dot in the open thread whenever presence changes --
-   called alongside renderPeople() from the presence 'sync' handler -- so someone going away/busy/
-   offline (or coming back) while you're sitting in a thread updates live instead of only reflecting
-   whatever their status happened to be the moment their post first rendered. */
-function refreshThreadStatusDots() {
-if (!tpPosts) return;
-tpPosts.querySelectorAll('.who[data-id]').forEach(function (el) {
-var dot = el.querySelector('.tp-dot');
-var cls = threadStatusDotClass(el.dataset.id);
+/* Re-stamps every already-rendered name's dot -- in the open thread AND every whisper window,
+   header plus transcript -- whenever presence changes. Called alongside renderPeople() from the
+   presence 'sync' handler, so someone going away/busy/offline (or coming back) while you're
+   looking at a thread or a whisper updates live instead of only reflecting whatever their status
+   happened to be the moment their name first rendered. */
+function refreshPresenceDots() {
+if (tpPosts) tpPosts.querySelectorAll('.who[data-id]').forEach(refreshOnePresenceDot);
+Object.keys(wins).forEach(function (id) {
+updateWinPresenceDot(id);
+wins[id].log.querySelectorAll('.who[data-id]').forEach(refreshOnePresenceDot);
+});
+}
+function refreshOnePresenceDot(el) {
+var dot = el.querySelector('.presence-dot');
+var cls = presenceDotClass(el.dataset.id);
 if (!cls) { if (dot) dot.remove(); return; }
 if (dot) dot.className = cls;
 else el.insertAdjacentHTML('afterbegin', '<span class="' + cls + '"></span>');
-});
 }
 function appendThreadPost(p, isOp) {
 if (threadPostsSeen[p.id]) return; threadPostsSeen[p.id] = 1;
@@ -2866,7 +2903,7 @@ var reactId = isOp ? p.thread_id : p.id;
 /* class="who" + data-name wires this into the same name-menu click handling (see tpPosts.onclick
    below) that the main chat log and leaderboard already use, so tapping a name in a thread opens
    the familiar Get Info / Whisper / Tag in Chat / Block menu instead of doing nothing. */
-var html = '<span class="t">' + fmt(p.created_at) + '</span><b class="who" data-id="' + esc(p.sender_id) + '" data-name="' + esc(p.sender_name) + '" tabindex="0">' + threadStatusDotHtml(p.sender_id) + esc(p.sender_name) + levelBadgeHtml(p.sender_id) + (isOp ? ' (OP)' : '') + ':</b> ';
+var html = '<span class="t">' + fmt(p.created_at) + '</span><b class="who" data-id="' + esc(p.sender_id) + '" data-name="' + esc(p.sender_name) + '" tabindex="0">' + presenceDotHtml(p.sender_id) + esc(p.sender_name) + levelBadgeHtml(p.sender_id) + (isOp ? ' (OP)' : '') + ':</b> ';
 if (p.body) html += bodyHtml(p.body);
 if (p.image_url) html += (p.body ? '<br>' : '') + '<img class="tp-posted-img" src="' + esc(p.image_url) + '" alt="Image" loading="lazy">';
 if (isAdmin) html += ' <button type="button" class="tp-del" data-id="' + esc(String(p.id)) + '" data-op="' + (isOp ? '1' : '0') + '" data-thread="' + esc(String(p.thread_id)) + '" title="' + (isOp ? 'Delete thread' : 'Delete reply') + '" aria-label="' + (isOp ? 'Delete thread' : 'Delete reply') + '">🗑</button>';
@@ -3629,7 +3666,7 @@ Object.keys(stt).forEach(function (k) { if (stt[k][0]) people[k] = stt[k][0]; })
 touchRecentPeople(); // refresh the mention-push grace-window cache with whoever's live right now
 Object.keys(wins).forEach(function (id) { if (people[id]) { renameWin(id, people[id].name); updateWinAvatar(id); } });
 renderPeople();
-refreshThreadStatusDots();
+refreshPresenceDots();
 });
 channel.on('presence', { event: 'join' }, function (p) {
 if (p.key !== me.id && p.newPresences[0] && !people[p.key]) {
