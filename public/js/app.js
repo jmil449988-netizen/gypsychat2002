@@ -24,6 +24,7 @@ var bugBtn = $('bugBtn'), bugFile = $('bugFile'), bugReportOverlay = $('bugRepor
 var bugReportsBtn = $('bugReportsBtn'), bugReportsBadge = $('bugReportsBadge'), bugReportsOverlay = $('bugReportsOverlay'), bugReportsList = $('bugReportsList'), bugReportsClose = $('bugReportsClose');
 var leaderboardBtn = $('leaderboardBtn'), leaderboardPanel = $('leaderboardPanel'), leaderboardList = $('leaderboardList'), leaderboardBack = $('leaderboardBack');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
+var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
 
@@ -46,6 +47,17 @@ if ($('madeBy')) $('madeBy').textContent = 'created by Yogg Squad © 2027 · ' +
 if ($('roomWatermark')) $('roomWatermark').textContent = WATERMARK_TEXT;
 if ($('threadsWatermark')) $('threadsWatermark').textContent = WATERMARK_TEXT;
 if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
+/* BUILD_NUMBER is a different thing from APP_VERSION above on purpose: APP_VERSION is a curated
+   label bumped by hand for a release worth naming, while BUILD_NUMBER mirrors the ?v=NN
+   cache-busting number on app.js/index.html/sw.js and moves on every deploy, however small. That
+   makes it the one honest answer to "which code is this browser actually running right now" --
+   exactly the question that turned a real, already-shipped fix into a confusing "still broken"
+   report earlier, purely because a phone was still running yesterday's cached build. Shown in two
+   low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
+   it's there to check the moment it's needed without normally being visible enough to matter. */
+var BUILD_NUMBER = 85;
+if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
+if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
 
 var sb = null, me = null, channel = null;
@@ -3732,6 +3744,45 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 navigator.serviceWorker.register('./sw.js').then(function (reg) {
 reg.update(); // proactively check for a newer sw.js -- iOS Safari in particular can otherwise
 // sit on an old service worker (and its cached app shell) for a long time on its own.
+/* One check at registration isn't enough on its own: a tab can sit open for hours, and the
+   browser's own schedule for re-checking sw.js in the background can be far looser than that
+   (iOS Safari especially). Re-checking whenever the tab actually becomes visible again --
+   someone tapping back into a backgrounded app, or switching back to this tab -- catches a new
+   deploy at exactly the moment it'd matter, for the cost of one small script fetch. The hourly
+   timer just covers a tab that's left open and visible for a very long stretch without ever
+   being backgrounded. */
+document.addEventListener('visibilitychange', function () { if (!document.hidden) reg.update(); });
+setInterval(function () { reg.update(); }, 60 * 60 * 1000);
+/* sw.js calls self.skipWaiting() + self.clients.claim() unconditionally, so a newly-installed
+   worker takes over almost immediately once the browser notices the update above -- but taking
+   over only changes which worker answers future network requests. The PAGE itself keeps
+   running whatever JS was already loaded into memory; the new code only actually starts
+   running once something reloads it. This is precisely the gap that made an already-shipped
+   fix look "still broken" earlier this session -- the server had it, the open tab just hadn't
+   picked it up yet. Force-reloading the instant control switches would fix that automatically,
+   but could just as easily yank the page out from under someone mid-message, so instead this
+   surfaces a small "tap to refresh" banner and lets the person choose when. `alreadyControlled`
+   guards against firing that banner on the very first page load, when a controller is being
+   assigned for the first time rather than swapped out for a newer one. */
+var alreadyControlled = !!navigator.serviceWorker.controller;
+navigator.serviceWorker.addEventListener('controllerchange', function () {
+if (!alreadyControlled) { alreadyControlled = true; return; }
+if (updateBanner) updateBanner.classList.remove('hidden');
+});
 }).catch(function () { /* offline shell is optional */ });
+/* The mirror-image case: sw.js's own 'pushsubscriptionchange' handler (fired when the browser
+   itself invalidates/rotates a push subscription, which does happen occasionally, independent
+   of anything this app does) can get a fresh subscription from the push service, but a service
+   worker has no Supabase session of its own to save it with -- only an open page does. It
+   posts the new subscription here so the row in push_subscriptions gets updated right away
+   instead of silently going stale until a future send fails against the dead one. */
+navigator.serviceWorker.addEventListener('message', function (e) {
+var d = e.data || {};
+if (d.type !== 'PUSH_SUBSCRIPTION_CHANGED' || !d.subscription || !sb || !me) return;
+var j = d.subscription;
+sb.from('push_subscriptions').upsert({ user_id: me.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: 'endpoint' })
+.then(function (r) { if (r.error) console.warn('push subscription refresh not saved:', r.error.message); });
+});
 }
+if (updateBannerBtn) updateBannerBtn.onclick = function () { location.reload(); };
 })();
