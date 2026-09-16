@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 96;
+var BUILD_NUMBER = 97;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -2525,6 +2525,7 @@ if ($('moreBtn')) { $('moreBtn').classList.add('hidden'); closeMoreMenu(); }
 if (st) { st.classList.remove('renamable'); st.removeAttribute('title'); }
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
 activeDm = null; if (dmDock) dmDock.classList.add('hidden'); syncDock(); // the Messages dock goes with the room
+stopBallot();
 Object.keys(typingRoom).forEach(function (k) { clearTimeout(typingRoom[k].timer); }); typingRoom = {};
 Object.keys(typingSendState).forEach(function (k) { clearTimeout(typingSendState[k].stopTimer); }); typingSendState = {};
 if ($('typingIndicator')) { $('typingIndicator').classList.add('hidden'); $('typingIndicator').textContent = ''; }
@@ -3481,6 +3482,102 @@ loadLeaderboard();
 }
 if (leaderboardBack) leaderboardBack.onclick = closeLeaderboard;
 
+/* ---------- the Ballot Box (anonymous notes) ----------
+   The panel in the right-hand gutter of the wide desktop layout (#ballotPanel; see .ballot-panel
+   in style.css for where and when it shows). Anyone signed in can drop a 140-character note in
+   with no name attached; every note in the box takes a turn scrolling across the parchment strip
+   at the bottom of the panel, 15 seconds each, newest first, round and round.
+   Storage is ballot_notes (ballot_box_feature.sql). The client only ever asks for id/created_at/
+   body -- author_id exists for moderation but the API refuses to hand it out -- and the table is
+   deliberately not on realtime (a change payload would carry that column), so the box is re-read
+   once a minute instead. At one note per 15s on screen that's more than fresh enough. */
+var ballotPanel = $('ballotPanel'), ballotBody = $('ballotBody'), ballotCast = $('ballotCast'), ballotCount = $('ballotCount');
+var ballotNote = $('ballotNote'), ballotText = $('ballotText'), ballotStrip = $('ballotStrip'), ballotRemove = $('ballotRemove'), ballotBox = $('ballotBox');
+var ballotNotes = [], ballotIdx = -1, ballotShowing = null, ballotTimer = null;
+var BALLOT_EMPTY = 'The box is empty. Be the first to drop a note in.', BALLOT_MAX = 140;
+/* Puts text on the strip and restarts its crossing from the right edge, so a swap never lands
+   mid-scroll. animationiteration (below) is what calls for the next note each time a crossing
+   completes -- 15s, the animation's own duration in style.css. */
+function setStrip(text) {
+if (!ballotText) return;
+ballotText.textContent = text;
+ballotText.style.animation = 'none'; void ballotText.offsetWidth; ballotText.style.animation = '';
+}
+function showBallotNote() {
+if (!ballotNotes.length) { ballotShowing = null; ballotIdx = -1; setStrip(BALLOT_EMPTY); }
+else { ballotIdx = (ballotIdx + 1) % ballotNotes.length; ballotShowing = ballotNotes[ballotIdx]; setStrip(ballotShowing.body); }
+if (ballotRemove) ballotRemove.classList.toggle('hidden', !(isAdmin && ballotShowing));
+}
+if (ballotText) ballotText.addEventListener('animationiteration', showBallotNote);
+/* reading a long one? hovering the strip holds it still */
+if (ballotStrip) {
+ballotStrip.addEventListener('mouseenter', function () { ballotStrip.classList.add('paused'); });
+ballotStrip.addEventListener('mouseleave', function () { ballotStrip.classList.remove('paused'); });
+}
+async function loadBallot() {
+if (!sb || !me || !ballotPanel) return;
+var r = await sb.from('ballot_notes').select('id,created_at,body').order('created_at', { ascending: false }).limit(60);
+if (r.error) { console.warn('ballot box:', r.error.message); return; }
+var wasEmpty = !ballotNotes.length;
+ballotNotes = r.data || [];
+/* First fill (or the box going from empty to not): start the rotation right away rather than
+   letting the "box is empty" line finish its crossing. Otherwise the refreshed list just takes
+   over from the next crossing on; ballotIdx keeps counting modulo whatever the new length is. */
+if (wasEmpty || !ballotNotes.length) { ballotIdx = -1; showBallotNote(); }
+}
+function startBallot() {
+if (!ballotPanel) return;
+ballotPanel.classList.remove('hidden');
+loadBallot();
+clearInterval(ballotTimer); ballotTimer = setInterval(loadBallot, 60000);
+}
+function stopBallot() {
+clearInterval(ballotTimer); ballotTimer = null;
+ballotNotes = []; ballotIdx = -1; ballotShowing = null;
+if (ballotPanel) ballotPanel.classList.add('hidden');
+}
+function setBallotNote(text, isErr) { if (!ballotNote) return; ballotNote.textContent = text || ''; ballotNote.classList.toggle('err', !!isErr); }
+function updateBallotCount() {
+if (!ballotCount || !ballotBody) return;
+var left = BALLOT_MAX - ballotBody.value.length;
+ballotCount.textContent = String(left); ballotCount.classList.toggle('low', left < 20);
+}
+async function castBallot() {
+if (!me || !ballotBody) return;
+var t = ballotBody.value.trim(); if (!t) return;
+if (t.length > BALLOT_MAX) t = t.slice(0, BALLOT_MAX);
+ballotCast.disabled = true; setBallotNote('');
+/* author_id is the only identifying thing written, and only the database ever sees it again;
+   .select() names its columns so the returned row stays inside what the API allows us to read */
+var r = await sb.from('ballot_notes').insert({ author_id: me.id, body: t }).select('id,created_at,body').single();
+ballotCast.disabled = false;
+if (r.error) {
+/* the insert policy is also the rate limit (one a minute) and the ban check, both of which come
+   back as a bare row-level-security refusal */
+setBallotNote(/row-level security|policy/i.test(r.error.message) ? 'One note a minute — give it a moment.' : 'The box wouldn’t take it: ' + r.error.message, true);
+return;
+}
+ballotBody.value = ''; updateBallotCount();
+if (ballotBox) { ballotBox.classList.remove('casting'); void ballotBox.offsetWidth; ballotBox.classList.add('casting'); }
+if (r.data) { ballotNotes.unshift(r.data); ballotIdx = -1; showBallotNote(); } // your own note takes the strip next
+setBallotNote('Your note is in the box.');
+setTimeout(function () { if (ballotNote && ballotNote.textContent === 'Your note is in the box.') setBallotNote(''); }, 6000);
+}
+if (ballotCast) ballotCast.onclick = castBallot;
+if (ballotBody) {
+ballotBody.addEventListener('input', updateBallotCount);
+ballotBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); castBallot(); } };
+}
+/* admin: pull the note that's on the strip right now out of the box */
+if (ballotRemove) ballotRemove.onclick = async function () {
+if (!isAdmin || !ballotShowing) return;
+var gone = ballotShowing;
+var r = await sb.from('ballot_notes').delete().eq('id', gone.id);
+if (r.error) { setBallotNote('Could not remove it: ' + r.error.message, true); return; }
+ballotNotes = ballotNotes.filter(function (n) { return n.id !== gone.id; });
+ballotIdx = Math.max(-1, ballotIdx - 1); showBallotNote();
+};
+
 /* ---------- draggable / sweepable fab bubbles ----------
    Either bubble can be dragged anywhere on screen, and dragged most of the way off the left or
    right edge to sweep it out of the way -- only a small tab is left peeking in from that edge,
@@ -4024,6 +4121,7 @@ renderPeople();
 Object.keys(wins).forEach(updateTab); // inbox rows: snippets and unread badges from the replay, in one pass
 if (dmDock) dmDock.classList.remove('hidden');
 syncDock();
+startBallot(); // the ballot box in the right-hand gutter (wide layout only -- see style.css)
 /* Reactions aren't part of the message row itself, so they need their own pass once the room
    messages they belong to actually exist in the DOM to be painted onto -- whispers are excluded,
    same as everywhere else reactions touch messages. */
