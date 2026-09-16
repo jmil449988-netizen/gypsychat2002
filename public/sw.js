@@ -3,8 +3,8 @@ Chat itself always needs a connection; this only makes the UI load offline.
 v2: bumped the cache name and hardened the fetch/install paths to bypass the HTTP cache — iOS
 Safari in particular can hold onto an old app.js/index.html far more stubbornly than desktop
 Chrome, which silently ran stale code (missing new features) even though the deploy succeeded. */
-var CACHE = 'gc2000-v99';
-var SHELL = ['./', './index.html', './css/style.css?v=55', './js/appconfig.js?v=2', './js/app.js?v=84', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png'];
+var CACHE = 'gc2000-v100';
+var SHELL = ['./', './index.html', './css/style.css?v=56', './js/appconfig.js?v=2', './js/app.js?v=85', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png'];
 self.addEventListener('install', function (e) {
 e.waitUntil(
 caches.open(CACHE).then(function (c) {
@@ -73,5 +73,27 @@ self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(functi
 for (var i = 0; i < list.length; i++) { if ('focus' in list[i]) return list[i].focus(); }
 if (self.clients.openWindow) return self.clients.openWindow(url);
 })
+);
+});
+/* ---------- push subscription rotation ----------
+   The browser can invalidate/rotate a push subscription entirely on its own, independent of
+   anything this app does -- rare, but documented Push API behavior. Left alone, the old endpoint
+   would just sit in push_subscriptions until some future send fails against it and gets cleaned
+   up reactively (see send-push) -- harmless, but it means a real whisper/mention silently
+   reaches nobody in the meantime. Resubscribing here with the OLD subscription's own options
+   (which the browser hands back on oldSubscription.options) means this file never needs its own
+   copy of the VAPID public key just for this. A service worker has no Supabase session of its
+   own to save the new subscription with, though -- posting it to any open tab is what lets
+   app.js's own message listener finish the job by upserting the row immediately, rather than
+   waiting for the person to happen to reopen the app. */
+self.addEventListener('pushsubscriptionchange', function (e) {
+e.waitUntil(
+self.registration.pushManager.subscribe(e.oldSubscription ? e.oldSubscription.options : undefined)
+.then(function (sub) {
+return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+list.forEach(function (c) { c.postMessage({ type: 'PUSH_SUBSCRIPTION_CHANGED', subscription: sub.toJSON() }); });
+});
+})
+.catch(function () {})
 );
 });

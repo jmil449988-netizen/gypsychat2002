@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=55">
+<link rel="stylesheet" href="./css/style.css?v=56">
 </head>
 <body>
 <div class="gc-root">
@@ -41,6 +41,7 @@
 <h1>Gypsy Chat 2000</h1>
 <div class="rule"></div>
 <div class="tag" id="loginTag">Stay awhile, and chat.</div>
+<div class="buildtag" id="buildTag" aria-hidden="true"></div>
 
 <div id="joinFields">
 <div id="gateFields">
@@ -84,7 +85,7 @@
 
 <div id="ims"></div>
 <div id="imTray" class="im-tray"></div>
-<div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status">●</button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs">💬</button><button class="cell morebtn hidden" id="moreBtn" type="button" title="More options" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button><div class="status-popover" id="statusPopover" role="menu" aria-label="More options"><button class="cell avabtn hidden" id="avaBtn" type="button" title="Set your profile picture" aria-label="Set your profile picture"><span class="ava-thumb" id="avaThumb">＋</span><span class="popover-label">Change picture</span></button><input type="file" id="avaFile" class="hidden" accept="image/*,.heic,.heif"><button class="cell savebtn hidden" id="saveBtn" type="button" title="Save your character with an email" aria-label="Save your character with an email"><span class="btn-icon">🔑</span><span class="popover-label">Save with email</span></button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds"><span class="btn-icon">🔊</span><span class="popover-label">Sound</span></button><button class="cell notifbtn" id="notifBtn" type="button" title="Turn on notifications for whispers & mentions" aria-label="Toggle notifications"><span class="btn-icon">🔕</span><span class="popover-label">Notifications</span></button><button class="cell leaderboardbtn" id="leaderboardBtn" type="button" title="Leaderboard" aria-label="Leaderboard"><span class="btn-icon">🏆</span><span class="popover-label">Leaderboard</span></button><button class="cell bugbtn hidden" id="bugBtn" type="button" title="Report a bug" aria-label="Report a bug"><span class="btn-icon">🐞</span><span class="popover-label">Report a bug</span></button><button class="cell reportsbtn hidden" id="reportsBtn" type="button" title="Review reports" aria-label="Review reports"><span class="btn-icon">🚩</span><span class="popover-label">Reports</span><span class="rbadge hidden" id="reportsBadge">0</span></button><button class="cell bugreportsbtn hidden" id="bugReportsBtn" type="button" title="Review bug reports" aria-label="Review bug reports"><span class="btn-icon">🛠️</span><span class="popover-label">Bug Reports</span><span class="rbadge hidden" id="bugReportsBadge">0</span></button></div></div>
+<div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status">●</button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs">💬</button><button class="cell morebtn hidden" id="moreBtn" type="button" title="More options" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button><div class="status-popover" id="statusPopover" role="menu" aria-label="More options"><button class="cell avabtn hidden" id="avaBtn" type="button" title="Set your profile picture" aria-label="Set your profile picture"><span class="ava-thumb" id="avaThumb">＋</span><span class="popover-label">Change picture</span></button><input type="file" id="avaFile" class="hidden" accept="image/*,.heic,.heif"><button class="cell savebtn hidden" id="saveBtn" type="button" title="Save your character with an email" aria-label="Save your character with an email"><span class="btn-icon">🔑</span><span class="popover-label">Save with email</span></button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds"><span class="btn-icon">🔊</span><span class="popover-label">Sound</span></button><button class="cell notifbtn" id="notifBtn" type="button" title="Turn on notifications for whispers & mentions" aria-label="Toggle notifications"><span class="btn-icon">🔕</span><span class="popover-label">Notifications</span></button><button class="cell leaderboardbtn" id="leaderboardBtn" type="button" title="Leaderboard" aria-label="Leaderboard"><span class="btn-icon">🏆</span><span class="popover-label">Leaderboard</span></button><button class="cell bugbtn hidden" id="bugBtn" type="button" title="Report a bug" aria-label="Report a bug"><span class="btn-icon">🐞</span><span class="popover-label">Report a bug</span></button><button class="cell reportsbtn hidden" id="reportsBtn" type="button" title="Review reports" aria-label="Review reports"><span class="btn-icon">🚩</span><span class="popover-label">Reports</span><span class="rbadge hidden" id="reportsBadge">0</span></button><button class="cell bugreportsbtn hidden" id="bugReportsBtn" type="button" title="Review bug reports" aria-label="Review bug reports"><span class="btn-icon">🛠️</span><span class="popover-label">Bug Reports</span><span class="rbadge hidden" id="bugReportsBadge">0</span></button><div class="popover-version" id="popoverVersion" aria-hidden="true"></div></div></div>
 <div class="room-footer hidden" id="roomWatermark" aria-live="polite"></div>
 </div>
 
@@ -264,6 +265,15 @@
 <img id="imgLightboxImg" class="lightbox-img" src="" alt="Full-size image">
 </div>
 
+<!-- Hidden until app.js detects that a new service-worker version has taken over this tab (see
+     the controllerchange listener near the bottom of app.js). Deliberately a tap-to-refresh
+     prompt rather than an automatic reload -- a fresh deploy landing on someone mid-message
+     shouldn't yank the page out from under them. -->
+<div class="update-banner hidden" id="updateBanner" role="status">
+<span>A newer version of Gypsy Chat is ready.</span>
+<button type="button" class="btn" id="updateBannerBtn">Refresh</button>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <!-- Converts iPhone HEIC/HEIF photos to JPEG in the browser before upload -- no browser can decode
@@ -271,6 +281,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=84"></script>
+<script src="./js/app.js?v=85"></script>
 </body>
 </html>
