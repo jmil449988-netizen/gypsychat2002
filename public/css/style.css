@@ -1147,3 +1147,60 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
 @media (min-width:501px){
   .gc-root.dm-open .roulette-toggle-fab{right:calc(clamp(260px,calc(50vw - 396px),340px) + 20px)}
 }
+
+/* ==================== the Ballot Box (v69) ====================
+   The right-hand gutter's counterpart to the roulette teaser on the left: same fixed offset from
+   centre (394px = half the 760px window + its border/glow), same 260px width and frame treatment,
+   same 1340px breakpoint -- below that the window fills the viewport and there's no gutter to put
+   it in. Only the TOP half of the gutter, by request; the Messages dock keeps the bottom. Hidden
+   until signed on (app.js drops .hidden after the room loads). */
+.ballot-panel{position:fixed;top:6px;left:calc(50% + 394px);width:260px;height:max(calc(50vh - 9px),400px);display:none;
+flex-direction:column;align-items:center;text-align:center;padding:18px 16px 12px;
+background:linear-gradient(180deg,var(--stone-2),var(--stone));border:3px double var(--gold-lo);outline:1px solid #000;
+box-shadow:0 0 0 2px var(--gold-lo),0 0 0 3px #000,0 0 24px #000,inset 0 0 30px #000;overflow:hidden;z-index:8}
+@media (min-width:1340px){.ballot-panel{display:flex}}
+.ballot-panel.hidden{display:none !important}
+/* dims along with the window when the threads board is up, same as the roulette teaser */
+.gc-root.thread-open .ballot-panel{opacity:.28;filter:saturate(.4)}
+.bp-title{font:700 22px Cinzel,"Trajan Pro",Georgia,serif;letter-spacing:2px;line-height:1.15;color:var(--gold);
+text-shadow:0 0 12px rgba(201,162,74,.55),0 2px 0 #000,0 -1px 0 #000}
+.bp-blurb{font-size:12px;line-height:1.5;color:var(--bone);opacity:.75;margin-top:6px}
+.bp-box{width:140px;height:auto;margin:4px 0 0;flex:none;filter:drop-shadow(0 6px 8px #000)}
+.bp-box svg{display:block;width:100%;height:auto;overflow:visible}
+/* the slip drops through the slot when a note is cast (see castBallot in app.js) */
+.bp-box .bp-slip{transform-box:fill-box;transform-origin:50% 100%}
+.bp-box.casting .bp-slip{animation:bp-drop .9s ease-in forwards}
+@keyframes bp-drop{0%{transform:translateY(0);opacity:1}55%{transform:translateY(22px);opacity:1}100%{transform:translateY(34px) scaleY(.2);opacity:0}}
+.bp-compose{width:100%;flex:none;display:flex;flex-direction:column;gap:6px}
+.bp-compose textarea{font:inherit;font-size:13px;color:var(--bone);resize:none;height:52px;padding:6px 8px;outline:none;caret-color:var(--gold-hi);width:100%}
+.bp-compose textarea:focus{box-shadow:inset 0 0 18px #000,0 0 0 1px var(--gold),0 0 10px rgba(201,162,74,.35)}
+.bp-compose textarea::placeholder{color:#5f5648}
+.bp-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bp-count{font:10px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--ash)}
+.bp-count.low{color:var(--ember)}
+.bp-row .btn{height:28px}
+.bp-note{min-height:14px;font-size:11px;font-style:italic;color:var(--ash)}
+.bp-note.err{color:#e07a7a}
+/* The parchment strip: a scrap of old paper pinned along the bottom of the panel. One note at a
+   time crosses it right-to-left; the animation runs 15s per crossing and app.js swaps the text at
+   each animationiteration, so each note gets exactly one pass. */
+.bp-strip{margin-top:auto;width:calc(100% + 32px);flex:none;position:relative;overflow:hidden;height:46px;
+background:
+ radial-gradient(ellipse at 20% 30%,rgba(255,255,255,.18),transparent 45%),
+ radial-gradient(ellipse at 80% 70%,rgba(90,60,20,.25),transparent 40%),
+ linear-gradient(180deg,#e2cf9f,#cbb279 60%,#b89d66);
+border-top:2px solid #6b5323;border-bottom:2px solid #6b5323;
+box-shadow:inset 0 0 18px rgba(90,60,20,.55),inset 0 1px 0 rgba(255,255,255,.35),0 -4px 12px #000}
+.bp-scroll{position:absolute;inset:0;display:flex;align-items:center;white-space:nowrap}
+.bp-text{display:inline-block;padding-left:100%;font:15px "IM Fell English",Georgia,serif;color:#3a2a10;text-shadow:0 1px 0 rgba(255,255,255,.35);
+animation:bp-ticker 15s linear infinite}
+.bp-strip.paused .bp-text{animation-play-state:paused}
+@keyframes bp-ticker{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+@media (prefers-reduced-motion:reduce){.bp-text{animation:none;padding-left:0;white-space:normal;padding:0 12px;font-size:13px;line-height:1.3}}
+.bp-remove{position:absolute;top:2px;right:4px;width:18px;height:18px;line-height:16px;padding:0;font:700 11px Georgia,serif;
+color:#6b5323;background:rgba(255,255,255,.35);border:1px solid #6b5323;border-radius:50%;cursor:pointer;opacity:.6}
+.bp-remove:hover,.bp-remove:focus-visible{opacity:1;color:#fff;background:var(--blood);border-color:#000;outline:none}
+/* keep the Messages dock in the bottom half of the gutter on the wide layout, so it never climbs
+   up under the ballot box when expanded */
+/* (the panel's own height is max(50vh - 9px, 400px): on a short screen it takes a little more than half) */
+@media (min-width:1340px){.dm-dock:not(.collapsed){height:min(480px,calc(100vh - max(calc(50vh - 9px),400px) - 22px))}}
