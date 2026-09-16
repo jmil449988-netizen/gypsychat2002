@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 93;
+var BUILD_NUMBER = 94;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -810,6 +810,17 @@ return '<a href="' + u + '" target="_blank" rel="noopener noreferrer nofollow">'
 }
 function setStatus(t) { st.textContent = t; }
 
+/* Once signed in, the status bar's only job is to double as the rename control (see
+   renameCharacter/promptRename below), so it shows "Change name" -- in the neon-orange
+   .renamable styling (style.css) -- rather than restating who you are, which is already visible
+   in the room itself. The name isn't lost, just moved to a hover tooltip via title. */
+function setSignedOnStatus() {
+if (!me) return;
+var who = 'Signed on as ' + me.name + (isAdmin ? ' (admin)' : '');
+setStatus('Change name');
+if (st) { st.title = who; st.classList.add('renamable'); }
+}
+
 /* ---------- changing your character name ----------
    Renaming keeps the account: same id, so the friends list, whispers and saved email all stay
    put, and anyone who has added you sees the new name appear the moment presence updates.
@@ -835,7 +846,7 @@ lockedName = n; // so the sign-on screen offers the new name next time
 try { await sb.auth.updateUser({ data: { name: n } }); await sb.auth.refreshSession(); } catch (e) { /* display-only mirror */ }
 updateMyPresence();
 renderPeople();
-setStatus('Signed on as ' + me.name + (isAdmin ? ' (admin)' : ''));
+setSignedOnStatus();
 addSys('You are now known as ' + n + '. (Previously ' + was + '.)');
 }
 
@@ -2496,7 +2507,7 @@ if ($('statusBtn')) $('statusBtn').classList.add('hidden');
 if ($('avaBtn')) $('avaBtn').classList.add('hidden');
 if ($('saveBtn')) $('saveBtn').classList.add('hidden');
 if ($('moreBtn')) { $('moreBtn').classList.add('hidden'); closeMoreMenu(); }
-if (st) st.classList.remove('renamable');
+if (st) { st.classList.remove('renamable'); st.removeAttribute('title'); }
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
 Object.keys(typingRoom).forEach(function (k) { clearTimeout(typingRoom[k].timer); }); typingRoom = {};
 Object.keys(typingSendState).forEach(function (k) { clearTimeout(typingSendState[k].stopTimer); }); typingSendState = {};
@@ -4008,8 +4019,7 @@ if ($('moreBtn')) $('moreBtn').classList.remove('hidden');
    below) are only offered to them -- an account with an email attached is already portable. */
 isAnonAccount = user.is_anonymous !== false && !user.email;
 if ($('saveBtn')) $('saveBtn').classList.toggle('hidden', !isAnonAccount);
-setStatus('Signed on as ' + me.name + (isAdmin ? ' (admin)' : ''));
-if (st) st.classList.add('renamable');
+setSignedOnStatus();
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
 if (isAnonAccount) addSys('Heads up: ' + me.name + ' and your friends list are saved in this browser only. Tap the 🔑 below to add an email and keep them on any device.');
 if (threadsPanel) {
