@@ -202,11 +202,19 @@ padding:8px;border-radius:4px;z-index:40;box-shadow:0 0 0 1px #000,0 6px 18px #0
 padding-top:5px;margin-top:2px;border-top:1px solid var(--gold-lo)}
 }
 /* whisper windows */
+/* z-index 41+ (not the old 20/24/30) so whisper windows and the tray stay ABOVE the full-screen
+   mobile takeover panels -- threads/leaderboard/roulette all force themselves to z-index:40 when
+   open (see .gc-root.mobile-threads-open .threads-panel etc.), which used to bury whispers behind
+   them entirely: a whisper arriving while you were in Threads never showed, not even as a tray
+   flash, and stayed invisible until you backed out to chat and happened to notice the badge.
+   Still safely under the emoji/reaction pickers (56/57), .nmenu (60), modals (70) and the lightbox
+   (90), all of which can open from inside a whisper window and need to render on top of it. See
+   Z_WIN_MIN/Z_WIN_MAX/zTop in app.js, which this range has to stay in sync with. */
 .im{position:fixed;width:340px;height:280px;min-width:260px;min-height:200px;max-width:calc(100vw - 12px);max-height:calc(100vh - 12px);
-z-index:20;display:flex;flex-direction:column;
+z-index:41;display:flex;flex-direction:column;
 background:linear-gradient(180deg,#221a26,#120e14);border:3px double #7a4bb0;outline:1px solid #000;
 box-shadow:0 0 0 2px #a67ad1,0 0 0 3px #000,0 10px 30px #000,inset 0 0 30px #000;color:var(--bone)}
-.im.front{z-index:30}
+.im.front{z-index:51}
 .im .rz{position:absolute;width:16px;height:16px;z-index:3;background:transparent}
 .im .rz::after{content:"";position:absolute;inset:4px;border:1px solid var(--gold-lo);opacity:0;transition:opacity .15s}
 .im .rz:hover::after{opacity:.9}
@@ -254,7 +262,7 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
 .im .icomp .btn.img,.im .icomp .btn.emo{font-size:15px;min-width:38px;padding:0 6px}
 @media (max-width:500px){.im{left:6px !important;right:6px;width:auto !important;height:60vh !important;bottom:6px;top:auto !important}.im .bar{cursor:default}}
 /* whisper tray — closed/minimized PMs sit here as small tabs instead of popping open */
-.im-tray{position:fixed;right:8px;bottom:8px;z-index:24;display:flex;flex-direction:column-reverse;gap:6px;max-height:70vh;overflow-y:auto;overflow-x:hidden}
+.im-tray{position:fixed;right:8px;bottom:8px;z-index:45;display:flex;flex-direction:column-reverse;gap:6px;max-height:70vh;overflow-y:auto;overflow-x:hidden}
 .im-tab{position:relative;display:flex;align-items:center;gap:6px;padding:6px 26px 6px 10px;cursor:pointer;user-select:none;font:700 12px Cinzel,Georgia,serif;letter-spacing:.5px;
 color:#e2c4ff;white-space:nowrap;max-width:160px;background:linear-gradient(180deg,#31253a,#1a1320);border:2px double #7a4bb0;outline:1px solid #000;
 box-shadow:0 0 0 1px #000,0 4px 14px #000;touch-action:pan-y;transition:transform .18s ease,opacity .18s ease}
