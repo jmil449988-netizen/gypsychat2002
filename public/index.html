@@ -83,11 +83,23 @@
 </div>
 </div>
 
-<div id="ims"></div>
-<div id="imTray" class="im-tray"></div>
 <div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status">●</button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs">💬</button><button class="cell morebtn hidden" id="moreBtn" type="button" title="More options" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button><div class="status-popover" id="statusPopover" role="menu" aria-label="More options"><button class="cell avabtn hidden" id="avaBtn" type="button" title="Set your profile picture" aria-label="Set your profile picture"><span class="ava-thumb" id="avaThumb">＋</span><span class="popover-label">Change picture</span></button><input type="file" id="avaFile" class="hidden" accept="image/*,.heic,.heif"><button class="cell savebtn hidden" id="saveBtn" type="button" title="Save your character with an email" aria-label="Save your character with an email"><span class="btn-icon">🔑</span><span class="popover-label">Save with email</span></button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds"><span class="btn-icon">🔊</span><span class="popover-label">Sound</span></button><button class="cell notifbtn" id="notifBtn" type="button" title="Turn on notifications for whispers & mentions" aria-label="Toggle notifications"><span class="btn-icon">🔕</span><span class="popover-label">Notifications</span></button><button class="cell leaderboardbtn" id="leaderboardBtn" type="button" title="Leaderboard" aria-label="Leaderboard"><span class="btn-icon">🏆</span><span class="popover-label">Leaderboard</span></button><button class="cell bugbtn hidden" id="bugBtn" type="button" title="Report a bug" aria-label="Report a bug"><span class="btn-icon">🐞</span><span class="popover-label">Report a bug</span></button><button class="cell reportsbtn hidden" id="reportsBtn" type="button" title="Review reports" aria-label="Review reports"><span class="btn-icon">🚩</span><span class="popover-label">Reports</span><span class="rbadge hidden" id="reportsBadge">0</span></button><button class="cell bugreportsbtn hidden" id="bugReportsBtn" type="button" title="Review bug reports" aria-label="Review bug reports"><span class="btn-icon">🛠️</span><span class="popover-label">Bug Reports</span><span class="rbadge hidden" id="bugReportsBadge">0</span></button><div class="popover-version" id="popoverVersion" aria-hidden="true"></div></div></div>
 <div class="room-footer hidden" id="roomWatermark" aria-live="polite"></div>
 </div>
+
+<!-- Whisper windows + their minimized tray live OUTSIDE .win on purpose: .win gets display:none
+     whenever a full-screen takeover panel is open (Threads/Leaderboard/Roulette -- see
+     .gc-root.mobile-threads-open .win etc. in style.css), and a display:none ancestor removes its
+     ENTIRE subtree from rendering no matter what position/z-index the descendants use -- position:fixed
+     only escapes normal document FLOW, it does not escape an ancestor's display:none. With #ims/#imTray
+     nested inside .win (as they used to be), opening a whisper while on the Threads board silently
+     produced a window with display:flex and a real z-index that still measured 0x0 and painted
+     nothing, because the whole subtree had already been pulled out of the render tree one level up.
+     Keeping them as direct children of .gc-root instead -- siblings of .win and the takeover panels --
+     means they're never inside anything that gets display:none'd by those panels, so the z-index
+     range above (see the .im comment) is what actually decides stacking, exactly as intended. -->
+<div id="ims"></div>
+<div id="imTray" class="im-tray"></div>
 
 <div class="picker" id="picker" role="listbox" aria-label="Emoji"></div>
 
