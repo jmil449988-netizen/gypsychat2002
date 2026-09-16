@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 100;
+var BUILD_NUMBER = 101;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -805,6 +805,14 @@ window.addEventListener('focus', clearTitle);
    defense-in-depth strip of control characters from user text; it isn't what stops injection —
    never building raw SQL from user input is. */
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+/* Focus a field for the person's convenience -- but only where that convenience is real. On a
+   touch screen, focusing a field programmatically throws the keyboard up over half the screen
+   the moment a view opens (signing on, opening a thread, the report/bug/ballot dialogs...), which
+   was the most-complained-about thing on phones. So this is a no-op on touch-primary devices;
+   the field is one tap away. Focus that follows something the person just did IN a field
+   (sending a message, picking an emoji, completing an @name) still calls .focus() directly. */
+function isTouchDevice() { return !!(window.matchMedia && window.matchMedia('(hover:none) and (pointer:coarse)').matches); }
+function autoFocus(el) { if (el && !isTouchDevice()) el.focus(); }
 function sanitizeInput(s) { return String(s || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); }
 /* getHours()/getMinutes() already read the LOCAL clock -- a Date parses the stored UTC
    created_at and these getters convert it to whatever timezone the browser/device is set to, so
@@ -979,7 +987,7 @@ input.maxLength = opts.maxLength || 100;
 promptMentions = !!opts.mentions;
 if (promptMentions) mentionTa = input;
 overlay.classList.remove('hidden');
-input.focus(); input.select();
+if (!isTouchDevice()) { input.focus(); input.select(); }
 function done(val) {
 overlay.classList.add('hidden');
 okBtn.onclick = null; cancelBtn.onclick = null; overlay.onclick = null; input.onkeydown = null;
@@ -1764,7 +1772,7 @@ activeDm = id; dockOpen = true; saveDockOpen();
 unread[id] = 0; markDmRead(id); renderPeople();
 updateTab(id);
 syncDock();
-if (focus) w.ta.focus();
+if (focus) autoFocus(w.ta);
 /* A hidden element has no layout, so while the conversation wasn't showing the browser had
    nowhere to keep its scroll offset and clamped it to zero -- reopening it dropped you at the
    OLDEST message. Put it back on the newest, a frame later so it has been laid out again. */
@@ -1775,7 +1783,7 @@ return w;
    selected, so expanding the bar again lands straight back in it -- same as Instagram. */
 function minimizeIM(id) {
 if (!wins[id]) return;
-dockOpen = false; saveDockOpen(); syncDock(); msg.focus();
+dockOpen = false; saveDockOpen(); syncDock(); autoFocus(msg);
 }
 function destroyWin(id) {
 var w = wins[id]; if (!w) return;
@@ -2058,7 +2066,7 @@ function openBugReportModal() {
 if (!bugReportOverlay || !me) return;
 resetBugReportForm();
 bugReportOverlay.classList.remove('hidden');
-if (bugDesc) bugDesc.focus();
+autoFocus(bugDesc);
 }
 function closeBugReportModal() { if (bugReportOverlay) bugReportOverlay.classList.add('hidden'); }
 if (bugBtn) bugBtn.onclick = openBugReportModal;
@@ -2922,7 +2930,7 @@ b.onclick = function () {
 closeGif(); gifQ.value = '';
 if (gifTarget === 'thread-new') setPendingImage('new', full);
 else if (gifTarget === 'thread-reply') setPendingImage('reply', full);
-else { post(full); msg.focus(); }
+else { post(full); autoFocus(msg); }
 };
 gifResults.appendChild(b);
 });
@@ -3302,7 +3310,7 @@ tpPosts.innerHTML = '';
 appendThreadPost({ id: 'op-' + id, sender_id: t.op_id, sender_name: t.op_name, body: t.body, image_url: t.image_url, created_at: t.created_at, thread_id: id }, true);
 if (!r.error) r.data.forEach(function (p) { appendThreadPost(p, false); });
 tpPosts.scrollTop = tpPosts.scrollHeight;
-if (tpReplyBody) tpReplyBody.focus();
+autoFocus(tpReplyBody); // desktop only: on a phone the keyboard would cover the thread you just opened
 loadReactionsFor('thread', [id]);
 loadReactionsFor('thread_post', r.data ? r.data.map(function (p) { return p.id; }) : []);
 }
@@ -3943,7 +3951,7 @@ var nm = $('saveName'); if (nm) nm.textContent = me.name;
 $('saveEmail').value = ''; $('savePassword').value = ''; $('savePassword2').value = '';
 saveErr('');
 $('saveOverlay').classList.remove('hidden');
-$('saveEmail').focus();
+autoFocus($('saveEmail'));
 }
 function closeSaveAccount() { $('saveOverlay').classList.add('hidden'); }
 
@@ -4012,7 +4020,7 @@ var sn = $('sn');
 sn.readOnly = false; sn.value = ''; sn.classList.remove('locked');
 $('join').textContent = emailMode ? 'Sign in' : 'Enter the room';
 if ($('snNote')) $('snNote').classList.add('hidden');
-sn.focus();
+autoFocus(sn);
 }
 
 async function restoreIdentity() {
@@ -4079,7 +4087,7 @@ if ($('gateNote')) $('gateNote').classList.toggle('hidden', emailMode);
 $('sn').readOnly = !emailMode && !!lockedName;
 if ($('snNote')) $('snNote').classList.toggle('hidden', emailMode || !lockedName);
 fail('');
-(emailMode ? adminEmail : (accessCode && !accessCode.value ? accessCode : $('sn'))).focus();
+autoFocus(emailMode ? adminEmail : (accessCode && !accessCode.value ? accessCode : $('sn')));
 };
 }
 /* Cloudflare Turnstile (join-screen human check): the widget calls these globally-named
@@ -4374,7 +4382,7 @@ else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.')
 pinLogBottom();
 resetIdle();
 startRecentPeopleHeartbeat();
-msg.focus();
+autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
 } catch (e) {
 fail(e.message || String(e)); setStatus('Not signed on'); $('join').disabled = false; me = null;
 if (window.turnstile) { try { turnstile.reset(); } catch (resetErr) {} }
@@ -4421,7 +4429,7 @@ try {
 var storedCode = localStorage.getItem('gc_access_code');
 if (storedCode && accessCode) accessCode.value = storedCode;
 } catch (e) {}
-if (accessCode && !accessCode.value) accessCode.focus(); else $('sn').focus();
+autoFocus(accessCode && !accessCode.value ? accessCode : $('sn'));
 
 /* ---------- PWA service worker ---------- */
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
