@@ -987,3 +987,18 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
   .friendreq-btn{top:auto;right:auto;bottom:8px;left:8px}
   .friendreq-panel{top:auto;right:auto;bottom:50px;left:8px;width:calc(100vw - 16px)}
 }
+
+/* Desktop: Threads moves off the floating, vertically-centred bubble (still the mobile behaviour
+   below 500px, see makeFabDraggable's desktopFixed flag in app.js -- no dragging here either) and
+   into a fixed spot up in the header, near the friend-request bell but with a real gap so the two
+   don't read as one control. 62px = friendreq-btn's own 34px width + a 20px gap from its left edge
+   + friendreq-btn's own 8px base offset; the calc() branch mirrors the exact "track .win's actual
+   right edge past the 760px cap, not the raw viewport corner" logic .friendreq-btn already uses, so
+   both buttons cross from their flat fallback to the calc() formula at the same viewport width and
+   the 54px gap between them (62-8) never drifts, wide monitor or narrow desktop window alike.
+   !important guards against a stale inline position from a drag made back when this bubble was
+   still mobile-narrow (see makeFabDraggable) -- belt and braces alongside the JS-side guards there. */
+@media (min-width:501px){
+  .thread-toggle-fab{position:fixed !important;top:8px !important;bottom:auto !important;
+  right:max(62px,calc(50% - 380px + 62px)) !important;left:auto !important;transform:none !important}
+}
