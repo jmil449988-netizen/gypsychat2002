@@ -218,7 +218,13 @@ box-shadow:0 0 0 2px #a67ad1,0 0 0 3px #000,0 10px 30px #000,inset 0 0 30px #000
 .im .bar{display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:move;user-select:none;touch-action:none;
 background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4bb0;box-shadow:0 2px 0 #000}
 .im .bar .gem{width:9px;height:9px;transform:rotate(45deg);background:radial-gradient(circle at 35% 35%,#e0b3ff,#7a4bb0 60%,#2a1638);border:1px solid #4d2f6b;flex:none}
-.im .bar .nm{flex:1;font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:#e2c4ff;text-shadow:0 0 8px rgba(200,150,255,.5),0 1px 0 #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Header status dot for who this window is with -- same presence-dot classes/colors the threads
+   board uses (see presence-dot rules above), just placed here instead of per-message since a
+   whisper only ever has one other person. margin:0 since .bar's own flex `gap` already spaces it
+   from .wava/.nm -- the default presence-dot margin would double up. */
+.im .bar .nm-dot{margin:0}
+.im .bar .nm{flex:1;font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:#e2c4ff;text-shadow:0 0 8px rgba(200,150,255,.5),0 1px 0 #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.im .bar .nm:hover,.im .bar .nm:focus-visible{text-decoration:underline;outline:none}
 .im .bar .x,.im .bar .buzz{font:700 13px Cinzel,Georgia,serif;color:#c9a3e6;background:none;border:1px solid #7a4bb0;width:22px;height:20px;line-height:16px;cursor:pointer;padding:0}
 .im .bar .x:hover,.im .bar .buzz:hover{color:#fff;border-color:#e2c4ff;box-shadow:0 0 8px rgba(200,150,255,.6)}
 .im .bar .buzz{font-size:13px}
@@ -228,6 +234,10 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
 background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-shadow:inset 0 0 16px #000}
 .im .ilog .m b{font-weight:normal;font-family:Cinzel,Georgia,serif;font-size:12px}
 .im .ilog .me b{color:var(--gold-hi)} .im .ilog .them b{color:#e2c4ff}
+/* Names in a whisper transcript open the same Get Info/Whisper/Tag in Chat/Block menu a name click
+   opens everywhere else (see win.log.onclick in app.js) -- same hover treatment as .log b.who. */
+.im .ilog .m b.who{cursor:pointer}
+.im .ilog .m b.who:hover,.im .ilog .m b.who:focus-visible{text-decoration:underline;outline:none}
 .im .ilog .sys{color:var(--sys);font-style:italic}
 .im .ilog .t{color:#5a4f63;font-size:11px;margin-right:6px}
 .im .ilog .e{font-size:16px;vertical-align:-2px}
@@ -565,16 +575,17 @@ width:100%;max-width:900px;margin:0 auto;box-sizing:border-box}
    opens everywhere else (see tpPosts.onclick in app.js) -- same hover treatment as .log b.who. */
 .tp-posts .tp-post b.who{cursor:pointer}
 .tp-posts .tp-post b.who:hover,.tp-posts .tp-post b.who:focus-visible{text-decoration:underline;outline:none}
-/* Status dot before a name in the threads board -- colors match the Online list exactly
-   (st-away/st-busy/st-idle in the .users rules above), plus a plain grey "recently online" dot
-   (tp-dot-recent) for someone within the 30-minute reachable window but not live in the room right
-   now. See threadStatusDotClass/threadStatusDotHtml in app.js. */
-.tp-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin:0 5px 1px 0;vertical-align:middle;flex:none}
-.tp-dot-online{background:var(--leaf);box-shadow:0 0 5px rgba(90,161,90,.9)}
-.tp-dot-away{background:var(--gold);box-shadow:0 0 5px rgba(201,162,74,.7)}
-.tp-dot-busy{background:var(--blood);box-shadow:0 0 5px rgba(179,38,30,.7)}
-.tp-dot-idle{background:#5f6b7a;box-shadow:0 0 5px rgba(95,107,122,.6)}
-.tp-dot-recent{background:#6b7280;box-shadow:none}
+/* Status dot before a name -- used in the threads board AND whisper windows (header + transcript,
+   see .im rules below). Colors match the Online list exactly (st-away/st-busy/st-idle in the
+   .users rules above), plus a plain grey "recently online" dot (presence-dot-recent) for someone
+   within the 30-minute reachable window but not live in the room right now. See presenceDotClass/
+   presenceDotHtml in app.js. */
+.presence-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin:0 5px 1px 0;vertical-align:middle;flex:none}
+.presence-dot-online{background:var(--leaf);box-shadow:0 0 5px rgba(90,161,90,.9)}
+.presence-dot-away{background:var(--gold);box-shadow:0 0 5px rgba(201,162,74,.7)}
+.presence-dot-busy{background:var(--blood);box-shadow:0 0 5px rgba(179,38,30,.7)}
+.presence-dot-idle{background:#5f6b7a;box-shadow:0 0 5px rgba(95,107,122,.6)}
+.presence-dot-recent{background:#6b7280;box-shadow:none}
 .tp-posts .tp-loading{color:#5f5648;font-style:italic;font-size:12px;padding:8px}
 /* Reply/OP pictures are thumbnails too -- click to open the lightbox (openLightbox in app.js) --
    sized to match the room/whisper thumbnails (.log img.gif) rather than their old, larger 200px cap. */
