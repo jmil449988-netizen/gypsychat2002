@@ -245,13 +245,26 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
    updateSeenMark in app.js). Right-aligned and quiet, same idea as the timestamp but not meant to
    compete with the message text above it. */
 .im .ilog .dm-seen{text-align:right;font:italic 10px "IM Fell English",Georgia,serif;color:#8a7a9c;margin:1px 2px 5px}
-.im .icomp{display:grid;grid-template-columns:auto auto 1fr auto;gap:6px;padding:6px;flex:none}
+/* Composer. The dock is only 260-340px wide on desktop, so the attachment buttons sit in a row
+   UNDER the field there (the field and Send get the full width); on a phone the dock is
+   full-screen and everything fits on one line (the emoji button steps aside for the phone's own
+   keyboard -- see the max-width:500px rule). */
+.im .icomp{display:grid;grid-template-columns:auto auto auto 1fr auto;gap:6px;padding:6px;flex:none}
+@media (min-width:501px){
+  .im .icomp{grid-template-columns:auto auto auto 1fr auto;grid-template-areas:"ta ta ta ta send" "emo img gif . ."}
+  .im .icomp textarea{grid-area:ta}
+  .im .icomp .btn.emo{grid-area:emo;height:28px;min-width:34px;font-size:14px}
+  .im .icomp .btn.img{grid-area:img;height:28px;min-width:34px;font-size:14px}
+  .im .icomp .btn.gif{grid-area:gif;height:28px;min-width:34px}
+  .im .icomp .btn:last-child{grid-area:send}
+}
 .im .icomp textarea{font:inherit;color:var(--bone);resize:none;height:44px;padding:5px 8px;outline:none;caret-color:#e2c4ff;
 background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-shadow:inset 0 0 16px #000}
 .im .icomp textarea:focus{box-shadow:inset 0 0 16px #000,0 0 0 1px #a67ad1}
 .im .icomp .btn{color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
 .im .icomp .btn:hover{box-shadow:inset 0 1px 0 rgba(241,217,138,.15),inset 0 -2px 4px #000,0 0 0 1px #000,0 0 10px rgba(166,122,209,.6)}
 .im .icomp .btn.img,.im .icomp .btn.emo{font-size:15px;min-width:38px;padding:0 6px}
+.im .icomp .btn.gif{font-size:11px;min-width:38px;padding:0 6px}
 /* the dock's inbox: one .im-tab row per conversation (newest activity first -- app.js moves a row
    to the top when a message lands in it) */
 .im-tray{display:flex;flex-direction:column}
@@ -1141,7 +1154,7 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
   .gc-root.dm-open .thread-toggle-fab,.gc-root.dm-open .roulette-toggle-fab,.gc-root.dm-open .friendreq-btn,.gc-root.dm-open .friendreq-panel{display:none !important}
   /* same call as the room composer (#emoBtn above): the phone keyboard already has emoji */
   .im .icomp .emo{display:none}
-  .im .icomp{grid-template-columns:auto 1fr auto}
+  .im .icomp{grid-template-columns:auto auto 1fr auto}
 }
 /* Desktop: the roulette bubble floats at the right edge, vertically centred -- right where the
    expanded dock's top-right corner lands on a typical laptop screen. While the dock is open it
