@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 95;
+var BUILD_NUMBER = 96;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -575,7 +575,7 @@ applyDmVisibility();
 if (!dmToggleBtn) return;
 dmToggleBtn.textContent = dmTabsOff ? '🚫' : '💬';
 dmToggleBtn.setAttribute('aria-pressed', dmTabsOff ? 'true' : 'false');
-dmToggleBtn.title = dmTabsOff ? 'DM tabs hidden — click to show them again' : 'Hide DM tabs';
+dmToggleBtn.title = dmTabsOff ? 'Messages hidden — click to show them again' : 'Hide messages';
 }
 if (dmToggleBtn) {
 updateDmToggleBtn();
@@ -1464,36 +1464,68 @@ return '<div class="fg-hd">' + esc(g) + '</div>' + rows;
 }
 function nameTaken(n) { return Object.keys(people).some(function (id) { return id !== me.id && people[id].name.toLowerCase() === n.toLowerCase(); }); }
 
-/* ---------- whisper windows (keyed by user id) ----------
-   A whisper window is never forced open on its own — history replay on login and
-   any incoming message while it's closed just update a small tab in the tray
-   (like a mail icon) instead of popping a window over the room. Only a deliberate
-   action (tapping a name > Whisper, /w, or tapping its tray tab) opens it. */
-/* Z_WIN_MIN/MAX bound how high a whisper window's stacking order can climb -- see front() below for
-   why that bound has to exist at all. Floor of 41 (not the old 20) keeps every whisper window
-   above the full-screen mobile takeover panels (threads/leaderboard/roulette, all z-index:40 while
-   open -- see .gc-root.mobile-threads-open .threads-panel etc. in style.css), which used to bury
-   an open whisper behind them entirely. Ceiling of 54 stays clear of the emoji/reaction pickers
-   (56/57) and .nmenu (60), which can open on top of a whisper window and need to win that fight. */
-var zTop = 41, Z_WIN_MIN = 41, Z_WIN_MAX = 54, nWin = 0, lastBuzz = {};
+/* ---------- whisper conversations (keyed by user id) ----------
+   A conversation is never forced open on its own — history replay on login and any incoming
+   message while it's closed just update its row in the dock's inbox (and the bar's badge)
+   instead of popping the panel open over the room. Only a deliberate action (tapping a name >
+   Whisper, /w, or tapping its inbox row) opens it. */
+/* ---------- the Messages dock ----------
+   v96: whispers moved out of separate draggable/resizable windows (plus a tray of minimized tabs)
+   into ONE panel anchored at the bottom-right corner, Instagram-web style -- see #dmDock in
+   index.html. dockOpen is whether the panel is expanded at all; activeDm is which conversation
+   is showing inside it (null = the inbox list). Every wins[id] still has its own .im element
+   (the conversation view) and its own .im-tab (now an inbox row); syncDock() is the single place
+   that turns those two variables into what's on screen, including each window's `minimized`
+   flag, which the rest of the whisper code (unread counting, buzz, the DM-hide toggle) reads. */
+var dmDock = $('dmDock'), dmBar = $('dmBar'), dmBarBadge = $('dmBarBadge'), dmEmpty = $('dmEmpty');
+var dockOpen = false, activeDm = null;
+try { dockOpen = localStorage.getItem('gc_dm_dock_open') === '1'; } catch (e) {}
+function saveDockOpen() { try { localStorage.setItem('gc_dm_dock_open', dockOpen ? '1' : '0'); } catch (e) {} }
+function syncDock() {
+if (!dmDock) return;
+var ids = Object.keys(wins);
+if (activeDm && !wins[activeDm]) activeDm = null;
+var inThread = dockOpen && !!activeDm;
+dmDock.classList.toggle('collapsed', !dockOpen);
+dmDock.classList.toggle('thread', inThread);
+if (gcRoot) gcRoot.classList.toggle('dm-open', dockOpen); // style.css moves/hides the floating bubbles out of the expanded panel's way
+var total = 0;
+ids.forEach(function (id) {
+var w = wins[id], shown = inThread && id === activeDm;
+w.el.classList.toggle('hidden', !shown);
+w.minimized = !shown;
+if (w.tab) w.tab.classList.toggle('active', id === activeDm);
+total += unread[id] || 0;
+});
+if (dmBarBadge) { dmBarBadge.textContent = total > 9 ? '9+' : String(total); dmBarBadge.classList.toggle('hidden', !total); }
+if (dmBar) dmBar.setAttribute('aria-expanded', dockOpen ? 'true' : 'false');
+if (dmEmpty) dmEmpty.classList.toggle('hidden', ids.length > 0);
+applyDmVisibility();
+}
+function toggleDock() { dockOpen = !dockOpen; saveDockOpen(); syncDock(); }
+function showInbox() { activeDm = null; syncDock(); }
+if (dmBar) {
+dmBar.onclick = toggleDock;
+dmBar.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDock(); } };
+}
+var lastBuzz = {};
 function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
-el.innerHTML = '<div class="bar"><span class="gem"></span><span class="wava" aria-hidden="true"></span><span class="nm" tabindex="0" role="button" aria-label="' + esc(name) + ' options"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" aria-label="Minimize">–</button></div>' +
+el.innerHTML = '<div class="bar"><button class="back" type="button" title="Back to messages" aria-label="Back to messages">‹</button><span class="wava" aria-hidden="true"></span><span class="nm" tabindex="0" role="button" aria-label="' + esc(name) + ' options"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" title="Collapse messages" aria-label="Collapse messages">–</button></div>' +
 '<div class="ilog" aria-live="polite"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
 '<input type="file" class="im-img-file hidden" accept="image/*,.heic,.heif">' +
-'<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>' +
-'<div class="rz rz-nw" data-dir="nw" aria-hidden="true"></div><div class="rz rz-ne" data-dir="ne" aria-hidden="true"></div>' +
-'<div class="rz rz-sw" data-dir="sw" aria-hidden="true"></div><div class="rz rz-se" data-dir="se" aria-hidden="true"></div>';
+'<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
 el.querySelector('.nm').textContent = name;
 // typingPeer/typingTimer track whether -- and until when -- the OTHER person in this whisper is
 // shown as typing; see markImTyping/clearImTyping in the typing-indicator section below.
-var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !(people[id] || recentPeopleEntries()[id]), name: name, minimized: true, tab: null };
+// snippet: the last line of the conversation, for this conversation's inbox row (see updateTab).
+var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !(people[id] || recentPeopleEntries()[id]), name: name, minimized: true, tab: null, snippet: '' };
 win.ta.placeholder = 'Whisper to ' + name + '...';
 win.ta.addEventListener('input', function () { sendTyping(id, !!win.ta.value); });
-var off = (nWin++ % 6) * 24; el.style.left = (30 + off) + 'px'; el.style.top = (70 + off) + 'px';
+el.querySelector('.back').onclick = function () { showInbox(); };
 el.querySelector('.x').onclick = function () { minimizeIM(id); };
 el.querySelector('.buzz').onclick = function () { sendBuzz(id); };
 el.querySelector('.icomp .btn:last-child').onclick = function () { sendIM(id); };
@@ -1527,65 +1559,20 @@ var nmEl = el.querySelector('.nm');
    itself always still knows their last-known name (wins[id].name), whisper history or not. */
 nmEl.onclick = function (e) { e.stopPropagation(); openMenu(id, nmEl, wins[id] && wins[id].name); };
 nmEl.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nmEl.click(); } };
-el.addEventListener('pointerdown', function () { front(el); });
-var bar = el.querySelector('.bar');
-bar.addEventListener('pointerdown', function (e) {
-if (e.target.classList.contains('x') || e.target.classList.contains('buzz') || e.target.closest('.nm') || window.innerWidth <= 430) return;
-var sx = e.clientX - el.offsetLeft, sy = e.clientY - el.offsetTop; bar.setPointerCapture(e.pointerId);
-function mv(ev) { el.style.left = Math.max(0, Math.min(window.innerWidth - 60, ev.clientX - sx)) + 'px'; el.style.top = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - sy)) + 'px'; }
-function up() { bar.removeEventListener('pointermove', mv); bar.removeEventListener('pointerup', up); }
-bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up);
-});
-makeResizable(el);
 $('ims').appendChild(el); wins[id] = win;
-makeTab(id); updateTab(id); updateWinAvatar(id); updateWinPresenceDot(id); // tab starts visible (win starts minimized) regardless of who the first message is from
-applyDmVisibility(); // a whisper was just opened -- show it even if the DM-tabs-off preference is on
+makeTab(id); updateTab(id); updateWinAvatar(id); updateWinPresenceDot(id);
+syncDock(); // a new conversation exists -- give it its inbox row, and show the dock even if the DM-hide preference is on
 return win;
-}
-/* ---------- whisper window resizing ----------
-   Four corner handles, dragged like the title bar already is (setPointerCapture on the handle
-   itself). Each corner keeps the OPPOSITE edge fixed while it moves, so clamping to the min/max
-   size never makes the window jump -- e.g. dragging the top-left corner keeps the bottom-right
-   corner planted and just grows/shrinks toward it. Disabled on the mobile layout (see the
-   max-width:430px rule for .im .rz), where whisper windows are already full-width/fixed-height. */
-var RZ_MIN_W = 260, RZ_MIN_H = 200, RZ_MAX_W = 640, RZ_MAX_H = 720;
-function makeResizable(el) {
-Array.prototype.forEach.call(el.querySelectorAll('.rz'), function (h) {
-h.addEventListener('pointerdown', function (e) {
-if (window.innerWidth <= 430) return;
-e.preventDefault(); e.stopPropagation();
-front(el);
-var dir = h.dataset.dir;
-var r = el.getBoundingClientRect();
-var startX = e.clientX, startY = e.clientY;
-var startW = r.width, startH = r.height, startLeft = r.left, startTop = r.top;
-var rightEdge = startLeft + startW, bottomEdge = startTop + startH;
-h.setPointerCapture(e.pointerId);
-function mv(ev) {
-var dx = ev.clientX - startX, dy = ev.clientY - startY;
-var w = startW, ht = startH, left = startLeft, top = startTop;
-if (dir === 'se' || dir === 'ne') w = startW + dx; else w = startW - dx;
-if (dir === 'se' || dir === 'sw') ht = startH + dy; else ht = startH - dy;
-w = Math.max(RZ_MIN_W, Math.min(RZ_MAX_W, Math.min(w, window.innerWidth - 6)));
-ht = Math.max(RZ_MIN_H, Math.min(RZ_MAX_H, Math.min(ht, window.innerHeight - 6)));
-if (dir === 'sw' || dir === 'nw') left = rightEdge - w;
-if (dir === 'ne' || dir === 'nw') top = bottomEdge - ht;
-el.style.width = w + 'px'; el.style.height = ht + 'px';
-el.style.left = Math.max(0, left) + 'px'; el.style.top = Math.max(0, top) + 'px';
-}
-function up() { h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); }
-h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
-});
-});
 }
 function makeTab(id) {
 var w = wins[id];
-// A <div role="button"> rather than a real <button> -- the close "x" inside it is its own real
-// button, and a button can't contain another button (the browser would silently pop it back out
-// as a sibling, breaking both the layout and the click handling below).
-var b = document.createElement('div'); b.className = 'im-tab hidden'; b.tabIndex = 0; b.setAttribute('role', 'button');
-b.innerHTML = '<span class="env" aria-hidden="true">✉</span><span class="nm"></span><span class="badge hidden">0</span>' +
-'<button type="button" class="tab-close" title="Close this whisper" aria-label="Close whisper with ' + esc(w.name) + '">✕</button>';
+// An inbox row in the Messages dock. A <div role="button"> rather than a real <button> -- the
+// close "x" inside it is its own real button, and a button can't contain another button (the
+// browser would silently pop it back out as a sibling, breaking both the layout and the click
+// handling below). .tava is kept current by updateWinAvatar, .snippet by updateTab.
+var b = document.createElement('div'); b.className = 'im-tab'; b.tabIndex = 0; b.setAttribute('role', 'button');
+b.innerHTML = '<span class="tava" aria-hidden="true"></span><span class="tmeta"><span class="nm"></span><span class="snippet"></span></span><span class="badge hidden">0</span>' +
+'<button type="button" class="tab-close" title="Remove this conversation" aria-label="Remove conversation with ' + esc(w.name) + '">✕</button>';
 b.querySelector('.nm').textContent = w.name;
 b.setAttribute('aria-label', 'Open whisper with ' + w.name);
 b.addEventListener('click', function (e) {
@@ -1666,15 +1653,15 @@ var buzzBtn = w.el.querySelector('.buzz'); if (buzzBtn) buzzBtn.setAttribute('ar
 w.ta.placeholder = 'Whisper to ' + name + '...';
 if (w.tab) {
 w.tab.querySelector('.nm').textContent = name; w.tab.setAttribute('aria-label', 'Open whisper with ' + name);
-var closeBtn = w.tab.querySelector('.tab-close'); if (closeBtn) closeBtn.setAttribute('aria-label', 'Close whisper with ' + name);
+var closeBtn = w.tab.querySelector('.tab-close'); if (closeBtn) closeBtn.setAttribute('aria-label', 'Remove conversation with ' + name);
 }
 }
 /* Keeps a whisper window's title-bar avatar in sync with presence -- called once when the window
    is created and again on every presence sync (a person can change their picture mid-conversation). */
 function updateWinAvatar(id) {
 var w = wins[id]; if (!w) return;
-var span = w.el.querySelector('.wava'); if (!span) return;
-span.innerHTML = avatarHtml(id, w.name);
+var span = w.el.querySelector('.wava'); if (span) span.innerHTML = avatarHtml(id, w.name);
+var tava = w.tab && w.tab.querySelector('.tava'); if (tava) tava.innerHTML = avatarHtml(id, w.name); // the inbox row's picture too
 }
 /* Keeps a whisper window's title-bar status dot in sync with presence -- same green/yellow/red/
    grey vocabulary as the threads board (see presenceDotClass), just parked in the header instead
@@ -1690,64 +1677,55 @@ if (!cls) { if (dot) dot.remove(); return; }
 if (dot) dot.className = 'nm-dot ' + cls;
 else nm.insertAdjacentHTML('beforebegin', '<span class="nm-dot ' + cls + '"></span>');
 }
+/* Refreshes one conversation's inbox row: unread badge and last-line snippet. Rows are always
+   listed (the inbox shows every conversation, open or not); which one is currently open is
+   syncDock's business. Also re-sums the bar's total badge, since that's derived from the same
+   per-conversation counts. */
 function updateTab(id) {
 var w = wins[id]; if (!w || !w.tab) return;
-w.tab.classList.toggle('hidden', !w.minimized);
 var n = unread[id] || 0;
 var badge = w.tab.querySelector('.badge');
 badge.textContent = n > 9 ? '9+' : String(n);
 badge.classList.toggle('hidden', !n);
+w.tab.classList.toggle('unread', !!n);
+var sn = w.tab.querySelector('.snippet'); if (sn) sn.textContent = w.snippet || '';
+if (dmBarBadge) {
+var total = 0; Object.keys(wins).forEach(function (k) { total += unread[k] || 0; });
+dmBarBadge.textContent = total > 9 ? '9+' : String(total); dmBarBadge.classList.toggle('hidden', !total);
 }
+}
+/* Opens one conversation inside the dock (expanding the dock if it was collapsed) and marks it
+   read. Every route into a whisper -- a name's "Whisper" menu item, an inbox row, /w, a tapped
+   notification -- comes through here. */
 function openIM(id, name, focus) {
 var w = ensureWin(id, name);
-w.minimized = false; w.el.classList.remove('hidden'); front(w.el);
-/* ensureWin only calls this itself for a brand-new window (see its early return for one that
-   already exists) -- reopening an EXISTING, previously-minimized whisper (e.g. via "Whisper" in
-   the name menu) needs its own call here, or the `no-dms` class from a stale toggle-off state
-   would leave it hidden by !important despite `hidden` just having been removed above. */
-applyDmVisibility();
+activeDm = id; dockOpen = true; saveDockOpen();
 unread[id] = 0; markDmRead(id); renderPeople();
 updateTab(id);
+syncDock();
 if (focus) w.ta.focus();
-/* A hidden element has no layout, so while the window sat minimised the browser had nowhere to
-   keep its scroll offset and clamped it to zero -- reopening a whisper dropped you at the OLDEST
-   message in the conversation. Put it back on the newest, a frame later so the window has been
-   laid out again by then. */
+/* A hidden element has no layout, so while the conversation wasn't showing the browser had
+   nowhere to keep its scroll offset and clamped it to zero -- reopening it dropped you at the
+   OLDEST message. Put it back on the newest, a frame later so it has been laid out again. */
 requestAnimationFrame(function () { w.log.scrollTop = w.log.scrollHeight; });
 return w;
 }
+/* "Minimize" in the dock model means collapse the whole panel to its bar. The conversation stays
+   selected, so expanding the bar again lands straight back in it -- same as Instagram. */
 function minimizeIM(id) {
-var w = wins[id]; if (!w) return;
-w.minimized = true; w.el.classList.add('hidden'); updateTab(id); msg.focus();
-applyDmVisibility(); // if DM tabs are toggled off and this was the last open window, hide the tray now
+if (!wins[id]) return;
+dockOpen = false; saveDockOpen(); syncDock(); msg.focus();
 }
 function destroyWin(id) {
 var w = wins[id]; if (!w) return;
 clearTimeout(w.typingTimer);
 w.el.remove(); if (w.tab) w.tab.remove(); delete wins[id];
-applyDmVisibility(); // once the last open whisper is fully closed, go back to hidden if that's still the preference
+if (activeDm === id) activeDm = null; // back to the inbox if that conversation was the one showing
+syncDock();
 }
-/* Every tap on a whisper window (see the pointerdown listener a few lines up) calls this to bring
-   it to the front, so zTop climbs constantly during normal use -- not just once per window. Left
-   unbounded, a single active DM session can run zTop past 56 within minutes, which is the z-index
-   the emoji/GIF/mention pickers are pinned at (style.css .picker/.gifpicker/.mention-menu): since
-   front() sets an inline style, it overrides that CSS value outright, so once a window's inline
-   z-index climbs above 56 the picker silently renders BEHIND it -- opening it does nothing visible.
-   That's what was actually behind "emojis don't pop up in DMs": not a picker bug, a stacking-order
-   bug that got worse the longer a conversation ran. Recycling window z-indices back into
-   [Z_WIN_MIN, Z_WIN_MAX] whenever they'd cross that ceiling keeps them permanently below the
-   picker/menu tier, however long the session runs, while still preserving which open window was
-   most recently focused (that's all the actual number ever needs to encode). */
-function front(el) {
-zTop++;
-if (zTop > Z_WIN_MAX) {
-var order = Object.keys(wins).map(function (id) { return wins[id].el; })
-.sort(function (a, b) { return (parseInt(a.style.zIndex, 10) || 0) - (parseInt(b.style.zIndex, 10) || 0); });
-order.forEach(function (winEl, i) { winEl.style.zIndex = Z_WIN_MIN + i; });
-zTop = Z_WIN_MIN + order.length;
-}
-el.style.zIndex = zTop;
-}
+/* Kept as a no-op so the call sites that used to raise a floating window still read naturally:
+   there is only one panel now, and nothing inside it stacks. */
+function front() {}
 function imSys(id, text) { var w = wins[id]; if (!w) return; var d = document.createElement('div'); d.className = 'm sys'; d.textContent = text; w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; }
 function sendBuzz(id) {
 var now = Date.now();
@@ -1778,14 +1756,25 @@ if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts comp
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
 d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
+/* Inbox row: last line as its snippet, and newest activity floats to the top of the list.
+   updateTab always runs here (not only when unread changes) so the snippet is current -- but
+   during history replay hold off on both the re-sort and the repaint until the end (rows are
+   inserted newest-first anyway, and openIM/syncDock repaint after the replay). */
+w.snippet = (mine ? 'You: ' : '') + notifPreview(m.body);
+if (w.tab && tray && w.tab.parentNode === tray && tray.firstChild !== w.tab) tray.insertBefore(w.tab, tray.firstChild);
 if (mine) updateSeenMark(otherId); // this may now be the new last message of mine -- move/(re)show the mark
 if (!mine && !alreadyRead(otherId, m.created_at)) {
-if (w.minimized || document.activeElement !== w.ta) { unread[otherId] = (unread[otherId] || 0) + 1; if (!replayingHistory) { renderPeople(); updateTab(otherId); } }
-else markDmRead(otherId, m.created_at); // you are sitting in the window with the cursor in it
+if (w.minimized || document.activeElement !== w.ta) { unread[otherId] = (unread[otherId] || 0) + 1; if (!replayingHistory) renderPeople(); }
+else markDmRead(otherId, m.created_at); // you are sitting in the conversation with the cursor in it
 }
+if (!replayingHistory) updateTab(otherId);
 if (!mine && !replayingHistory) {
-if (!w.minimized) front(w.el);
-else if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
+if (w.minimized) {
+/* Not looking at this conversation: flash its inbox row, and the collapsed bar too if the
+   whole dock is shut, so the arrival registers wherever the person's eye is. */
+if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
+if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
+}
 playSound('ding');
 if (document.hidden) bumpTitle();
 notifyDesktop(otherName, notifPreview(m.body), 'gc-whisper-' + otherId, function () { openIM(otherId, otherName, true); });
@@ -2535,6 +2524,7 @@ if ($('saveBtn')) $('saveBtn').classList.add('hidden');
 if ($('moreBtn')) { $('moreBtn').classList.add('hidden'); closeMoreMenu(); }
 if (st) { st.classList.remove('renamable'); st.removeAttribute('title'); }
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
+activeDm = null; if (dmDock) dmDock.classList.add('hidden'); syncDock(); // the Messages dock goes with the room
 Object.keys(typingRoom).forEach(function (k) { clearTimeout(typingRoom[k].timer); }); typingRoom = {};
 Object.keys(typingSendState).forEach(function (k) { clearTimeout(typingSendState[k].stopTimer); }); typingSendState = {};
 if ($('typingIndicator')) { $('typingIndicator').classList.add('hidden'); $('typingIndicator').textContent = ''; }
@@ -3942,9 +3932,11 @@ playSound('buzz');
 if (w.minimized) {
 imSys(b.from, b.name + ' sent you a buzz!'); unread[b.from] = (unread[b.from] || 0) + 1; renderPeople(); updateTab(b.from);
 if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
+if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
 } else {
-imSys(b.from, b.name + ' sent you a buzz!'); front(w.el);
-w.el.classList.remove('shake'); void w.el.offsetWidth; w.el.classList.add('shake');
+imSys(b.from, b.name + ' sent you a buzz!');
+/* the whole dock rattles -- it's the panel the conversation is in, so that's what's on screen */
+if (dmDock) { dmDock.classList.remove('shake'); void dmDock.offsetWidth; dmDock.classList.add('shake'); }
 }
 if (document.hidden) bumpTitle();
 });
@@ -4029,6 +4021,9 @@ replayingHistory = false;
 /* Badges were accumulated silently during the replay above; paint them once, now, rather than
    re-rendering the whole people list on every one of up to 200 historical messages. */
 renderPeople();
+Object.keys(wins).forEach(updateTab); // inbox rows: snippets and unread badges from the replay, in one pass
+if (dmDock) dmDock.classList.remove('hidden');
+syncDock();
 /* Reactions aren't part of the message row itself, so they need their own pass once the room
    messages they belong to actually exist in the DOM to be painted onto -- whispers are excluded,
    same as everywhere else reactions touch messages. */
