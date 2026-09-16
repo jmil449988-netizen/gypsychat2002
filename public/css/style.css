@@ -184,6 +184,11 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
    status bar itself (display:contents flattens #statusPopover there) and there's no room for
    text next to them; the mobile media query below is the only place that turns them back on. */
 .popover-label{display:none}
+/* Hidden on a wide screen for the same reason .popover-label is: #statusPopover is display:contents
+   there, flattening its children straight into the .status bar, so an always-visible text node
+   here would show up as a stray line of text sitting among the icon buttons. Only meant to be
+   read inside the actual mobile popover, where the media query below turns it back on. */
+.popover-version{display:none}
 @media (max-width:500px){
 .status{position:relative}
 #moreBtn{display:inline-flex;align-items:center;justify-content:center}
@@ -193,6 +198,8 @@ padding:8px;border-radius:4px;z-index:40;box-shadow:0 0 0 1px #000,0 6px 18px #0
 #statusPopover.open{display:flex}
 #statusPopover .cell{width:100%;display:flex;align-items:center;gap:8px;text-align:left}
 #statusPopover .popover-label{display:inline;font-size:11px}
+#statusPopover .popover-version{display:block;font-size:9px;color:var(--ash);opacity:.5;text-align:center;
+padding-top:5px;margin-top:2px;border-top:1px solid var(--gold-lo)}
 }
 /* whisper windows */
 .im{position:fixed;width:340px;height:280px;min-width:260px;min-height:200px;max-width:calc(100vw - 12px);max-height:calc(100vh - 12px);
@@ -302,6 +309,16 @@ background:linear-gradient(180deg,#0f0d0b,#171310)}
 .lightbox-close{position:fixed;top:14px;right:16px;width:34px;height:32px;line-height:28px;font:700 15px Cinzel,Georgia,serif;
 color:var(--gold);background:#0f0d0b;border:1px solid var(--gold-lo);cursor:pointer;padding:0}
 .lightbox-close:hover,.lightbox-close:focus-visible{color:var(--gold-hi);border-color:var(--gold);outline:none}
+/* Tap-to-refresh prompt shown once app.js notices a new service-worker version has taken over
+   this tab (see the controllerchange listener near the bottom of app.js) -- above everything
+   else (.lightbox-overlay's 90 included) since it's a "your copy of the whole app is stale"
+   notice, not a piece of the app's own UI. Fixed to the bottom so it can't land on top of the
+   compose box or a whisper window's own controls. */
+.update-banner{position:fixed;left:8px;right:8px;bottom:8px;z-index:95;display:flex;align-items:center;
+justify-content:space-between;gap:10px;padding:8px 10px;background:linear-gradient(180deg,#2a2118,#171310);
+border:2px double var(--gold-lo);outline:1px solid #000;box-shadow:0 0 0 1px #000,0 6px 18px #000;
+color:var(--bone);font-size:12px;max-width:420px;margin:0 auto}
+.update-banner.hidden{display:none}
 .btn{font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);cursor:pointer;min-width:66px;padding:0 12px;
 background:linear-gradient(180deg,#3a3026,#1c1712);border:1px solid var(--gold-lo);
 box-shadow:inset 0 1px 0 rgba(241,217,138,.25),inset 0 -2px 4px #000,0 0 0 1px #000;text-shadow:0 1px 0 #000}
@@ -414,6 +431,10 @@ background:#0f0d0b}
 text-shadow:0 0 14px rgba(201,162,74,.5),0 2px 0 #000}
 .login .rule{width:180px;height:1px;margin:6px auto 12px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
 .login .tag{color:var(--ash);font-style:italic;margin-bottom:16px}
+/* Deliberately tiny and low-contrast -- this exists purely so "which build is this device
+   actually running" has an instant answer without opening dev tools, not to be a visible piece
+   of UI. See BUILD_NUMBER in app.js. */
+.buildtag{color:var(--ash);opacity:.4;font-size:10px;letter-spacing:.5px;margin:-10px 0 14px}
 .login label{display:block;margin:0 auto 6px;width:240px;text-align:left;font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold)}
 .login input{font:inherit;color:var(--bone);width:240px;padding:6px 8px;display:block;margin:0 auto 10px;outline:none}
 .login input:focus{box-shadow:inset 0 0 18px #000,0 0 0 1px var(--gold)}
