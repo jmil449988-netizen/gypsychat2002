@@ -55,7 +55,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 88;
+var BUILD_NUMBER = 89;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1416,8 +1416,12 @@ function nameTaken(n) { return Object.keys(people).some(function (id) { return i
    (like a mail icon) instead of popping a window over the room. Only a deliberate
    action (tapping a name > Whisper, /w, or tapping its tray tab) opens it. */
 /* Z_WIN_MIN/MAX bound how high a whisper window's stacking order can climb -- see front() below for
-   why that bound has to exist at all. */
-var zTop = 20, Z_WIN_MIN = 20, Z_WIN_MAX = 49, nWin = 0, lastBuzz = {};
+   why that bound has to exist at all. Floor of 41 (not the old 20) keeps every whisper window
+   above the full-screen mobile takeover panels (threads/leaderboard/roulette, all z-index:40 while
+   open -- see .gc-root.mobile-threads-open .threads-panel etc. in style.css), which used to bury
+   an open whisper behind them entirely. Ceiling of 54 stays clear of the emoji/reaction pickers
+   (56/57) and .nmenu (60), which can open on top of a whisper window and need to win that fight. */
+var zTop = 41, Z_WIN_MIN = 41, Z_WIN_MAX = 54, nWin = 0, lastBuzz = {};
 function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
