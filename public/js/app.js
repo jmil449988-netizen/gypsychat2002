@@ -55,7 +55,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 85;
+var BUILD_NUMBER = 86;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -976,13 +976,18 @@ var GIF_RE = /^https:\/\/(?:media\d{0,3}\.giphy\.com|i\.giphy\.com)\/media\/[^\s
 var OWN_IMG_RE = C.SUPABASE_URL ? new RegExp('^' + C.SUPABASE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/storage/v1/object/public/thread-images/[^\\s"\'<>]+$', 'i') : null;
 function escRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 /* @mentions: names aren't restricted to word-characters (a name can have spaces, punctuation,
-   emoji...), so there's no context-free regex for "a mention" -- instead we match against the
-   names of people actually in the room right now, longest name first so e.g. "@Jo" can't eat the
-   front of "@John" (the trailing (?![\w-]) guard on every match does the same job the other way:
-   it keeps "@Jo" from matching the "Jo" inside "@John"). Only online people can be @mentioned
-   (same rule the whisper picker already uses for who you can talk to). */
+   emoji...), so there's no context-free regex for "a mention" -- instead we match against a pool
+   of names, longest name first so e.g. "@Jo" can't eat the front of "@John" (the trailing
+   (?![\w-]) guard on every match does the same job the other way: it keeps "@Jo" from matching
+   the "Jo" inside "@John"). The pool is recentPeopleEntries(), not just `people` -- the same
+   30-minute reachable pool the whisper picker and mentionedUserIds() push resolution already use
+   (see recentPeopleEntries above). Without this, someone who stepped away for a minute would drop
+   out of highlighting/autocomplete the moment they went offline, even though @mentioning them
+   still actually pushes a notification -- a confusing mismatch between what the UI shows is
+   possible and what actually works. */
 function mentionableNames() {
-  return Object.keys(people).map(function (id) { return people[id].name; }).filter(Boolean).sort(function (a, b) { return b.length - a.length; });
+  var pool = recentPeopleEntries();
+  return Object.keys(pool).map(function (id) { return pool[id].name; }).filter(Boolean).sort(function (a, b) { return b.length - a.length; });
 }
 function highlightMentions(html) {
   mentionableNames().forEach(function (n) {
@@ -1715,9 +1720,30 @@ if (imgBtn) imgBtn.disabled = false;
 if (url) await post(url, id, w.name);
 w.ta.focus();
 }
-/* ---------- name menu: Get Info / Whisper / Block / Report / Friend / Kick ---------- */
+/* ---------- name menu: Get Info / Whisper / Tag in Chat / Block / Report / Friend / Kick ---------- */
 var menu = document.createElement('div'); menu.className = 'nmenu'; menu.setAttribute('role', 'menu'); document.body.appendChild(menu);
 function closeMenu() { menu.classList.remove('open'); }
+/* Drops "@Name " into the main chat box and focuses it -- the requested shortcut for tagging
+   someone straight from their context menu instead of hand-typing "@" and their name. Always
+   targets the main room composer (every entry point that can open this menu -- online list,
+   friends list, leaderboard, chat log -- lives on the main room screen, never inside a whisper
+   window), so there's no ambiguity about which box gets the mention. Inserts at the cursor rather
+   than always appending, and adds a leading space only if the text before the cursor needs one,
+   so tagging mid-sentence doesn't run words together or clobber whatever was already being typed. */
+function tagInChat(name) {
+  if (!msg) return;
+  var v = msg.value;
+  var s = typeof msg.selectionStart === 'number' ? msg.selectionStart : v.length;
+  var e = typeof msg.selectionEnd === 'number' ? msg.selectionEnd : v.length;
+  var before = v.slice(0, s);
+  var needsSpace = before.length > 0 && !/\s$/.test(before);
+  var insert = (needsSpace ? ' ' : '') + '@' + name + ' ';
+  msg.value = before + insert + v.slice(e);
+  var newPos = (before + insert).length;
+  closeMention();
+  msg.focus();
+  msg.selectionStart = msg.selectionEnd = newPos;
+}
 function openMenu(id, anchor, fallbackName) {
 var online = !!people[id];
 /* Reachable (can still receive a whisper) is a wider set than online (live in the room right now)
@@ -1729,6 +1755,7 @@ var name = (online && people[id].name) || (recent && recent.name) || (friends[id
 var items = [];
 items.push(['Get Info', function () { showInfo(id, name); }]);
 if (reachable && !blocked[id]) items.push(['Whisper', function () { unread[id] = 0; openIM(id, name, true); }]);
+if (reachable && !blocked[id]) items.push(['Tag in Chat', function () { tagInChat(name); }]);
 items.push(blocked[id] ? ['Unblock', function () { unblock(id); }] : ['Block', function () { block(id, name); }]);
 items.push(['Report', async function () { var rr = await showPromptModal('Report ' + name, { placeholder: 'e.g. spam, harassment', maxLength: 300 }); if (rr) report(id, name, rr); }]);
 items.push(friends[id] ? ['Remove Friend', function () { removeFriend(id, name); }] : ['Add Friend', function () { addFriend(id, name); }]);
@@ -2423,8 +2450,9 @@ if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 
 /* ---------- @mention autocomplete (main chat only) ----------
    One dropdown, shared the same way the emoji/GIF pickers are: created once, repositioned to the
-   textarea via positionPicker(). Matches against people currently in the room -- same scope the
-   whisper picker already limits you to, and it means the suggestion list is never stale. */
+   textarea via positionPicker(). Matches against recentPeopleEntries() -- the same 30-minute
+   reachable pool the whisper picker and mentionableNames() use, not just people live in the room
+   this instant, so someone who just stepped away is still suggested and still gets pushed. */
 var mentionMenu = document.createElement('div'); mentionMenu.className = 'mention-menu'; mentionMenu.setAttribute('role', 'listbox'); document.body.appendChild(mentionMenu);
 var mentionStart = -1, mentionItems = [], mentionIndex = 0;
 function closeMention() { mentionMenu.classList.remove('open'); mentionItems = []; mentionStart = -1; }
@@ -2451,7 +2479,9 @@ function updateMentionMenu() {
 var tok = currentMentionToken();
 if (!tok || !me) { closeMention(); return; }
 var q = tok.query.toLowerCase();
-var items = Object.keys(people).filter(function (id) { return id !== me.id; }).map(function (id) { return people[id].name; })
+var pool = recentPeopleEntries();
+var items = Object.keys(pool).filter(function (id) { return id !== me.id; }).map(function (id) { return pool[id].name; })
+.filter(Boolean)
 .filter(function (n) { return n.toLowerCase().indexOf(q) !== -1; })
 .sort(function (a, b) {
 var ap = a.toLowerCase().indexOf(q) === 0, bp = b.toLowerCase().indexOf(q) === 0;
