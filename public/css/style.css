@@ -917,3 +917,50 @@ transition:opacity .15s ease,background .15s ease}
 .gc-root.users-stacked.users-folded .users .list,
 .gc-root.users-stacked.users-folded .users .frhd,
 .gc-root.users-stacked.users-folded .users .hint{display:none}
+
+/* ---------- friend requests: a bell + dropdown inbox, siblings of .win (see the comment on
+   #ims/#imTray in index.html for why -- same reasoning applies here). z-index 46 sits in the
+   whisper-window band (41-54) since neither one needs to beat the other; both stay under
+   .nmenu (60) and modals (70). */
+.friendreq-btn{position:fixed;top:8px;right:8px;z-index:46;width:34px;height:34px;padding:0;
+font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;
+color:var(--ash);background:linear-gradient(180deg,#2e261d,#1a1511);border:2px double var(--gold-lo);
+outline:1px solid #000;box-shadow:0 0 0 1px #000,0 4px 10px #000;cursor:pointer}
+.friendreq-btn:hover,.friendreq-btn:focus-visible{color:var(--gold-hi);border-color:var(--gold);outline:none}
+/* Pulses gently whenever there's at least one request waiting, so it doesn't rely on the badge
+   number alone to catch the eye. */
+.friendreq-btn.has-requests{color:var(--gold-hi);border-color:var(--gold);animation:frq-pulse 1.6s ease-in-out infinite}
+@keyframes frq-pulse{0%,100%{box-shadow:0 0 0 1px #000,0 4px 10px #000}50%{box-shadow:0 0 0 1px #000,0 4px 10px #000,0 0 10px rgba(201,162,74,.8)}}
+
+.friendreq-panel{position:fixed;top:46px;right:8px;z-index:46;width:280px;max-width:calc(100vw - 16px);
+max-height:min(60vh,420px);display:none;flex-direction:column;overflow:hidden;
+background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double var(--gold-lo);
+box-shadow:0 0 0 1px #000,0 8px 24px #000}
+.friendreq-panel.open{display:flex}
+.frq-hd{padding:8px 10px;font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);
+text-align:center;border-bottom:1px solid var(--gold-lo);text-transform:uppercase;flex:none}
+.frq-list{overflow-y:auto;scrollbar-color:var(--gold-lo) #0f0d0b}
+.frq-empty{padding:14px 10px;color:var(--ash);font-style:italic;font-size:12px;text-align:center}
+
+/* Each row is a swipeable card: .frq-bg sits underneath full-size and only shows in the gap left
+   behind as .frq-content (the actual visible row, dragged by pointer events in app.js) slides off
+   to one side -- see swipe handling near renderFriendReqPanel. Right = accept, left = decline,
+   matching the request. Explicit Accept/Decline buttons stay in the row too, since swipe alone
+   would lock out anyone on a desktop mouse or using a screen reader. */
+.frq-row{position:relative;overflow:hidden;border-bottom:1px solid #2a2119;touch-action:pan-y}
+.frq-row:last-child{border-bottom:none}
+.frq-bg{position:absolute;inset:0;display:flex;align-items:center;font:700 12px Cinzel,Georgia,serif;
+letter-spacing:.5px;color:#fff;padding:0 12px;opacity:0}
+.frq-bg.accept{background:var(--leaf);justify-content:flex-start}
+.frq-bg.decline{background:var(--blood);justify-content:flex-end}
+.frq-content{position:relative;display:flex;align-items:center;gap:8px;padding:8px 10px;
+background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-y}
+.frq-content .ava,.frq-content .ava-fallback{width:28px;height:28px;font-size:13px;flex:none}
+.frq-name{flex:1;min-width:0;font-size:13px;color:var(--bone);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frq-actions{display:flex;gap:4px;flex:none}
+.frq-actions button{font:700 11px Cinzel,Georgia,serif;padding:3px 7px;cursor:pointer;border-radius:2px}
+.frq-accept{color:#cdeecd;background:rgba(90,161,90,.18);border:1px solid var(--leaf)}
+.frq-accept:hover,.frq-accept:focus-visible{background:rgba(90,161,90,.35);outline:none}
+.frq-decline{color:#f3c9c6;background:rgba(179,38,30,.18);border:1px solid var(--blood)}
+.frq-decline:hover,.frq-decline:focus-visible{background:rgba(179,38,30,.35);outline:none}
+@media (max-width:500px){.friendreq-panel{top:44px;right:6px;width:calc(100vw - 12px)}}
