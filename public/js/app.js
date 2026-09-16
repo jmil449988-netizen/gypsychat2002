@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 90;
+var BUILD_NUMBER = 91;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -557,12 +557,18 @@ return t.length > 140 ? t.slice(0, 140) + '…' : t;
 var dmTabsOff = false;
 try { dmTabsOff = localStorage.getItem('gc_dm_tabs_off') === '1'; } catch (e) {}
 /* The toggle button always reflects the raw preference the person picked ("I don't want to see DM
-   tabs"), but that preference only actually hides anything while there are zero whisper windows
+   tabs"), but that preference only actually hides the TRAY/minimized tabs while nothing is actively
    open -- opening (or receiving) a new whisper while the toggle is off should still show it, since
-   the person is looking right at it; once every whisper window is fully closed (not just
-   minimized -- see destroyWin), the DM UI goes back to hidden if the preference is still on. */
+   the person is looking right at it; the moment every whisper window is minimized or fully closed,
+   the DM UI goes back to hidden if the preference is still on.
+   This checks for a non-minimized window specifically, not just "wins isn't empty" -- a stale
+   minimized/background tab sitting in wins (nobody's actively looking at it) used to keep the whole
+   DM UI pinned visible forever, which is what made the toggle look broken ("tabs persist even
+   after being toggled off"): the tray never actually went away because *something* was always
+   sitting in wins, even with every window minimized. */
 function applyDmVisibility() {
-if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff && Object.keys(wins).length === 0);
+var anyOpen = Object.keys(wins).some(function (id) { return !wins[id].minimized; });
+if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff && !anyOpen);
 }
 function updateDmToggleBtn() {
 applyDmVisibility();
@@ -1658,6 +1664,11 @@ badge.classList.toggle('hidden', !n);
 function openIM(id, name, focus) {
 var w = ensureWin(id, name);
 w.minimized = false; w.el.classList.remove('hidden'); front(w.el);
+/* ensureWin only calls this itself for a brand-new window (see its early return for one that
+   already exists) -- reopening an EXISTING, previously-minimized whisper (e.g. via "Whisper" in
+   the name menu) needs its own call here, or the `no-dms` class from a stale toggle-off state
+   would leave it hidden by !important despite `hidden` just having been removed above. */
+applyDmVisibility();
 unread[id] = 0; markDmRead(id); renderPeople();
 updateTab(id);
 if (focus) w.ta.focus();
@@ -1671,6 +1682,7 @@ return w;
 function minimizeIM(id) {
 var w = wins[id]; if (!w) return;
 w.minimized = true; w.el.classList.add('hidden'); updateTab(id); msg.focus();
+applyDmVisibility(); // if DM tabs are toggled off and this was the last open window, hide the tray now
 }
 function destroyWin(id) {
 var w = wins[id]; if (!w) return;
