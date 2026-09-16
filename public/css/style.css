@@ -168,8 +168,10 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .list div.f-away{color:var(--gold)}
 .users .list div.f-busy{color:#e07a7a}
 .users .list div.f-idle{color:#7a8494}
-.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn,.status .bugbtn,.status .leaderboardbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
-.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover,.status .bugbtn:hover,.status .leaderboardbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+/* .savebtn/.notifbtn were missing from this list, so "Save with email" and "Notifications" rendered as
+   the browser's stock light-grey buttons among the dark ones -- v66 brings them in line. */
+.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn,.status .bugbtn,.status .leaderboardbtn,.status .savebtn,.status .notifbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
+.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover,.status .bugbtn:hover,.status .leaderboardbtn:hover,.status .savebtn:hover,.status .notifbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
 .status .avabtn{padding:1px 6px}
 .ava-thumb{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#2b2521;color:var(--gold);font-size:12px;line-height:1;overflow:hidden;vertical-align:-3px}
 .ava-thumb img{width:16px;height:16px;border-radius:50%;object-fit:cover;display:block}
@@ -699,8 +701,7 @@ background-size:230px auto,cover}
 .sn-reset:hover,.sn-reset:focus-visible{color:var(--gold-hi);outline:none}
 
 /* Save-your-character dialog (anonymous -> email account upgrade) */
-.status .savebtn{cursor:pointer;font-size:13px;line-height:1}
-.status .savebtn:hover{color:var(--gold-hi)}
+.status .savebtn{font-size:13px;line-height:1}
 .save-modal{max-width:420px;width:calc(100vw - 32px);text-align:left}
 .save-modal .modal-body{max-height:min(60vh,520px);overflow-y:auto}
 
@@ -1057,13 +1058,9 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
   .gc-root.signed-on .status{padding-left:50px}
   /* the buttons grew to finger height (rule 2), so centre the text beside them instead of letting it sit at the top of the row */
   .status{align-items:center}
-  /* 6. Inside the "..." popover, "Save with email" and "Notifications" were the only two buttons
-        never given the room's dark button styling, so they rendered as the browser's stock light
-        grey buttons -- two white boxes in an otherwise dark menu. (On a wide screen the same two
-        buttons sit inline in the status bar and are left exactly as they were.) Every row also
-        gets a finger-height minimum. */
-  #statusPopover .savebtn,#statusPopover .notifbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px}
-  #statusPopover .savebtn:hover,#statusPopover .notifbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+  /* 6. Every row of the "..." popover gets a finger-height minimum. (The dark styling for the
+        "Save with email" / "Notifications" rows now comes from the shared .status button rule
+        near the top of the file, same as on a wide screen.) */
   #statusPopover .cell{min-height:36px}
   /* 7. Online/Friends panel, stacked under the log on a phone (see "Online/Friends panel on a
         phone" above). It now starts FOLDED on a phone the first time (app.js), so all it costs
