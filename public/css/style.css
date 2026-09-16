@@ -170,8 +170,8 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .list div.f-idle{color:#7a8494}
 /* .savebtn/.notifbtn were missing from this list, so "Save with email" and "Notifications" rendered as
    the browser's stock light-grey buttons among the dark ones -- v66 brings them in line. */
-.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn,.status .bugbtn,.status .leaderboardbtn,.status .savebtn,.status .notifbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
-.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover,.status .bugbtn:hover,.status .leaderboardbtn:hover,.status .savebtn:hover,.status .notifbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn,.status .bugbtn,.status .leaderboardbtn,.status .savebtn,.status .notifbtn,.status .whisperbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
+.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover,.status .bugbtn:hover,.status .leaderboardbtn:hover,.status .savebtn:hover,.status .notifbtn:hover,.status .whisperbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
 .status .avabtn{padding:1px 6px}
 .ava-thumb{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#2b2521;color:var(--gold);font-size:12px;line-height:1;overflow:hidden;vertical-align:-3px}
 .ava-thumb img{width:16px;height:16px;border-radius:50%;object-fit:cover;display:block}
@@ -979,6 +979,8 @@ letter-spacing:.5px;color:#fff;padding:0 12px;opacity:0}
 background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-y}
 .frq-content .ava,.frq-content .ava-fallback{width:28px;height:28px;font-size:13px;flex:none}
 .frq-name{flex:1;min-width:0;font-size:13px;color:var(--bone);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* the optional one-line intro that came with the request (friends_only_whispers.sql) */
+.frq-intro{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font:italic 12px/1.3 "IM Fell English",Georgia,serif;color:var(--ash);overflow:hidden;white-space:normal}
 .frq-actions{display:flex;gap:4px;flex:none}
 .frq-actions button{font:700 11px Cinzel,Georgia,serif;padding:3px 7px;cursor:pointer;border-radius:2px}
 .frq-accept{color:#cdeecd;background:rgba(90,161,90,.18);border:1px solid var(--leaf)}
