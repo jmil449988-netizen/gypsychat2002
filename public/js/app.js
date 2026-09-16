@@ -58,7 +58,20 @@ var people = {}; // user id -> presence object {name, status, awayMsg} (from pre
    and never gets notified, which defeats the entire point of Web Push. recentPeople keeps a
    short-lived memory of the last known presence data for anyone seen this session, so a mention
    still resolves to a real user id for a grace window after they drop out of live `people`. */
+/* Kept in localStorage (same pattern as dmRead/dmDismissed above) for a specific reason: joining
+   is a fresh page load with a brand-new, empty `people`/`recentPeople` in memory, but restoreIdentity()
+   already treats a refresh as resuming the SAME sitting, not starting a new one -- so from the
+   person's point of view, someone they were just able to whisper a second before they hit refresh
+   should still be whisperable a second after. Without persistence, reloading wipes this cache
+   back to empty, and since the person who minimized their window a moment ago is (correctly, by
+   design) no longer in live `people` either, nothing would ever re-add them -- the whisper option
+   would vanish for the rest of what should have been their 30-minute grace window, purely because
+   YOU happened to refresh, not because THEY actually dropped out of it. Reviving the saved cache
+   at load time (further down) closes that gap; recentPeopleEntries()'s own lastSeen sweep still
+   throws out anything that's actually past its 30 minutes, so a stale save from days ago is harmless. */
 var recentPeople = {}; // user id -> { ...presence data, lastSeen }
+try { recentPeople = JSON.parse(localStorage.getItem('gc_recent_people') || '{}') || {}; } catch (e) { recentPeople = {}; }
+function saveRecentPeople() { try { localStorage.setItem('gc_recent_people', JSON.stringify(recentPeople)); } catch (e) {} }
 var RECENT_GRACE_MS = 30 * 60 * 1000; // matches IDLE_DISCONNECT_MS below -- if a quiet connection isn't kicked from the room until 30 minutes of inactivity, there's no reason to treat someone as "gone" for whisper/mention purposes any sooner than that
 function touchRecentPeople() {
   var now = Date.now();
@@ -66,12 +79,15 @@ function touchRecentPeople() {
     var p = people[id]; if (!p) return;
     recentPeople[id] = { name: p.name, status: p.status, awayMsg: p.awayMsg, lastSeen: now };
   });
+  saveRecentPeople();
 }
 /* Lazily sweeps out anything past its grace window before handing back the pool -- called right
    before it's read rather than on a timer, so it's always accurate at the moment it matters. */
 function recentPeopleEntries() {
   var now = Date.now();
-  Object.keys(recentPeople).forEach(function (id) { if (now - recentPeople[id].lastSeen > RECENT_GRACE_MS) delete recentPeople[id]; });
+  var changed = false;
+  Object.keys(recentPeople).forEach(function (id) { if (now - recentPeople[id].lastSeen > RECENT_GRACE_MS) { delete recentPeople[id]; changed = true; } });
+  if (changed) saveRecentPeople();
   return recentPeople;
 }
 /* touchRecentPeople() above only ever runs from the presence 'sync' handler below, which fires
