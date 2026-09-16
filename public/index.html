@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=73">
+<link rel="stylesheet" href="./css/style.css?v=74">
 </head>
 <body>
 <div class="gc-root">
@@ -85,7 +85,7 @@
 <div class="log sunk hidden" id="log" aria-live="polite" aria-label="Chat messages"></div>
 <!-- The Ballot Box as a scroll, for every screen without the right-hand gutter (see .bp-mscroll in
      style.css and "the Ballot Box on a phone" in app.js): a rolled-up parchment tucked into the
-     top-right corner of the log that unrolls once a minute with one anonymous note on it, then
+     top-right corner of the log that unrolls every 15 seconds with one anonymous note on it, then
      rolls itself back up. Tap the parchment to hold it; tap the roller to peek at the last note. -->
 <div class="bp-mscroll hidden" id="ballotMobile" aria-label="The Ballot Box">
 <div class="bp-mparch" id="ballotMobileParch" role="button" tabindex="0" aria-label="Hold the note"><span class="bp-mtext" id="ballotMobileText"></span><button type="button" class="bp-remove hidden" id="ballotMobileRemove" title="Remove this note (admin)" aria-label="Remove this note">✕</button></div>
@@ -421,6 +421,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=103"></script>
+<script src="./js/app.js?v=104"></script>
 </body>
 </html>
