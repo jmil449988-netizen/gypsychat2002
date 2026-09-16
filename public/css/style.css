@@ -675,9 +675,15 @@ box-shadow:0 0 0 2px var(--gold-lo),0 0 0 3px #000,0 0 24px #000,inset 0 0 30px 
 text-shadow:0 0 12px rgba(201,162,74,.55),0 2px 0 #000,0 -1px 0 #000}
 .rp-rule{width:70%;height:1px;margin:16px 0;background:linear-gradient(90deg,transparent,var(--gold-lo),transparent)}
 .rp-blurb{font-size:13px;line-height:1.7;color:var(--bone);opacity:.8}
-.rp-wheel{margin-top:22px;width:56px;height:56px;border:2px dashed var(--gold-lo);border-radius:50%;
-display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:17px}
-@media (prefers-reduced-motion:no-preference){.rp-wheel{animation:rp-spin 14s linear infinite}}
+/* The caravan wheel (inline SVG in index.html, v67 -- it used to be a 56px dashed circle with a
+   star in it). 160px is as big as the 260px desktop gutter panel can carry with its padding;
+   the full-screen phone/tablet presentation below has room for 200px. Slowed from 14s to 22s:
+   a wheel this size at the old rate read as a fan, not a wagon wheel rolling along. */
+.rp-wheel{margin-top:24px;width:160px;height:160px;border-radius:50%;flex:none;
+filter:drop-shadow(0 0 12px rgba(201,162,74,.28)) drop-shadow(0 6px 10px #000)}
+.rp-wheel svg{display:block;width:100%;height:100%;overflow:visible}
+.gc-root.mobile-roulette-open .rp-wheel{width:200px;height:200px;margin-top:28px}
+@media (prefers-reduced-motion:no-preference){.rp-wheel{animation:rp-spin 22s linear infinite}}
 @keyframes rp-spin{to{transform:rotate(360deg)}}
 
 /* Gypsy-woman line art as a watermark in the chat log's dead space. Two background layers:
