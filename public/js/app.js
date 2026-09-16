@@ -74,6 +74,26 @@ function recentPeopleEntries() {
   Object.keys(recentPeople).forEach(function (id) { if (now - recentPeople[id].lastSeen > RECENT_GRACE_MS) delete recentPeople[id]; });
   return recentPeople;
 }
+/* touchRecentPeople() above only ever runs from the presence 'sync' handler below, which fires
+   when someone's presence state changes -- a busy room gets plenty of those for free, but a quiet
+   one (or two people who are both already sitting idle) can go long stretches with no presence
+   churn at all. Left alone, that means a quietly-connected phone's lastSeen can already be several
+   minutes stale by the moment it actually disconnects, so the 30-minute RECENT_GRACE_MS window
+   ends up counted from that stale stamp instead of from when they really went offline -- someone
+   who minimizes their browser can fall out of the "reachable" pool, and lose the Whisper option,
+   well short of the full 30 minutes anyone would expect from that cache. This tick re-stamps
+   everyone currently in `people` on its own fixed clock, independent of how chatty the room is, so
+   lastSeen is never more than ~30 seconds stale at the moment a connection actually drops --
+   which is what makes the 30-minute grace window and the 30-minute idle-kick (IDLE_DISCONNECT_MS)
+   actually line up the way the comment on RECENT_GRACE_MS always intended. */
+var recentPeopleHeartbeatTimer = null;
+function startRecentPeopleHeartbeat() {
+  stopRecentPeopleHeartbeat();
+  recentPeopleHeartbeatTimer = setInterval(touchRecentPeople, 30 * 1000);
+}
+function stopRecentPeopleHeartbeat() {
+  if (recentPeopleHeartbeatTimer) { clearInterval(recentPeopleHeartbeatTimer); recentPeopleHeartbeatTimer = null; }
+}
 var wins = {}, unread = {}, seen = {};
 var typingRoom = {}; // user id -> {name, timer} -- who's currently typing in the main room; see the typing-indicator section below
 /* Message metadata cache, keyed by message id -- just enough (sender, raw body, when) for the 🚩
@@ -2176,6 +2196,7 @@ openThreadId = null;
 reactions = {}; userStats = {}; closeReactPicker();
 clearTimeout(idleTimer);
 clearTimeout(idleDisconnectTimer);
+stopRecentPeopleHeartbeat();
 log.classList.add('hidden'); $('users').classList.add('hidden'); $('compose').classList.add('hidden');
 if ($('roomWatermark')) $('roomWatermark').classList.add('hidden');
 if ($('statusBtn')) $('statusBtn').classList.add('hidden');
@@ -3640,6 +3661,7 @@ else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.')
 }
 pinLogBottom();
 resetIdle();
+startRecentPeopleHeartbeat();
 msg.focus();
 } catch (e) {
 fail(e.message || String(e)); setStatus('Not signed on'); $('join').disabled = false; me = null;
