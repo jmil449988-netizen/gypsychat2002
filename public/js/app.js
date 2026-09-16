@@ -61,7 +61,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 105;
+var BUILD_NUMBER = 106;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -555,6 +555,74 @@ if (GIF_RE.test(t) || (OWN_IMG_RE && OWN_IMG_RE.test(t))) return '📷 sent an i
 return t.length > 140 ? t.slice(0, 140) + '…' : t;
 }
 
+/* ---------- who can whisper me: friends only (default) or everyone ----------
+   The rule itself is enforced in the database (see friends_only_whispers.sql: the messages insert
+   policy calls can_whisper(sender, recipient)), so nothing here is load-bearing for safety -- this
+   is the switch that sets my own profiles.whisper_policy, plus the client-side mirror of the rule
+   that lets the UI say "add them as a friend first" up front instead of letting a whisper bounce
+   off the policy with a raw error. Admins are exempt both ways, same as the database.
+   Someone else's setting is public (profiles are readable by anyone signed on), so whisperAllowed
+   looks it up when the fast checks don't already answer, and remembers it for a minute. */
+var whisperPolicy = 'friends';
+var whisperBtn = $('whisperBtn');
+var whisperPolicyCache = {}; // user id -> {policy, at}
+var WHISPER_POLICY_CACHE_MS = 60 * 1000;
+function updateWhisperBtn() {
+if (!whisperBtn) return;
+var open = whisperPolicy === 'everyone';
+var icon = whisperBtn.querySelector('.btn-icon'), label = whisperBtn.querySelector('.popover-label');
+if (icon) icon.textContent = open ? '📬' : '🔒';
+if (label) label.textContent = open ? 'Whispers: Everyone' : 'Whispers: Friends only';
+whisperBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
+whisperBtn.title = open ? 'Anyone in the room can whisper you — click to allow friends only' : 'Only friends can whisper you — click to allow everyone';
+}
+if (whisperBtn) {
+updateWhisperBtn();
+whisperBtn.onclick = async function () {
+if (!me) return;
+var next = whisperPolicy === 'everyone' ? 'friends' : 'everyone';
+var r = await sb.from('profiles').update({ whisper_policy: next, updated_at: new Date().toISOString() }).eq('user_id', me.id);
+if (r.error) { addSys('Could not change who can whisper you: ' + r.error.message); return; }
+whisperPolicy = next; updateWhisperBtn();
+addSys(next === 'everyone' ? 'Anyone in the room can whisper you now.' : 'Only your friends can whisper you now. (Admins always can.)');
+};
+}
+/* Synchronous half of the rule: true when a whisper to `id` is certain to go through without
+   asking the database (they're on my friends list, or an admin is on either end). */
+function whisperAllowedSync(id) {
+return !!(me && (isAdmin || isAdminId(id) || friends[id]));
+}
+/* Full rule: the sync checks, then their own whisper_policy if that's what decides it. */
+async function whisperAllowed(id) {
+if (whisperAllowedSync(id)) return true;
+var c = whisperPolicyCache[id];
+if (c && Date.now() - c.at < WHISPER_POLICY_CACHE_MS) return c.policy === 'everyone';
+var r = await sb.from('profiles').select('whisper_policy').eq('user_id', id).maybeSingle();
+var policy = (!r.error && r.data && r.data.whisper_policy) || 'friends';
+whisperPolicyCache[id] = { policy: policy, at: Date.now() };
+return policy === 'everyone';
+}
+/* Opens a whisper to `id` if the rule allows it; otherwise offers a friend request (with the
+   optional intro line) in its place. Every "start a whisper" path goes through here -- the name
+   menus, /w, and the inbox rows -- so the "friends first" moment always looks the same. */
+async function tryWhisper(id, name, focus) {
+if (await whisperAllowed(id)) { unread[id] = 0; return openIM(id, name, focus); }
+var incomingReqId = incomingRequestIdFrom(id);
+if (incomingReqId) { addSys(name + ' only takes whispers from friends — and they already sent you a request. Accept it from the 🤝 bell and you can whisper away.'); return null; }
+if (outgoingPending[id]) { addSys(name + ' only takes whispers from friends. Your friend request to them is still pending.'); return null; }
+var intro = await showPromptModal(name + ' only takes whispers from friends', { placeholder: 'Say hi (optional)', maxLength: 100, hint: 'Send a friend request instead? Once they accept, you can whisper each other.', okLabel: 'Send request' });
+if (intro === null) return null;
+sendFriendRequest(id, name, intro);
+return null;
+}
+/* Maps the database's refusal of a whisper (the "send as self" policy) to a sentence a person can
+   act on. Anything else keeps the raw message, same as before. */
+function whisperErrorText(err, name) {
+var m = (err && err.message) || String(err);
+if (/row-level security/i.test(m)) return (name || 'They') + ' only takes whispers from friends. Send them a friend request from their name menu.';
+return 'Your words were lost: ' + m;
+}
+
 /* ---------- option to completely hide DM (whisper) tabs and windows ----------
    Purely a client-side/visual toggle, same pattern as sound mute: whispers still arrive and are
    remembered under the hood (unread counts, history) — they're just not shown on screen while
@@ -987,6 +1055,7 @@ else { body.textContent = ''; body.classList.add('hidden'); }
 input.value = opts.value || '';
 input.placeholder = opts.placeholder || '';
 input.maxLength = opts.maxLength || 100;
+okBtn.textContent = opts.okLabel || 'OK'; // e.g. "Send request" when the field is a friend-request intro
 /* opts.mentions: the field gets the composer's @Name autocomplete for as long as the dialog is up
    (the Ballot Box uses this on phones) */
 promptMentions = !!opts.mentions;
@@ -1832,9 +1901,12 @@ syncDock();
    there is only one panel now, and nothing inside it stacks. */
 function front() {}
 function imSys(id, text) { var w = wins[id]; if (!w) return; var d = document.createElement('div'); d.className = 'm sys'; d.textContent = text; w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; }
-function sendBuzz(id) {
+async function sendBuzz(id) {
 var now = Date.now();
 if (lastBuzz[id] && now - lastBuzz[id] < 3000) return;
+/* Buzz rides the broadcast channel, which the database's whisper rule can't see -- so the same
+   friends-first rule is applied here, client-side (see the whisper-policy section above). */
+if (!(await whisperAllowed(id))) { imSys(id, 'Add ' + (wins[id] ? wins[id].name : 'them') + ' as a friend to buzz them.'); return; }
 lastBuzz[id] = now;
 channel.send({ type: 'broadcast', event: 'buzz', payload: { to: id, from: me.id, name: me.name } });
 imSys(id, 'You sent a buzz.');
@@ -1892,6 +1964,9 @@ post('[Away] ' + (myAwayMsg || (me.name + ' is currently away.')), otherId, othe
 async function sendIM(id) {
 var w = wins[id]; var t = w.ta.value.trim(); if (!t) return;
 if (w.gone) { imSys(id, w.name + ' is not here to hear you.'); return; }
+/* An old conversation can outlive the friendship (or they may have closed their whispers since):
+   check before sending so the text isn't thrown away on a policy refusal. */
+if (!(await whisperAllowed(id))) { imSys(id, w.name + ' only takes whispers from friends. Send them a friend request from their name above.'); return; }
 w.ta.value = ''; sendTyping(id, false);
 await post(t, id, w.name);
 w.ta.focus();
@@ -1948,7 +2023,9 @@ var reachable = online || !!recent;
 var name = (online && people[id].name) || (recent && recent.name) || (friends[id] && friends[id].name) || fallbackName; if (!name) return;
 var items = [];
 items.push(['Get Info', function () { showInfo(id, name); }]);
-if (reachable && !blocked[id]) items.push(['Whisper', function () { unread[id] = 0; openIM(id, name, true); }]);
+/* Whisper goes through tryWhisper: friends (and admins) open straight away; anyone else is
+   offered a friend request instead, unless that person has opened their whispers to everyone. */
+if (reachable && !blocked[id]) items.push(['Whisper', function () { tryWhisper(id, name, true); }]);
 if (reachable && !blocked[id]) items.push(['Tag in Chat', function () { tagInChat(name); }]);
 items.push(blocked[id] ? ['Unblock', function () { unblock(id); }] : ['Block', function () { block(id, name); }]);
 items.push(['Report', async function () { var rr = await showPromptModal('Report ' + name, { placeholder: 'e.g. spam, harassment', maxLength: 300 }); if (rr) report(id, name, rr); }]);
@@ -2349,8 +2426,8 @@ friends[id].group = g; addSys(friends[id].name + ' moved to ' + (g || 'Friends')
    for the two-sided mirror-insert dance that turns an accepted request into a real friendship. */
 async function loadFriendRequests() {
 incomingRequests = {}; outgoingPending = {};
-var inc = await sb.from('friend_requests').select('id, sender_id, sender_name, created_at').eq('recipient_id', me.id).eq('status', 'pending');
-if (!inc.error) inc.data.forEach(function (r) { incomingRequests[r.id] = { id: r.id, senderId: r.sender_id, senderName: r.sender_name || '?', createdAt: r.created_at }; });
+var inc = await sb.from('friend_requests').select('id, sender_id, sender_name, created_at, intro').eq('recipient_id', me.id).eq('status', 'pending');
+if (!inc.error) inc.data.forEach(function (r) { incomingRequests[r.id] = { id: r.id, senderId: r.sender_id, senderName: r.sender_name || '?', createdAt: r.created_at, intro: r.intro || '' }; });
 var out = await sb.from('friend_requests').select('id, recipient_id').eq('sender_id', me.id).eq('status', 'pending');
 if (!out.error) out.data.forEach(function (r) { outgoingPending[r.recipient_id] = r.id; });
 updateFriendReqBadge(); renderFriendReqPanel();
@@ -2361,10 +2438,10 @@ friendReqChannel = sb.channel('friend-requests-' + me.id);
 /* Someone sent ME a request -- straight into the inbox, live, the same way a whisper arrives. */
 friendReqChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'friend_requests', filter: 'recipient_id=eq.' + me.id }, function (p) {
 var row = p.new; if (row.status !== 'pending') return;
-incomingRequests[row.id] = { id: row.id, senderId: row.sender_id, senderName: row.sender_name || '?', createdAt: row.created_at };
+incomingRequests[row.id] = { id: row.id, senderId: row.sender_id, senderName: row.sender_name || '?', createdAt: row.created_at, intro: row.intro || '' };
 playSound('ding');
-notifyDesktop((row.sender_name || 'Someone') + ' wants to be friends', 'Tap to see your friend requests', 'gc-friendreq-' + row.id, function () { openFriendReqPanel(); });
-addSys((row.sender_name || 'Someone') + ' sent you a friend request. 🤝');
+notifyDesktop((row.sender_name || 'Someone') + ' wants to be friends', row.intro || 'Tap to see your friend requests', 'gc-friendreq-' + row.id, function () { openFriendReqPanel(); });
+addSys((row.sender_name || 'Someone') + ' sent you a friend request. 🤝' + (row.intro ? ' “' + row.intro + '”' : ''));
 updateFriendReqBadge(); renderFriendReqPanel();
 });
 /* A request I sent got answered elsewhere (their client, or my own other tab/device). Accepting
@@ -2400,7 +2477,10 @@ if (friendReqChannel) { friendReqChannel.unsubscribe(); friendReqChannel = null;
 function incomingRequestIdFrom(senderId) {
 return Object.keys(incomingRequests).filter(function (k) { return incomingRequests[k].senderId === senderId; })[0] || null;
 }
-async function sendFriendRequest(id, name) {
+/* intro: an optional one-liner that travels with the request (<= 100 chars, see
+   friends_only_whispers.sql). Passed in by tryWhisper's dialog; the plain "Add Friend" menu item
+   asks for it here instead (undefined = ask, '' = deliberately none). */
+async function sendFriendRequest(id, name, intro) {
 if (friends[id]) { addSys(name + ' is already on your friends list.'); return; }
 if (outgoingPending[id]) { addSys('You already sent ' + name + ' a friend request.'); return; }
 var pendingFromThem = incomingRequestIdFrom(id);
@@ -2409,7 +2489,14 @@ addSys(name + ' already sent you a request -- accepting it instead.');
 acceptFriendRequest(pendingFromThem, id, name);
 return;
 }
-var r = await sb.from('friend_requests').insert({ sender_id: me.id, sender_name: me.name, recipient_id: id, recipient_name: name, status: 'pending' }).select().single();
+if (intro === undefined) {
+intro = await showPromptModal('Add ' + name + ' as a friend', { placeholder: 'Say hi (optional)', maxLength: 100, hint: 'A line to go with your request. Once they accept, you can whisper each other.', okLabel: 'Send request' });
+if (intro === null) return;
+}
+intro = sanitizeInput(intro || '').slice(0, 100);
+var row = { sender_id: me.id, sender_name: me.name, recipient_id: id, recipient_name: name, status: 'pending' };
+if (intro) row.intro = intro;
+var r = await sb.from('friend_requests').insert(row).select().single();
 if (r.error) {
 if (r.error.code === '23505') addSys('You already sent ' + name + ' a friend request.');
 else addSys('Could not send friend request: ' + r.error.message);
@@ -2417,6 +2504,8 @@ return;
 }
 outgoingPending[id] = r.data.id;
 addSys('Friend request sent to ' + name + '.');
+/* Same sender-side push as whispers use (see post): a closed phone still hears the knock. */
+triggerPush(id, me.name + ' wants to be friends', intro || 'Tap to see your friend requests', 'gc-friendreq-' + me.id);
 }
 async function acceptFriendRequest(reqId, senderId, senderName) {
 var req = incomingRequests[reqId]; var name = senderName || (req && req.senderName) || '?';
@@ -2473,7 +2562,7 @@ var req = incomingRequests[reqId];
 return '<div class="frq-row" data-req="' + esc(reqId) + '">' +
 '<div class="frq-bg accept">✓ Accept</div><div class="frq-bg decline">✕ Decline</div>' +
 '<div class="frq-content">' + avatarHtml(req.senderId, req.senderName) +
-'<span class="frq-name">' + esc(req.senderName) + '</span>' +
+'<span class="frq-name">' + esc(req.senderName) + (req.intro ? '<span class="frq-intro">“' + esc(req.intro) + '”</span>' : '') + '</span>' +
 '<span class="frq-actions"><button type="button" class="frq-accept">Accept</button><button type="button" class="frq-decline">Decline</button></span>' +
 '</div></div>';
 }).join('');
@@ -2671,7 +2760,14 @@ var cap = recipientId ? 500 : 140; // main room chat is capped at 140; whispers 
 var row = { room: C.ROOM || 'main', sender_id: me.id, sender_name: me.name, body: sanitizeInput(body).slice(0, cap) };
 if (recipientId) { row.recipient_id = recipientId; row.recipient_name = recipientName; }
 var r = await sb.from('messages').insert(row).select().single();
-if (r.error) { addSys('Your words were lost: ' + r.error.message); return; }
+if (r.error) {
+/* A refused whisper gets its explanation in the whisper window it was typed in, in plain words
+   (see whisperErrorText); everything else stays in the room log as before. */
+if (!recipientId) addSys('Your words were lost: ' + r.error.message);
+else if (wins[recipientId]) imSys(recipientId, whisperErrorText(r.error, recipientName));
+else addSys(whisperErrorText(r.error, recipientName));
+return;
+}
 handleMessage(r.data); // show immediately; the realtime echo is de-duplicated by id
 /* Kick off any push notifications this message should cause. This has to happen from the SENDER's
    client -- it's the only side guaranteed to be online right now -- which is also exactly why it
@@ -2704,6 +2800,10 @@ var TYPING_SEND_THROTTLE_MS = 2500, TYPING_STOP_MS = 4000, TYPING_EXPIRE_MS = 60
 var typingSendState = {}; // key ('room', or a whisper peer's id) -> {lastSent, stopTimer}
 function sendTyping(target, isTyping) {
 if (!channel || !me) return;
+/* A whisper typing ping to someone who can't be whispered yet is skipped -- quietly, since this
+   fires on every keystroke. The sync check is enough here: for the rare "their door is open" case
+   the ping is merely missing, never leaked. */
+if (target && !whisperAllowedSync(target) && !(whisperPolicyCache[target] && whisperPolicyCache[target].policy === 'everyone')) return;
 var key = target || 'room';
 var st = typingSendState[key] || (typingSendState[key] = { lastSent: 0, stopTimer: null });
 clearTimeout(st.stopTimer); st.stopTimer = null;
@@ -2770,7 +2870,7 @@ var cmd = m[1].toLowerCase(), arg = m[2], rest = m[3].trim(), id;
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
+case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
@@ -2802,8 +2902,9 @@ var id = Object.keys(people).filter(function (k) { return people[k].name.toLower
 if (!id) { addSys('No one here is named ' + w[1] + '.'); return; }
 if (id === me.id) { addSys('You cannot whisper to yourself.'); return; }
 if (blocked[id]) { addSys('You have blocked ' + people[id].name + '. Unblock them first.'); return; }
-msg.value = ''; sendTyping(null, false); closeMention(); var win = openIM(id, people[id].name, true);
-if (w[2].trim()) { win.ta.value = w[2].trim(); sendIM(id); }
+msg.value = ''; sendTyping(null, false); closeMention();
+var win = await tryWhisper(id, people[id].name, true); // null when it turned into a friend-request offer instead
+if (win && w[2].trim()) { win.ta.value = w[2].trim(); sendIM(id); }
 return;
 }
 msg.value = ''; sendTyping(null, false); closeMention(); await post(t); msg.focus();
@@ -4265,8 +4366,11 @@ console.warn('verify-join check did not complete:', vjErr);
 }
 me = { id: user.id, name: n, avatarUrl: null };
 manualStatus = 'online'; myAwayMsg = ''; autoIdle = false; awayReplied = {};
-var myProf = await sb.from('profiles').select('avatar_url').eq('user_id', me.id).maybeSingle();
+var myProf = await sb.from('profiles').select('avatar_url, whisper_policy').eq('user_id', me.id).maybeSingle();
 if (!myProf.error && myProf.data && myProf.data.avatar_url) me.avatarUrl = myProf.data.avatar_url;
+whisperPolicy = (!myProf.error && myProf.data && myProf.data.whisper_policy) || 'friends';
+whisperPolicyCache = {}; // a fresh sign-on shouldn't trust last session's lookups
+updateWhisperBtn();
 // Anyone who already had notifications on before push subscriptions existed (this flag predates
 // them) has permission:'granted' and notifEnabled:true but no row in push_subscriptions yet --
 // catch them up here, now that sb/me actually exist, instead of waiting for them to happen to
@@ -4414,6 +4518,10 @@ isAnonAccount = user.is_anonymous !== false && !user.email;
 if ($('saveBtn')) $('saveBtn').classList.toggle('hidden', !isAnonAccount);
 setSignedOnStatus();
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
+/* One-time note about the friends-only whisper rule (friends_only_whispers.sql), since it changes
+   what a name menu's Whisper does for everyone who was here before it. */
+var whisperTipSeen = false; try { whisperTipSeen = localStorage.getItem('gc_whisper_tip') === '1'; } catch (e) {}
+if (!whisperTipSeen) { addSys('New: whispers are friends-only. Anyone can still send you a friend request (with a hello attached), and you can open your whispers to everyone under ⋯ → Whispers.'); try { localStorage.setItem('gc_whisper_tip', '1'); } catch (e) {} }
 if (isAnonAccount) addSys('Heads up: ' + me.name + ' and your friends list are saved in this browser only. Tap the 🔑 below to add an email and keep them on any device.');
 if (threadsPanel) {
 threadsPanel.classList.add('ready');
