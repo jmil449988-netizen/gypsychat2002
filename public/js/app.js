@@ -41,8 +41,13 @@ var NAME_RE = /^[\p{L}\p{N}\p{M}_ .'-]{2,16}$/u;
    deliberately separate from the ?v=NN cache-busting numbers on app.js/style.css in index.html/
    sw.js, which bump on every small deploy and would be a meaningless, constantly-churning number
    to show someone in the room. Bump this by hand only for a release worth calling out. Single
-   source of truth: every spot below reads this rather than having the string baked in repeatedly. */
-var APP_VERSION = 'Beta v0.6.6';
+   source of truth: every spot below reads this rather than having the string baked in repeatedly.
+   Version history (the ones worth calling out):
+     0.6.x -- invite-key beta, threads, whispers-in-windows, friends, push.
+     0.7.0 -- the September overhaul: phones fit the screen, the Messages dock, the Ballot Box
+              (with @tags), the caravan wheel, the mobile scroll. Early access is aimed at
+              October 31st; that's the release that should turn this into a 1.0. */
+var APP_VERSION = 'Beta v0.7.0';
 var WATERMARK_TEXT = 'Yogg Squad © 2027 · ' + APP_VERSION;
 if ($('madeBy')) $('madeBy').textContent = 'created by Yogg Squad © 2027 · ' + APP_VERSION;
 if ($('roomWatermark')) $('roomWatermark').textContent = WATERMARK_TEXT;
@@ -56,7 +61,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 104;
+var BUILD_NUMBER = 105;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
