@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 99;
+var BUILD_NUMBER = 100;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1516,9 +1516,59 @@ applyDmVisibility();
 function toggleDock() { dockOpen = !dockOpen; saveDockOpen(); syncDock(); }
 function showInbox() { activeDm = null; syncDock(); }
 if (dmBar) {
-dmBar.onclick = toggleDock;
+dmBar.onclick = function () { if (pillMoved) { pillMoved = false; return; } toggleDock(); }; // a drag's trailing click doesn't toggle
 dmBar.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDock(); } };
 }
+/* ---------- the collapsed pill is draggable on a phone ----------
+   Below 500px the collapsed dock is a small pill floating over the chat; drag it by its bar to
+   wherever it's least in the way. The spot is kept as two CSS variables on the dock plus a .moved
+   class (style.css: .dm-dock.collapsed.moved uses them for left/top), so the expanded, full-screen
+   layout is untouched -- expand and the pill's position simply stops applying until it collapses
+   again. Remembered per browser (gc_dm_pill). A press that doesn't travel 6px is a tap and toggles
+   the dock as ever; a real drag swallows the click that follows it (pillMoved, above). */
+var pillMoved = false, pillPos = null;
+function pillActive() { return window.innerWidth <= 500; }
+function clampPill(x, y) {
+if (!dmDock) return { x: x, y: y };
+var r = dmDock.getBoundingClientRect(), w = r.width || 120, h = r.height || 36;
+return { x: Math.max(4, Math.min(window.innerWidth - w - 4, x)), y: Math.max(4, Math.min(window.innerHeight - h - 4, y)) };
+}
+function applyPill() {
+if (!dmDock) return;
+if (pillPos && pillActive()) {
+var c = clampPill(pillPos.x, pillPos.y);
+dmDock.style.setProperty('--pill-x', c.x + 'px'); dmDock.style.setProperty('--pill-y', c.y + 'px');
+dmDock.classList.add('moved');
+} else dmDock.classList.remove('moved');
+}
+try { var savedPill = JSON.parse(localStorage.getItem('gc_dm_pill') || 'null'); if (savedPill && typeof savedPill.x === 'number') pillPos = savedPill; } catch (e) {}
+applyPill();
+window.addEventListener('resize', applyPill);
+if (dmBar) (function () {
+var startX = 0, startY = 0, originX = 0, originY = 0, dragging = false, pid = null;
+dmBar.addEventListener('pointerdown', function (e) {
+if (!pillActive() || dockOpen || e.isPrimary === false) return;
+var r = dmDock.getBoundingClientRect();
+startX = e.clientX; startY = e.clientY; originX = r.left; originY = r.top;
+dragging = true; pid = e.pointerId;
+try { dmBar.setPointerCapture(pid); } catch (err) {}
+});
+dmBar.addEventListener('pointermove', function (e) {
+if (!dragging || e.pointerId !== pid) return;
+var dx = e.clientX - startX, dy = e.clientY - startY;
+if (!pillMoved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+pillMoved = true; e.preventDefault();
+pillPos = clampPill(originX + dx, originY + dy); applyPill();
+});
+function end(e) {
+if (!dragging || (e && e.pointerId !== pid)) return;
+dragging = false;
+try { dmBar.releasePointerCapture(pid); } catch (err) {}
+if (pillMoved) { try { localStorage.setItem('gc_dm_pill', JSON.stringify(pillPos)); } catch (err) {} }
+}
+dmBar.addEventListener('pointerup', end);
+dmBar.addEventListener('pointercancel', end);
+})();
 var lastBuzz = {};
 function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
