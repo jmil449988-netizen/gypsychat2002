@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 94;
+var BUILD_NUMBER = 95;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -696,7 +696,12 @@ rememberChatScroll();
 setTimeout(function () { updateUsersStacked(); returnToChat(); }, 300);
 });
 
-var USERS_H_MIN = 84, USERS_H_DEFAULT = 150;
+/* 190 rather than the old 150: the height only ever applies in the stacked (phone) layout, and
+   150px left the Online list showing barely a name and a half once the Friends heading and the
+   hint had taken their share. The panel now starts folded there (see below), so a taller
+   unfolded size no longer costs anyone who never opens it. Anyone who already dragged it to a
+   height they like keeps that (gc_users_h). */
+var USERS_H_MIN = 84, USERS_H_DEFAULT = 190;
 var usersH = USERS_H_DEFAULT, usersFolded = false;
 function usersHMax() { return Math.max(USERS_H_MIN + 40, Math.round(window.innerHeight * 0.6)); }
 function applyUsersHeight() {
@@ -715,17 +720,34 @@ b.setAttribute('aria-label', b.title);
 try {
 var savedH = parseInt(localStorage.getItem('gc_users_h'), 10);
 if (savedH >= USERS_H_MIN) usersH = savedH;
-usersFolded = localStorage.getItem('gc_users_folded') === '1';
+/* First visit on a phone-width screen: start with the panel folded to its one-line "Online"
+   bar (which carries the head count, see renderPeople), so the conversation gets the room
+   and the list is one tap away. Once someone has pressed the fold button their choice is
+   what's remembered, on any screen size -- this default only fills in until then. On a wide
+   screen the panel is a side column and folding never applies, so `false` there is moot. */
+var savedFold = localStorage.getItem('gc_users_folded');
+usersFolded = savedFold === null ? window.innerWidth <= 500 : savedFold === '1';
 } catch (e) {}
 applyUsersHeight(); applyUsersFold();
 
 (function () {
 var btn = $('usersMin');
-if (btn) btn.onclick = function () {
+function toggleFold() {
 usersFolded = !usersFolded;
 try { localStorage.setItem('gc_users_folded', usersFolded ? '1' : '0'); } catch (e) {}
 applyUsersFold();
-};
+}
+if (btn) btn.onclick = toggleFold;
+/* On a phone the whole "Online" bar is the natural thing to tap, not just the small arrow at
+   its end -- so the bar toggles too, but only in the stacked layout where folding exists (on a
+   wide screen the bar is a plain column heading and a tap there should do nothing). Taps on the
+   arrow itself already toggled above; skip those so one tap doesn't fold and unfold. */
+var hd = btn ? btn.parentNode : null;
+if (hd) hd.addEventListener('click', function (e) {
+if (e.target === btn || btn.contains(e.target)) return;
+if (!gcRoot || !gcRoot.classList.contains('users-stacked')) return;
+toggleFold();
+});
 var grip = $('usersResizeV');
 if (!grip) return;
 var startY = 0, startH = 0, dragging = false;
@@ -1398,6 +1420,10 @@ return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1
    roulette have their own separate watermark footers (threadsWatermark/rouletteWatermark) that
    intentionally don't get an online count, since that count is specific to who's in the room. */
 if ($('roomWatermark')) $('roomWatermark').textContent = ids.length + ' online · ' + WATERMARK_TEXT;
+/* Same count again in the panel's own "Online" bar -- shown only when the panel is stacked
+   under the log on a phone (.ucount is display:none otherwise, see style.css), where that bar
+   is usually all of the panel that's visible, folded as it starts out there. */
+if ($('ucount')) $('ucount').textContent = '· ' + ids.length;
 /* "here" for whisper-delivery purposes uses the same recently-seen pool as @mention push (see
    recentPeopleEntries above): a phone that dropped its realtime connection a moment ago is still
    reachable, not gone, right up until the same 30-minute window the server itself uses to kick a
