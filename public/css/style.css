@@ -12,7 +12,11 @@
 @font-face{font-family:'Cinzel';src:local('Georgia');unicode-range:U+0030-0039;font-weight:400}
 @font-face{font-family:'Cinzel';src:local('Georgia Bold'),local('Georgia');unicode-range:U+0030-0039;font-weight:700}
 @font-face{font-family:'IM Fell English';src:local('Georgia');unicode-range:U+0030-0039;font-weight:400}
-html,body{margin:0;min-height:100%;background:#0b0a09}
+/* text-size-adjust: iOS Safari otherwise "helpfully" inflates text it decides is too small once a
+   page is wider than the screen or rotates to landscape, and it does so per element -- so the room
+   could end up with mismatched, oversized runs of text that no rule in this file asked for. 100%
+   pins every size to exactly what the stylesheet says. No effect on desktop browsers. */
+html,body{margin:0;min-height:100%;background:#0b0a09;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 
 :root{
@@ -66,7 +70,10 @@ filter:drop-shadow(0 0 12px rgba(163,42,255,.8)) drop-shadow(0 0 4px rgba(214,80
 .body{display:grid;grid-template-columns:1fr var(--users-w,160px);gap:10px;padding:12px}
 @media (max-width:500px){
   .body{grid-template-columns:1fr}
-  .users{display:none}
+  /* (An old `.users{display:none}` used to sit here. It never actually applied -- the plain
+     `.users{display:flex}` rule further down has the same specificity and comes later in the
+     file, so it always won -- and the panel is meant to be visible on a phone anyway, as the
+     foldable block between the log and the composer; see "Online/Friends panel on a phone" below.) */
   .gc-root{padding:4px 0}
   .win{max-width:100%;min-height:calc(100vh - 8px);display:flex;flex-direction:column}
   /* iOS Safari's address bar shrinks/grows the visual viewport without firing a resize the way
@@ -1004,3 +1011,83 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
   .thread-toggle-fab{position:fixed !important;top:8px !important;bottom:auto !important;
   right:max(62px,calc(50% - 380px + 62px)) !important;left:auto !important;transform:none !important}
 }
+
+/* ==================== phone overhaul (v65) ====================
+   Everything in this section is scoped to a touch device and/or a phone-width screen, and comes
+   last in the file on purpose so it wins over the earlier per-feature rules it adjusts. Nothing
+   here changes how a desktop browser with a mouse renders the room.
+
+   1. The "I have to zoom out every time I open it" complaint from iPhone testers. iOS Safari
+      zooms the whole page IN the moment an input, textarea or select with a computed font-size
+      under 16px gets focus (it's a legibility heuristic, not something the page asked for). The
+      room's base size is 14px and every field uses font:inherit, so tapping the invite-key field
+      -- the first thing anyone does on the sign-on screen -- zoomed the page, and it stayed
+      zoomed until they pinched it back. 16px on every field, on touch devices only, is the fix.
+      !important because a few fields set their size via the `font:` shorthand at higher
+      specificity (.prompt-modal input, .save-modal input, .report-row .rr-select). */
+@media (hover:none) and (pointer:coarse){
+  input:not([type=file]),textarea,select{font-size:16px !important}
+  /* 2. Touch targets. Several small controls were sized for a mouse pointer (16-24px); a finger
+        needs closer to 40. Widen the hit area without redrawing the control. */
+  .status button.cell{min-height:32px;min-width:40px}
+  .im-tab{padding-right:34px}
+  .im-tab .tab-close{width:26px;height:26px;line-height:24px;top:50%;transform:translateY(-50%);opacity:.7}
+  .users .umin{width:44px;height:28px;line-height:26px;font-size:12px}
+  .lightbox-close{width:44px;height:40px;line-height:36px}
+  .tp-back{width:38px;height:30px;line-height:26px}
+  .frq-actions button{padding:7px 10px}
+  .rp-back,.modal .btn{min-height:36px}
+}
+
+@media (max-width:500px){
+  /* 3. Belt and braces against the other cause of a shrunk-to-fit page: any element that ever
+        ends up a few pixels wider than the screen would make Safari lay the page out wider than
+        the viewport. Clip that instead of letting it change the zoom. Set on html so it applies
+        to the viewport itself; body keeps its own overflow untouched. */
+  html{overflow-x:hidden}
+  /* 4. Give the room back some of its own width and height: a tighter gutter inside the frame,
+        and a composer that isn't a 60px-tall block on a screen this short. The GIF/Send buttons
+        stretch to the textarea's height, so shrinking it shrinks them too -- 48px is still a
+        comfortable finger-sized button. */
+  .win > .body{padding:6px;gap:6px}
+  .compose textarea{height:48px}
+  /* 5. The friend-request bell sits fixed at the bottom-left corner on a phone (see the
+        .friendreq-btn rules above), which put it squarely on top of the "Change name" control in
+        the status bar. Once signed on -- the only time the bell exists -- indent the bar past it. */
+  .gc-root.signed-on .status{padding-left:50px}
+  /* the buttons grew to finger height (rule 2), so centre the text beside them instead of letting it sit at the top of the row */
+  .status{align-items:center}
+  /* 6. Inside the "..." popover, "Save with email" and "Notifications" were the only two buttons
+        never given the room's dark button styling, so they rendered as the browser's stock light
+        grey buttons -- two white boxes in an otherwise dark menu. (On a wide screen the same two
+        buttons sit inline in the status bar and are left exactly as they were.) Every row also
+        gets a finger-height minimum. */
+  #statusPopover .savebtn,#statusPopover .notifbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px}
+  #statusPopover .savebtn:hover,#statusPopover .notifbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+  #statusPopover .cell{min-height:36px}
+  /* 7. Online/Friends panel, stacked under the log on a phone (see "Online/Friends panel on a
+        phone" above). It now starts FOLDED on a phone the first time (app.js), so all it costs
+        until you want it is its one-line "Online" bar -- which therefore carries the head count,
+        so the folded bar still tells you something. Unfolded, the Online list gets the lion's
+        share of the height rather than splitting it 50/50 with a usually-shorter Friends list. */
+  .gc-root.users-stacked .users .hd .ucount{display:inline;margin-left:5px;color:var(--ash);letter-spacing:0;font-weight:400}
+  /* Unfolded, the two lists sit SIDE BY SIDE rather than one above the other: a phone is short
+     on height but has plenty of width for two columns of names, and stacking them vertically
+     gave the Online list two rows before the Friends heading cut in. The grips (.uz/.uzv) are
+     absolutely positioned so they never occupy a cell. Folded, the panel goes back to the plain
+     column so the lone "Online" bar spans the full width. */
+  .gc-root.users-stacked:not(.users-folded) .users{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto minmax(0,1fr) auto}
+  .gc-root.users-stacked:not(.users-folded) .users .hd:first-of-type{grid-area:1/1/2/2}
+  .gc-root.users-stacked:not(.users-folded) .users #ulist{grid-area:2/1/3/2}
+  .gc-root.users-stacked:not(.users-folded) .users .frhd{grid-area:1/2/2/3;border-left:1px solid var(--gold-lo);border-top:none}
+  .gc-root.users-stacked:not(.users-folded) .users #flist{grid-area:2/2/3/3;border-left:1px solid var(--gold-lo)}
+  .gc-root.users-stacked:not(.users-folded) .users .hint{grid-area:3/1/4/3}
+  .gc-root.users-stacked:not(.users-folded) .users .list{min-height:0}
+  /* the whole bar toggles the fold on a phone (app.js), so it should look tappable */
+  .gc-root.users-stacked .users .hd:first-of-type{cursor:pointer;user-select:none;-webkit-user-select:none}
+}
+/* The head count in the Online bar is a phone-only affordance (rule 7 just above): on a wide
+   screen the bar heads a full column where the names speak for themselves, and the room footer
+   already shows "N online" there, so the span stays hidden everywhere the panel isn't stacked. */
+.users .hd .ucount{display:none}
+.gc-root.users-stacked .users .hd .ucount{display:inline}
