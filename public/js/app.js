@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 103;
+var BUILD_NUMBER = 104;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1520,11 +1520,16 @@ if (dmBarBadge) { dmBarBadge.textContent = total > 9 ? '9+' : String(total); dmB
 if (dmBar) dmBar.setAttribute('aria-expanded', dockOpen ? 'true' : 'false');
 if (dmEmpty) dmEmpty.classList.toggle('hidden', ids.length > 0);
 applyDmVisibility();
+if (typeof applyPill === 'function') applyPill();
 }
 function toggleDock() { dockOpen = !dockOpen; saveDockOpen(); syncDock(); }
 function showInbox() { activeDm = null; syncDock(); }
 if (dmBar) {
-dmBar.onclick = function () { if (pillMoved) { pillMoved = false; return; } toggleDock(); }; // a drag's trailing click doesn't toggle
+dmBar.onclick = function () {
+if (pillMoved) { pillMoved = false; return; } // a drag's trailing click doesn't toggle
+if (pillPos && pillPos.docked && pillActive()) { pillPos = clampPill(pillPos.x, pillPos.y); applyPill(); savePill(); return; } // swept aside: a tap brings it back, nothing more
+toggleDock();
+};
 dmBar.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDock(); } };
 }
 /* ---------- the collapsed pill is draggable on a phone ----------
@@ -1535,20 +1540,28 @@ dmBar.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.pre
    again. Remembered per browser (gc_dm_pill). A press that doesn't travel 6px is a tap and toggles
    the dock as ever; a real drag swallows the click that follows it (pillMoved, above). */
 var pillMoved = false, pillPos = null;
+var PILL_TAB = 16, PILL_DOCK_FRACTION = 0.55;
 function pillActive() { return window.innerWidth <= 500; }
+function pillSize() { var r = dmDock ? dmDock.getBoundingClientRect() : null; return { w: (r && r.width) || 120, h: (r && r.height) || 36 }; }
 function clampPill(x, y) {
-if (!dmDock) return { x: x, y: y };
-var r = dmDock.getBoundingClientRect(), w = r.width || 120, h = r.height || 36;
-return { x: Math.max(4, Math.min(window.innerWidth - w - 4, x)), y: Math.max(4, Math.min(window.innerHeight - h - 4, y)) };
+var sz = pillSize();
+return { x: Math.max(4, Math.min(window.innerWidth - sz.w - 4, x)), y: Math.max(4, Math.min(window.innerHeight - sz.h - 4, y)) };
 }
+/* pillPos: { x, y } for a free-floating pill, plus docked:'left'|'right' when it's been swept
+   to an edge -- then only PILL_TAB px of it peek in (like the threads/roulette bubbles) and x/y
+   remember where it floated before, for when it's tapped back out. */
 function applyPill() {
 if (!dmDock) return;
-if (pillPos && pillActive()) {
-var c = clampPill(pillPos.x, pillPos.y);
-dmDock.style.setProperty('--pill-x', c.x + 'px'); dmDock.style.setProperty('--pill-y', c.y + 'px');
+if (!pillPos || !pillActive()) { dmDock.classList.remove('moved', 'pill-docked'); return; }
+var sz = pillSize(), c = clampPill(pillPos.x, pillPos.y), x = c.x;
+if (pillPos.docked === 'left') x = -(sz.w - PILL_TAB);
+else if (pillPos.docked === 'right') x = window.innerWidth - PILL_TAB;
+dmDock.style.setProperty('--pill-x', x + 'px'); dmDock.style.setProperty('--pill-y', c.y + 'px');
 dmDock.classList.add('moved');
-} else dmDock.classList.remove('moved');
+dmDock.classList.toggle('pill-docked', !!pillPos.docked);
+if (dmBar) dmBar.setAttribute('aria-label', pillPos.docked ? 'Bring back Messages' : 'Messages');
 }
+function savePill() { try { localStorage.setItem('gc_dm_pill', JSON.stringify(pillPos)); } catch (e) {} }
 try { var savedPill = JSON.parse(localStorage.getItem('gc_dm_pill') || 'null'); if (savedPill && typeof savedPill.x === 'number') pillPos = savedPill; } catch (e) {}
 applyPill();
 window.addEventListener('resize', applyPill);
@@ -1566,13 +1579,24 @@ if (!dragging || e.pointerId !== pid) return;
 var dx = e.clientX - startX, dy = e.clientY - startY;
 if (!pillMoved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
 pillMoved = true; e.preventDefault();
-pillPos = clampPill(originX + dx, originY + dy); applyPill();
+/* while the finger's down the pill may run past either edge (that's the sweep); it settles on release */
+var sz = pillSize();
+var x = Math.max(-sz.w, Math.min(window.innerWidth, originX + dx)), y = Math.max(4, Math.min(window.innerHeight - sz.h - 4, originY + dy));
+dmDock.style.setProperty('--pill-x', x + 'px'); dmDock.style.setProperty('--pill-y', y + 'px');
+dmDock.classList.add('moved', 'pill-dragging'); dmDock.classList.remove('pill-docked');
 });
 function end(e) {
 if (!dragging || (e && e.pointerId !== pid)) return;
 dragging = false;
 try { dmBar.releasePointerCapture(pid); } catch (err) {}
-if (pillMoved) { try { localStorage.setItem('gc_dm_pill', JSON.stringify(pillPos)); } catch (err) {} }
+dmDock.classList.remove('pill-dragging');
+if (!pillMoved) return;
+var r = dmDock.getBoundingClientRect(), sz = pillSize();
+var prevFree = pillPos && !pillPos.docked ? pillPos : null;
+if (r.left <= -(sz.w * PILL_DOCK_FRACTION)) pillPos = { x: prevFree ? prevFree.x : 4, y: r.top, docked: 'left' };
+else if (r.right >= window.innerWidth + sz.w * PILL_DOCK_FRACTION) pillPos = { x: prevFree ? prevFree.x : window.innerWidth - sz.w - 4, y: r.top, docked: 'right' };
+else pillPos = clampPill(r.left, r.top);
+applyPill(); savePill();
 }
 dmBar.addEventListener('pointerup', end);
 dmBar.addEventListener('pointercancel', end);
@@ -3737,7 +3761,7 @@ if (ballotRemove) ballotRemove.onclick = async function () { if (await removeBal
 
 /* ---------- the Ballot Box on a phone (and any screen without the gutter panel) ----------
    No gutter to keep a panel in, so the box becomes a scroll: a rolled-up parchment tucked into the
-   top-right corner of the chat log (#ballotMobile, .bp-mscroll in style.css). Once a minute it
+   top-right corner of the chat log (#ballotMobile, .bp-mscroll in style.css). Every 15 seconds it
    unrolls across the top of the log, one note glides over it (or just sits there if it's short
    enough to fit), and it rolls itself back up out of the way -- on screen for roughly ten seconds
    in sixty. The first note comes a few seconds after signing on rather than a full minute later.
@@ -3747,7 +3771,7 @@ if (ballotRemove) ballotRemove.onclick = async function () { if (await removeBal
 var ballotMobile = $('ballotMobile'), ballotMobileText = $('ballotMobileText'), ballotMobileParch = $('ballotMobileParch');
 var ballotMobileRoller = $('ballotMobileRoller'), ballotMobileRemove = $('ballotMobileRemove'), ballotBtn = $('ballotBtn');
 var mobileBallotTimer = null, mobileBallotHide = null, mobileBallotHeld = false, mobileBallotShowing = null;
-var MOBILE_BALLOT_EVERY = 60000, MOBILE_BALLOT_FIRST = 5000, MOBILE_BALLOT_HOLD = 6000, MOBILE_BALLOT_GLIDE_PX_PER_S = 45;
+var MOBILE_BALLOT_EVERY = 15000, MOBILE_BALLOT_FIRST = 5000, MOBILE_BALLOT_HOLD = 6000, MOBILE_BALLOT_GLIDE_PX_PER_S = 45;
 function mobileBallotActive() { return !!ballotMobile && window.matchMedia('(max-width:1339px)').matches; }
 function rollUpMobileBallot() {
 clearTimeout(mobileBallotHide); mobileBallotHide = null;
@@ -3781,6 +3805,7 @@ mobileBallotHide = setTimeout(function () { if (!mobileBallotHeld) rollUpMobileB
 }
 function tickMobileBallot() {
 if (!mobileBallotActive() || mobileBallotHeld) return;
+if (ballotMobile && ballotMobile.classList.contains('open')) return; // a long note still crossing keeps its turn; next tick
 showMobileNote(nextBallotNote());
 }
 function startMobileBallot() {
