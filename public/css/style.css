@@ -561,6 +561,20 @@ width:100%;max-width:900px;margin:0 auto;box-sizing:border-box}
    when a post is both. Pinning to the top of the list is handled in appendThreadPost() (app.js). */
 .tp-posts .tp-post.admin b{color:var(--admin);text-shadow:0 0 8px rgba(209,59,47,.45)}
 .tp-posts .tp-post .t{color:#5f5648;font-size:11px;margin-right:6px}
+/* Names in the threads board open the same Get Info/Whisper/Tag in Chat/Block menu a name click
+   opens everywhere else (see tpPosts.onclick in app.js) -- same hover treatment as .log b.who. */
+.tp-posts .tp-post b.who{cursor:pointer}
+.tp-posts .tp-post b.who:hover,.tp-posts .tp-post b.who:focus-visible{text-decoration:underline;outline:none}
+/* Status dot before a name in the threads board -- colors match the Online list exactly
+   (st-away/st-busy/st-idle in the .users rules above), plus a plain grey "recently online" dot
+   (tp-dot-recent) for someone within the 30-minute reachable window but not live in the room right
+   now. See threadStatusDotClass/threadStatusDotHtml in app.js. */
+.tp-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin:0 5px 1px 0;vertical-align:middle;flex:none}
+.tp-dot-online{background:var(--leaf);box-shadow:0 0 5px rgba(90,161,90,.9)}
+.tp-dot-away{background:var(--gold);box-shadow:0 0 5px rgba(201,162,74,.7)}
+.tp-dot-busy{background:var(--blood);box-shadow:0 0 5px rgba(179,38,30,.7)}
+.tp-dot-idle{background:#5f6b7a;box-shadow:0 0 5px rgba(95,107,122,.6)}
+.tp-dot-recent{background:#6b7280;box-shadow:none}
 .tp-posts .tp-loading{color:#5f5648;font-style:italic;font-size:12px;padding:8px}
 /* Reply/OP pictures are thumbnails too -- click to open the lightbox (openLightbox in app.js) --
    sized to match the room/whisper thumbnails (.log img.gif) rather than their old, larger 200px cap. */
