@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 101;
+var BUILD_NUMBER = 102;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1585,6 +1585,7 @@ el.innerHTML = '<div class="bar"><button class="back" type="button" title="Back 
 '<div class="ilog" aria-live="polite"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
+'<button class="btn gif" type="button" title="Search GIFs" aria-label="Search GIFs">GIF</button>' +
 '<input type="file" class="im-img-file hidden" accept="image/*,.heic,.heif">' +
 '<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
 el.querySelector('.nm').textContent = name;
@@ -1602,6 +1603,12 @@ var emoBtnWin = el.querySelector('.icomp .emo');
 emoBtnWin.onclick = function () { openEmojiPicker(win.ta, emoBtnWin); };
 var imgBtn = el.querySelector('.icomp .img'), imgFile = el.querySelector('.im-img-file');
 imgBtn.onclick = function () { imgFile.click(); };
+/* GIF search in a whisper: the one shared picker, told to deliver into this conversation */
+var gifBtnWin = el.querySelector('.icomp .gif');
+gifBtnWin.onclick = function () {
+if (gifPicker.classList.contains('open') && gifTarget === 'dm:' + id) { closeGif(); return; }
+openGifPicker('', 'dm:' + id, gifBtnWin);
+};
 imgFile.onchange = function () {
 var f = imgFile.files && imgFile.files[0]; imgFile.value = '';
 if (f) sendIMImage(id, f);
@@ -2930,6 +2937,12 @@ b.onclick = function () {
 closeGif(); gifQ.value = '';
 if (gifTarget === 'thread-new') setPendingImage('new', full);
 else if (gifTarget === 'thread-reply') setPendingImage('reply', full);
+else if (gifTarget.indexOf('dm:') === 0) {
+/* into a whisper: same delivery as a typed line or a sent photo -- an ordinary whisper message
+   whose body is the GIF's URL, which bodyHtml renders as the picture (GIF_RE) */
+var did = gifTarget.slice(3), dw = wins[did];
+if (dw) { if (dw.gone) imSys(did, dw.name + ' is not here to hear you.'); else { post(full, did, dw.name); autoFocus(dw.ta); } }
+}
 else { post(full); autoFocus(msg); }
 };
 gifResults.appendChild(b);
