@@ -741,6 +741,9 @@ box-shadow:0 0 0 1px #000}
 .leaderboard-panel{display:none;flex-direction:column;
 background:linear-gradient(180deg,var(--stone-2),var(--stone));overflow:hidden;z-index:8}
 .gc-root.leaderboard-open .win{display:none}
+/* The floating bubbles and the 🤝 bell sit above the panel (z 55 vs 40) and, on desktop, land
+   right on the #1 row's reaction count; they belong to the room, so they step out with .win. */
+.gc-root.leaderboard-open .thread-toggle-fab,.gc-root.leaderboard-open .roulette-toggle-fab,.gc-root.leaderboard-open .friendreq-btn{display:none !important}
 .gc-root.leaderboard-open .leaderboard-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
 height:100%;border-width:0;border-radius:0;z-index:40}
 .lb-list{flex:1;overflow-y:auto;padding:10px 14px;scrollbar-color:var(--gold-lo) #0f0d0b;
