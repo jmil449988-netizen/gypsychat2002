@@ -56,7 +56,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 91;
+var BUILD_NUMBER = 92;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -3469,7 +3469,11 @@ if (leaderboardBack) leaderboardBack.onclick = closeLeaderboard;
    inline left/top, with right/bottom/transform cleared so nothing in the stylesheet can fight
    the JS-driven position (an explicit inline style always wins over a stylesheet rule, media
    queries included). From that point on this bubble is on its own. */
-function makeFabDraggable(btn, storageKey) {
+/* desktopFixed: opt-in for a bubble that should behave like a normal, click-only, CSS-positioned
+   button above the mobile breakpoint (500px) -- used by the Threads toggle now that it lives in a
+   fixed spot near the friend-request bell on desktop instead of floating. Below 500px it's exactly
+   the same draggable bubble as ever, unaffected. */
+function makeFabDraggable(btn, storageKey, desktopFixed) {
 if (!btn) return;
 var SIZE = 46, TAB = 14, MARGIN = 6, DOCK_FRACTION = 0.55;
 var dragging = false, moved = false, docked = false, edge = null;
@@ -3508,6 +3512,7 @@ if (!skipSave) save();
 
 btn.addEventListener('pointerdown', function (e) {
 if (e.isPrimary === false) return;
+if (desktopFixed && window.innerWidth > 500) return; // desktop: fixed button, no drag-to-move
 var r = btn.getBoundingClientRect();
 startX = e.clientX; startY = e.clientY; startLeft = r.left; startTop = r.top;
 moved = false; dragging = true;
@@ -3552,21 +3557,24 @@ if (originalClick) originalClick.call(btn, e);
 };
 
 function reflow() {
+if (desktopFixed && window.innerWidth > 500) return; // desktop: leave the CSS-fixed position alone
 if (docked) setDocked(edge, btn.getBoundingClientRect().top, true);
 else if (freeX != null) setFree(freeX, freeY, true);
 }
 window.addEventListener('resize', reflow);
 
 try {
+if (!desktopFixed || window.innerWidth <= 500) { // desktop: never restore an old dragged-on-mobile spot
 var saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
 if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
 freeX = saved.x; freeY = saved.y;
 if (saved.docked) setDocked(saved.edge === 'right' ? 'right' : 'left', saved.y, true);
 else setFree(saved.x, saved.y, true);
 }
+}
 } catch (e) {}
 }
-makeFabDraggable(threadToggleBtn, 'gc_fab_thread');
+makeFabDraggable(threadToggleBtn, 'gc_fab_thread', true);
 makeFabDraggable(rouletteToggleBtn, 'gc_fab_roulette');
 
 /* ---------- saving an anonymous character with an email ----------
