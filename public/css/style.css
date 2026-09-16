@@ -1144,7 +1144,10 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
 @media (max-width:500px){
   .dm-dock.collapsed{width:auto;max-width:200px;right:6px;bottom:142px;border-width:2px}
   /* dragged somewhere (app.js applyPill): the pill sits where it was put, until it expands */
-  .dm-dock.collapsed.moved{left:var(--pill-x);top:var(--pill-y);right:auto;bottom:auto}
+  .dm-dock.collapsed.moved{left:var(--pill-x);top:var(--pill-y);right:auto;bottom:auto;transition:left .22s ease,top .22s ease}
+  /* swept to an edge: just a tab of it showing, dimmed, until tapped back out */
+  .dm-dock.collapsed.pill-docked{opacity:.55}
+  .dm-dock.collapsed.pill-dragging{transition:none}
   .dm-dock.collapsed .dm-bar{touch-action:none}
   .dm-dock.collapsed .dm-bar{padding:7px 10px;font-size:12px}
   .dm-dock:not(.collapsed){left:6px;right:6px;top:50px;bottom:6px;width:auto;height:auto}
