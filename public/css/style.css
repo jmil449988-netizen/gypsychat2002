@@ -210,31 +210,12 @@ padding:8px;border-radius:4px;z-index:40;box-shadow:0 0 0 1px #000,0 6px 18px #0
 #statusPopover .popover-version{display:block;font-size:9px;color:var(--ash);opacity:.5;text-align:center;
 padding-top:5px;margin-top:2px;border-top:1px solid var(--gold-lo)}
 }
-/* whisper windows */
-/* z-index 41+ (not the old 20/24/30) so whisper windows and the tray stay ABOVE the full-screen
-   mobile takeover panels -- threads/leaderboard/roulette all force themselves to z-index:40 when
-   open (see .gc-root.mobile-threads-open .threads-panel etc.), which used to bury whispers behind
-   them entirely: a whisper arriving while you were in Threads never showed, not even as a tray
-   flash, and stayed invisible until you backed out to chat and happened to notice the badge.
-   Still safely under the emoji/reaction pickers (56/57), .nmenu (60), modals (70) and the lightbox
-   (90), all of which can open from inside a whisper window and need to render on top of it. See
-   Z_WIN_MIN/Z_WIN_MAX/zTop in app.js, which this range has to stay in sync with. */
-.im{position:fixed;width:340px;height:280px;min-width:260px;min-height:200px;max-width:calc(100vw - 12px);max-height:calc(100vh - 12px);
-z-index:41;display:flex;flex-direction:column;
-background:linear-gradient(180deg,#221a26,#120e14);border:3px double #7a4bb0;outline:1px solid #000;
-box-shadow:0 0 0 2px #a67ad1,0 0 0 3px #000,0 10px 30px #000,inset 0 0 30px #000;color:var(--bone)}
-.im.front{z-index:51}
-.im .rz{position:absolute;width:16px;height:16px;z-index:3;background:transparent}
-.im .rz::after{content:"";position:absolute;inset:4px;border:1px solid var(--gold-lo);opacity:0;transition:opacity .15s}
-.im .rz:hover::after{opacity:.9}
-.im .rz-nw{top:-4px;left:-4px;cursor:nwse-resize}
-.im .rz-ne{top:-4px;right:-4px;cursor:nesw-resize}
-.im .rz-sw{bottom:-4px;left:-4px;cursor:nesw-resize}
-.im .rz-se{bottom:-4px;right:-4px;cursor:nwse-resize}
-@media (max-width:500px){.im .rz{display:none}}
-.im .bar{display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:move;user-select:none;touch-action:none;
+/* whisper conversations -- each one is a .im view inside the Messages dock (see .dm-dock at the
+   end of this file). They used to be free-floating fixed windows with their own z-index band,
+   drag bar and resize corners; now they fill the dock's body and only the active one is shown. */
+.im{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;color:var(--bone)}
+.im .bar{display:flex;align-items:center;gap:8px;padding:5px 8px;user-select:none;flex:none;
 background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4bb0;box-shadow:0 2px 0 #000}
-.im .bar .gem{width:9px;height:9px;transform:rotate(45deg);background:radial-gradient(circle at 35% 35%,#e0b3ff,#7a4bb0 60%,#2a1638);border:1px solid #4d2f6b;flex:none}
 /* Header status dot for who this window is with -- same presence-dot classes/colors the threads
    board uses (see presence-dot rules above), just placed here instead of per-message since a
    whisper only ever has one other person. margin:0 since .bar's own flex `gap` already spaces it
@@ -242,10 +223,12 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
 .im .bar .nm-dot{margin:0}
 .im .bar .nm{flex:1;font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:#e2c4ff;text-shadow:0 0 8px rgba(200,150,255,.5),0 1px 0 #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .im .bar .nm:hover,.im .bar .nm:focus-visible{text-decoration:underline;outline:none}
-.im .bar .x,.im .bar .buzz{font:700 13px Cinzel,Georgia,serif;color:#c9a3e6;background:none;border:1px solid #7a4bb0;width:22px;height:20px;line-height:16px;cursor:pointer;padding:0}
-.im .bar .x:hover,.im .bar .buzz:hover{color:#fff;border-color:#e2c4ff;box-shadow:0 0 8px rgba(200,150,255,.6)}
+.im .bar .x,.im .bar .buzz,.im .bar .back{font:700 13px Cinzel,Georgia,serif;color:#c9a3e6;background:none;border:1px solid #7a4bb0;width:22px;height:20px;line-height:16px;cursor:pointer;padding:0;flex:none}
+.im .bar .x:hover,.im .bar .buzz:hover,.im .bar .back:hover{color:#fff;border-color:#e2c4ff;box-shadow:0 0 8px rgba(200,150,255,.6)}
+/* back arrow to the inbox: a shade bigger than the other bar buttons, it is the main way out */
+.im .bar .back{width:26px;font-size:18px;line-height:14px}
 .im .bar .buzz{font-size:13px}
-.im.shake{animation:gcshake .4s}
+.im.shake,.dm-dock.shake{animation:gcshake .4s}
 @keyframes gcshake{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(2px)}30%,50%,70%{transform:translateX(-4px)}40%,60%{transform:translateX(4px)}}
 .im .ilog{flex:1 1 auto;min-height:60px;overflow-y:auto;padding:6px 8px;margin:6px 6px 0;line-height:1.45;word-wrap:break-word;scrollbar-color:#7a4bb0 #0f0d0b;
 background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-shadow:inset 0 0 16px #000}
@@ -262,37 +245,41 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
    updateSeenMark in app.js). Right-aligned and quiet, same idea as the timestamp but not meant to
    compete with the message text above it. */
 .im .ilog .dm-seen{text-align:right;font:italic 10px "IM Fell English",Georgia,serif;color:#8a7a9c;margin:1px 2px 5px}
-.im .icomp{display:grid;grid-template-columns:auto auto 1fr auto;gap:6px;padding:6px}
+.im .icomp{display:grid;grid-template-columns:auto auto 1fr auto;gap:6px;padding:6px;flex:none}
 .im .icomp textarea{font:inherit;color:var(--bone);resize:none;height:44px;padding:5px 8px;outline:none;caret-color:#e2c4ff;
 background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-shadow:inset 0 0 16px #000}
 .im .icomp textarea:focus{box-shadow:inset 0 0 16px #000,0 0 0 1px #a67ad1}
 .im .icomp .btn{color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
 .im .icomp .btn:hover{box-shadow:inset 0 1px 0 rgba(241,217,138,.15),inset 0 -2px 4px #000,0 0 0 1px #000,0 0 10px rgba(166,122,209,.6)}
 .im .icomp .btn.img,.im .icomp .btn.emo{font-size:15px;min-width:38px;padding:0 6px}
-@media (max-width:500px){.im{left:6px !important;right:6px;width:auto !important;height:60vh !important;bottom:6px;top:auto !important}.im .bar{cursor:default}}
-/* whisper tray — closed/minimized PMs sit here as small tabs instead of popping open */
-.im-tray{position:fixed;right:8px;bottom:8px;z-index:45;display:flex;flex-direction:column-reverse;gap:6px;max-height:70vh;overflow-y:auto;overflow-x:hidden}
-.im-tab{position:relative;display:flex;align-items:center;gap:6px;padding:6px 26px 6px 10px;cursor:pointer;user-select:none;font:700 12px Cinzel,Georgia,serif;letter-spacing:.5px;
-color:#e2c4ff;white-space:nowrap;max-width:160px;background:linear-gradient(180deg,#31253a,#1a1320);border:2px double #7a4bb0;outline:1px solid #000;
-box-shadow:0 0 0 1px #000,0 4px 14px #000;touch-action:pan-y;transition:transform .18s ease,opacity .18s ease}
-.im-tab:hover,.im-tab:focus-visible{border-color:#a67ad1;box-shadow:0 0 0 1px #000,0 4px 14px #000,0 0 10px rgba(166,122,209,.6);outline:none}
+/* the dock's inbox: one .im-tab row per conversation (newest activity first -- app.js moves a row
+   to the top when a message lands in it) */
+.im-tray{display:flex;flex-direction:column}
+.im-tab{position:relative;display:flex;align-items:center;gap:10px;padding:8px 30px 8px 10px;cursor:pointer;user-select:none;
+color:#e2c4ff;border-bottom:1px solid #2a1f33;background:linear-gradient(180deg,rgba(49,37,58,.35),rgba(26,19,32,.35));
+touch-action:pan-y;transition:transform .18s ease,opacity .18s ease,background .15s ease}
+.im-tab:hover,.im-tab:focus-visible{background:linear-gradient(180deg,#31253a,#1f1626);outline:none}
 .im-tab.dragging{transition:none}
-.im-tab .env{font-size:14px;flex:none}
-.im-tab .nm{overflow:hidden;text-overflow:ellipsis}
+.im-tab .tava{flex:none;display:inline-flex}
+.im-tab .tava .ava,.im-tab .tava .ava-fallback{width:34px;height:34px;font-size:14px;margin:0;vertical-align:0;border-color:#7a4bb0}
+.im-tab .tmeta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.im-tab .nm{font:700 12px Cinzel,Georgia,serif;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.im-tab .snippet{font-size:12px;color:var(--ash);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:1em}
+.im-tab.unread .nm{color:#fff;text-shadow:0 0 8px rgba(200,150,255,.6)}
+.im-tab.unread .snippet{color:var(--bone)}
 .im-tab .badge{flex:none;background:var(--blood);color:#fff;font:700 10px Georgia,serif;min-width:16px;height:16px;line-height:16px;text-align:center;border-radius:8px;padding:0 4px;box-shadow:0 0 0 1px #000}
 .im-tab.flash{animation:tabflash 1s ease-in-out 2}
-@keyframes tabflash{50%{box-shadow:0 0 0 1px #000,0 4px 14px #000,0 0 18px rgba(200,150,255,1)}}
-/* Small always-present close control, for anyone who can't (or doesn't know to) swipe a tab away --
+@keyframes tabflash{50%{background:linear-gradient(180deg,#4a3560,#2a1d38);box-shadow:inset 0 0 18px rgba(200,150,255,.6)}}
+/* Small always-present remove control, for anyone who can't (or doesn't know to) swipe a row away --
    keyboard and screen-reader users in particular. Dim by default so it doesn't visually compete with
    the swipe gesture; a hover/focus reveal on pointer devices, always reachable by Tab either way. */
-.im-tab .tab-close{position:absolute;top:3px;right:3px;width:16px;height:16px;line-height:14px;text-align:center;
+.im-tab .tab-close{position:absolute;top:50%;right:6px;transform:translateY(-50%);width:18px;height:18px;line-height:16px;text-align:center;
 padding:0;font:700 11px Georgia,serif;color:var(--ash);background:none;border:1px solid transparent;border-radius:50%;
 cursor:pointer;opacity:.45}
 .im-tab .tab-close:hover,.im-tab .tab-close:focus-visible{opacity:1;color:#fff;background:var(--blood);border-color:#000;outline:none}
-/* Swipe-to-dismiss hint: a soft red wash grows in behind the tab as it's dragged far enough to let go
+/* Swipe-to-dismiss hint: a soft red wash grows in behind the row as it's dragged far enough to let go
    and close it, so the gesture has visible feedback before release. */
 .im-tab.past-threshold{background:linear-gradient(180deg,#4a2130,#2a1420)}
-@media (max-width:500px){.im-tray{top:50px;right:6px;bottom:auto;flex-direction:column;max-height:50vh}}
 .users .list div::before{content:"";display:inline-block;width:7px;height:7px;transform:rotate(45deg);background:var(--leaf);
 border:1px solid var(--gold-lo);margin-right:7px;vertical-align:0;box-shadow:0 0 5px rgba(90,161,90,.7)}
 .compose{grid-column:1 / -1;display:grid;grid-template-columns:auto auto 1fr auto;gap:6px;align-items:stretch;position:relative}
@@ -651,7 +638,7 @@ height:100%;border-width:0;border-radius:0;z-index:40}
 
 /* option to hide the whisper "tray" tabs (and any open whisper windows) entirely — a purely
    client-side/visual toggle; whispers still arrive and are remembered, just not shown until re-enabled */
-.gc-root.no-dms .im-tray,.gc-root.no-dms .im{display:none !important}
+.gc-root.no-dms .dm-dock{display:none !important}
 
 /* "Gypsy Roulette — coming soon" teaser. Fills the empty gutter to the LEFT of the window,
    mirroring the threads board on the right: same fixed offset from centre (394px = half the
@@ -1037,8 +1024,8 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
   /* 2. Touch targets. Several small controls were sized for a mouse pointer (16-24px); a finger
         needs closer to 40. Widen the hit area without redrawing the control. */
   .status button.cell{min-height:32px;min-width:40px}
-  .im-tab{padding-right:34px}
-  .im-tab .tab-close{width:26px;height:26px;line-height:24px;top:50%;transform:translateY(-50%);opacity:.7}
+  .im-tab{padding-right:38px}
+  .im-tab .tab-close{width:28px;height:28px;line-height:26px;opacity:.7}
   .users .umin{width:44px;height:28px;line-height:26px;font-size:12px}
   .lightbox-close{width:44px;height:40px;line-height:36px}
   .tp-back{width:38px;height:30px;line-height:26px}
@@ -1094,3 +1081,69 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
    already shows "N online" there, so the span stays hidden everywhere the panel isn't stacked. */
 .users .hd .ucount{display:none}
 .gc-root.users-stacked .users .hd .ucount{display:inline}
+
+/* ==================== the Messages dock (v68) ====================
+   One panel for every whisper, pinned to the bottom-right corner of the screen the way
+   Instagram's web inbox is. Three states, set by syncDock() in app.js:
+     .collapsed  -- just the bar ("Messages", unread total, chevron), 260px wide
+     (neither)   -- expanded on the inbox: the bar, then one .im-tab row per conversation
+     .thread     -- expanded on one conversation: its own .im header (back arrow, name, buzz,
+                    collapse) replaces the bar, then the transcript and composer
+   z-index 45 sits in the old whisper-window band: above the full-screen takeover panels
+   (threads/leaderboard/roulette, 40) so a message can still be read from inside them, under
+   the emoji/reaction pickers (56/57), .nmenu (60) and the modals (70), all of which open from
+   inside a conversation and have to land on top of it. */
+/* Width: 340px when there's room, but the room's window is a centred 760px card, and on a
+   typical laptop (1280-1440 wide) a 340px panel in the corner would sit over the card's right
+   column and its Send button. clamp() sizes the panel to the gap beside the card instead --
+   (50vw - 380px) is that gap, minus the 8px inset on each side -- never narrower than 260px. */
+.dm-dock{position:fixed;right:8px;bottom:8px;z-index:45;width:clamp(260px,calc(50vw - 396px),340px);height:min(480px,calc(100vh - 16px));
+display:flex;flex-direction:column;
+background:linear-gradient(180deg,#221a26,#120e14);border:3px double #7a4bb0;outline:1px solid #000;
+box-shadow:0 0 0 2px #a67ad1,0 0 0 3px #000,0 10px 30px #000,inset 0 0 30px #000;color:var(--bone)}
+.dm-dock.collapsed{width:260px;height:auto}
+.dm-dock.collapsed .dm-body{display:none}
+.dm-bar{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;user-select:none;-webkit-user-select:none;flex:none;
+font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:#e2c4ff;text-shadow:0 0 8px rgba(200,150,255,.5),0 1px 0 #000;
+background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4bb0;box-shadow:0 2px 0 #000}
+.dm-dock.collapsed .dm-bar{border-bottom:none;box-shadow:none}
+.dm-bar:hover,.dm-bar:focus-visible{color:#fff;outline:none}
+.dm-bar .dm-bar-ico{font-size:15px;flex:none}
+.dm-bar .dm-bar-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* the unread total: .rbadge is the same red pill the friend-request bell and the reports button
+   use, but sitting in the row's flow here rather than pinned to a corner */
+.dm-bar .dm-bar-badge{position:static;flex:none;font-size:10px;letter-spacing:0}
+.dm-bar .dm-bar-chev{flex:none;font-size:14px;line-height:1;color:#c9a3e6;transform:translateY(2px);transition:transform .18s ease}
+.dm-dock:not(.collapsed) .dm-bar .dm-bar-chev{transform:translateY(-1px) rotate(180deg)}
+.dm-bar.flash{animation:tabflash 1s ease-in-out 2}
+/* Body: the inbox list and the conversation views share the same box; .thread swaps them. */
+.dm-body{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+.dm-inbox{flex:1;min-height:0;overflow-y:auto;scrollbar-color:#7a4bb0 #0f0d0b}
+.dm-dock.thread .dm-bar{display:none}
+.dm-dock.thread .dm-inbox{display:none}
+.dm-dock #ims{display:none}
+.dm-dock.thread #ims{display:block;position:absolute;inset:0}
+.dm-empty{padding:26px 16px;text-align:center;font-size:12px;line-height:1.7;color:var(--ash);font-style:italic}
+.dm-empty b{color:#e2c4ff;font-style:normal}
+/* Phone: the collapsed bar becomes a small pill floating over the bottom-right of the chat, clear
+   of the composer and the folded roster bar beneath it; expanded, the dock takes the screen
+   below the title bar, since a 340px panel would cover most of the room anyway. */
+@media (max-width:500px){
+  .dm-dock.collapsed{width:auto;max-width:200px;right:8px;bottom:150px;border-width:2px}
+  .dm-dock.collapsed .dm-bar{padding:7px 10px;font-size:12px}
+  .dm-dock:not(.collapsed){left:6px;right:6px;top:50px;bottom:6px;width:auto;height:auto}
+  .dm-dock:not(.collapsed) .dm-bar{padding:10px 12px}
+  /* the dock is a full-screen takeover here, so the bubbles and the friend-request bell (all of
+     which float above it) step aside until it's collapsed again */
+  .gc-root.dm-open .thread-toggle-fab,.gc-root.dm-open .roulette-toggle-fab,.gc-root.dm-open .friendreq-btn,.gc-root.dm-open .friendreq-panel{display:none !important}
+  /* same call as the room composer (#emoBtn above): the phone keyboard already has emoji */
+  .im .icomp .emo{display:none}
+  .im .icomp{grid-template-columns:auto 1fr auto}
+}
+/* Desktop: the roulette bubble floats at the right edge, vertically centred -- right where the
+   expanded dock's top-right corner lands on a typical laptop screen. While the dock is open it
+   moves left of the panel (only until someone drags it: a dragged bubble carries inline
+   left/right, which wins over this). */
+@media (min-width:501px){
+  .gc-root.dm-open .roulette-toggle-fab{right:calc(clamp(260px,calc(50vw - 396px),340px) + 20px)}
+}
