@@ -1312,20 +1312,20 @@ font:15px "IM Fell English",Georgia,serif;color:#3a2a10;text-shadow:0 1px 0 rgba
 /* the @ menu has to clear the prompt dialog (z-index 70) when it's serving that dialog's field */
 .mention-menu.above-modal{z-index:75}
 
-/* ==================== takeover-page chrome (v77) ====================
-   While the Threads board has the whole screen, the two floating controls that stay visible -- the
-   💬 "back to chat" toggle and the 🤝 friend-request bell -- move into the board's own header row,
-   one at each corner, instead of keeping the offsets they use over the chat window (those are
-   measured against .win's 760px cap and, on desktop, against the ballot strip -- which the board
-   covers anyway -- so they landed a row too low, on top of "Create new post"). The header gets a
-   fixed 44px height so both 34px controls centre on it exactly. The ✦ roulette bubble steps out
-   while the board is up, the same way every bubble does on the leaderboard: the board has its own
-   chrome, and the wheel is one tap away again back in the room. Last in the file so it wins over
-   the desktop top:36px rules and the phone-side drag positions (hence the !importants, matching
+/* ==================== takeover-page chrome (v77, desktop only since v78) ====================
+   While the Threads board has the whole screen on a desktop, the two floating controls that stay
+   visible -- the 💬 "back to chat" toggle and the 🤝 friend-request bell -- move into the board's
+   own header row, one at each corner, instead of keeping the offsets they use over the chat
+   window (those are measured against .win's 760px cap and against the ballot strip -- which the
+   board covers anyway -- so they landed a row too low, on top of "Create new post"). The header
+   gets a fixed 44px height so both 34px controls centre on it exactly. Phones are left alone: the
+   bubbles keep floating wherever they were dragged, and the bell stays in its bottom-left corner.
+   Last in the file so it wins over the desktop top:36px rules (hence the !importants, matching
    the existing desktop rule for the same reason). */
 .tp-hd{min-height:44px;box-sizing:border-box;padding-top:8px;padding-bottom:8px}
-.gc-root.signed-on.mobile-threads-open .thread-toggle-fab{position:fixed !important;top:5px !important;right:8px !important;left:auto !important;bottom:auto !important;
-transform:none !important;width:34px;height:34px;font-size:17px;opacity:1;z-index:56}
-.gc-root.signed-on.mobile-threads-open .friendreq-btn{top:5px;bottom:auto;left:8px;right:auto}
-.gc-root.signed-on.mobile-threads-open .friendreq-panel{top:46px;bottom:auto;left:8px;right:auto}
-.gc-root.mobile-threads-open .roulette-toggle-fab{display:none !important}
+@media (min-width:501px){
+  .gc-root.signed-on.mobile-threads-open .thread-toggle-fab{position:fixed !important;top:5px !important;right:8px !important;left:auto !important;bottom:auto !important;
+  transform:none !important;width:34px;height:34px;font-size:17px;opacity:1;z-index:56}
+  .gc-root.signed-on.mobile-threads-open .friendreq-btn{top:5px;bottom:auto;left:8px;right:auto}
+  .gc-root.signed-on.mobile-threads-open .friendreq-panel{top:46px;bottom:auto;left:8px;right:auto}
+}
