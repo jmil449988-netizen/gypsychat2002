@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 129;
+var BUILD_NUMBER = 130;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -5817,8 +5817,18 @@ var b = nouns[Math.floor(Math.random() * nouns.length)];
 var num = Math.floor(Math.random() * 90) + 10;
 return (a + b + num).slice(0, 16);
 }
+var joinInFlight = false;
 async function join(opts) {
 opts = opts || {};
+/* v130: one join at a time. The button is disabled below, but Enter/"Go" on any sign-on field
+   also calls join(), and a second call two seconds into the first re-sent the same single-use
+   Turnstile token -- which siteverify refused, and (until verify-join was changed today) that
+   refusal permanently muted a brand-new account before its first join had even finished. */
+if (joinInFlight) return;
+joinInFlight = true;
+try { await joinInner(opts); } finally { joinInFlight = false; }
+}
+async function joinInner(opts) {
 if (!opts.resuming && $('rememberMe')) { try { localStorage.setItem('gc_remember', $('rememberMe').checked ? '1' : '0'); } catch (e) {} }
 /* resuming: called automatically by restoreIdentity() for a device that already holds a
    session and a claimed name, to reconnect on page load/refresh without ever showing the login
