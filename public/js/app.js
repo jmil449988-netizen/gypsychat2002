@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 122;
+var BUILD_NUMBER = 123;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -5219,7 +5219,8 @@ if (wasEmpty || !ballotNotes.length) { ballotIdx = -1; showBallotNote(); }
 }
 function startBallot() {
 if (ballotPanel) ballotPanel.classList.remove('hidden');
-if (ballotStrip) ballotStrip.classList.remove('hidden'); // the parchment header over the chat window (desktop)
+/* v123: the parchment header strip (#ballotStrip) stays hidden -- the phone-style unrolling scroll
+   over the log shows notes on every width now, by request (the strip was liked less). */
 loadBallot();
 clearInterval(ballotTimer); ballotTimer = setInterval(loadBallot, 60000);
 startMobileBallot();
@@ -5307,7 +5308,7 @@ var ballotMobile = $('ballotMobile'), ballotMobileText = $('ballotMobileText'), 
 var ballotMobileRoller = $('ballotMobileRoller'), ballotMobileRemove = $('ballotMobileRemove'), ballotBtn = $('ballotBtn');
 var mobileBallotTimer = null, mobileBallotHide = null, mobileBallotHeld = false, mobileBallotShowing = null;
 var MOBILE_BALLOT_EVERY = 15000, MOBILE_BALLOT_FIRST = 5000, MOBILE_BALLOT_HOLD = 6000, MOBILE_BALLOT_GLIDE_PX_PER_S = 45;
-function mobileBallotActive() { return !!ballotMobile && window.matchMedia('(max-width:1339px)').matches; }
+function mobileBallotActive() { return !!ballotMobile; } // v123: the unrolling scroll is the one note display on every width now (the parchment header strip is retired)
 function rollUpMobileBallot() {
 clearTimeout(mobileBallotHide); mobileBallotHide = null;
 if (!ballotMobile) return;
