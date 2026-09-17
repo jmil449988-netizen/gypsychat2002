@@ -27,6 +27,7 @@ var leaderboardBtn = $('leaderboardBtn'), leaderboardPanel = $('leaderboardPanel
 var tttLeaderboardList = $('tttLeaderboardList'), lbTabXp = $('lbTabXp'), lbTabTtt = $('lbTabTtt');
 var unoLeaderboardList = $('unoLeaderboardList'), lbTabUno = $('lbTabUno');
 var hmLeaderboardList = $('hmLeaderboardList'), lbTabHm = $('lbTabHm'), hdLeaderboardList = $('hdLeaderboardList'), lbTabHd = $('lbTabHd');
+var prLeaderboardList = $('prLeaderboardList'), lbTabPr = $('lbTabPr');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
 var frqSection = $('frqSection'), frqCount = $('frqCount'), friendReqList = $('friendReqList');
@@ -65,7 +66,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 135;
+var BUILD_NUMBER = 136;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -386,7 +387,8 @@ return [
 ['⚔ Tic-Tac-Toe', function () { challengeGame(id, name); }],
 ['🃏 UNO', function () { challengeUno(id, name); }],
 ['🪢 Hangman', function () { challengeHangman(id, name); }],
-['♠ Texas Hold’em', function () { setTimeout(function () { holdemStakesMenu(id, name); }, 0); }]
+['♠ Texas Hold’em', function () { setTimeout(function () { holdemStakesMenu(id, name); }, 0); }],
+['🂡 Prasta', function () { challengePrasta(id, name); }]
 ];
 }
 
@@ -1842,11 +1844,13 @@ function loadTttLeaderboard() { return loadGameLadder(tttLeaderboardList, 'ttt_l
 function loadUnoLeaderboard() { return loadGameLadder(unoLeaderboardList, 'uno_leaderboard', 'No UNO games finished yet — open a whisper, tap 🎲 and pick UNO.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
 function loadHmLeaderboard() { return loadGameLadder(hmLeaderboardList, 'hangman_leaderboard', 'No Hangman games finished yet — open a whisper, tap 🎲 and pick Hangman.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
 function loadHdLeaderboard() { return loadGameLadder(hdLeaderboardList, 'holdem_leaderboard', 'Nobody has cashed out of a Hold’em table yet — open a whisper, tap 🎲, pick Texas Hold’em and choose your stakes.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + (x.net >= 0 ? '+' : '') + x.net + ' XP'; }); }
+function loadPrLeaderboard() { return loadGameLadder(prLeaderboardList, 'prasta_leaderboard', 'No hands of Prasta yet — open a whisper, tap 🎲, pick Prasta and name a stake.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + (x.net >= 0 ? '+' : '') + x.net + ' XP'; }); }
 var LB_TABS = [['xp', function () { return lbTabXp; }, function () { return leaderboardList; }, function () { loadLeaderboard(); }],
 ['ttt', function () { return lbTabTtt; }, function () { return tttLeaderboardList; }, loadTttLeaderboard],
 ['uno', function () { return lbTabUno; }, function () { return unoLeaderboardList; }, loadUnoLeaderboard],
 ['hm', function () { return lbTabHm; }, function () { return hmLeaderboardList; }, loadHmLeaderboard],
-['hd', function () { return lbTabHd; }, function () { return hdLeaderboardList; }, loadHdLeaderboard]];
+['hd', function () { return lbTabHd; }, function () { return hdLeaderboardList; }, loadHdLeaderboard],
+['pr', function () { return lbTabPr; }, function () { return prLeaderboardList; }, loadPrLeaderboard]];
 function showLeaderboardTab(which) {
 if (!LB_TABS.some(function (t) { return t[0] === which; })) which = 'xp';
 LB_TABS.forEach(function (t) {
@@ -2114,6 +2118,7 @@ if (gameCardClick(e, id)) return;
 if (unoCardClick(e, id)) return;
 if (hmCardClick(e, id)) return;
 if (hdCardClick(e, id)) return;
+if (prCardClick(e, id)) return;
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
 var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { reportMessage(rpt.dataset.mid); return; }
 /* Same Get Info / Whisper / Tag in Chat / Block menu a name click opens everywhere else (main
@@ -3399,6 +3404,7 @@ Object.keys(games).forEach(function (k) { var g = games[k]; if (g.status === 'ac
 Object.keys(unoGames).forEach(function (k) { var g = unoGames[k]; if (g.status === 'active') all.push({ g: g, fn: 'uno_timeout', store: unoGames, uno: true }); });
 Object.keys(hmGames).forEach(function (k) { var g = hmGames[k]; if (g.status === 'active') all.push({ g: g, fn: 'hangman_timeout', store: hmGames, hm: true }); });
 Object.keys(hdGames).forEach(function (k) { var g = hdGames[k]; if (g.status === 'active') all.push({ g: g, fn: 'holdem_timeout', store: hdGames, hd: true }); });
+Object.keys(prGames).forEach(function (k) { var g = prGames[k]; if (g.status === 'active' && g.turn) all.push({ g: g, fn: 'prasta_timeout', store: prGames, pr: true }); });
 all.forEach(function (x) {
 var g = x.g, peer = gamePeer(g), w = wins[peer]; if (!w) return;
 var el = w.log.querySelector('.turn-clock[data-clock="' + g.id + '"]');
@@ -3427,6 +3433,7 @@ noteServerTime(r.data);
 if (x.uno) { unoGames[r.data.id] = r.data; renderUnoCard(r.data, { scroll: false }); if (r.data.turn === me.id) unoFetchHand(r.data.id); }
 else if (x.hm) { hmGames[r.data.id] = r.data; renderHmCard(r.data, { scroll: false }); }
 else if (x.hd) { hdArrived(r.data, false, true); }
+else if (x.pr) { prArrived(r.data, false, true); }
 else { games[r.data.id] = r.data; renderGameCard(r.data, { scroll: false }); }
 });
 }
@@ -4034,6 +4041,188 @@ var h = await sb.from('holdem_hands').select('game_id, cards').in('game_id', ope
 (h.data || []).forEach(function (row) { hdHand[row.game_id] = row.cards || []; });
 }
 r.data.forEach(function (g) { if (gameShowsCard(g)) renderHdCard(g, { scroll: false }); });
+}
+
+/* ---------- Prasta (Gilet) in whispers (v136) ----------
+   A 16th-century Italian three-card gambling game, here heads-up for one agreed stake (1-9000 XP).
+   prasta_games is what both players may see; prasta_hands holds MY three cards (RLS: owner only)
+   and prasta_decks never leaves the server -- same shape as UNO and Hold'em. Hands rank
+   Tricon > Pair > Point; each player may change up to two cards once, then it is a showdown and
+   the winner takes both stakes. See supabase/prasta_feature.sql. */
+var prGames = {}, prHand = {}, prPick = {};   // prPick[gid] = the cards I have selected to change
+function prRecord(peerId) {
+var w = 0, l = 0, net = 0;
+Object.keys(prGames).forEach(function (k) { var g = prGames[k]; if (g.status !== 'finished' || gamePeer(g) !== peerId) return; if (g.winner === me.id) w++; else if (g.winner) l++; net += gameMyPoints(g); });
+return { w: w, l: l, net: net };
+}
+/* The three-card hand, ranked the way the server ranks it -- shown under your cards so nobody has
+   to learn the order from a help page. Mirrors pr_score()'s categories, not its tie-breakers. */
+function prHandName(cards) {
+if (!cards || cards.length < 3) return '';
+var PT = { A: 11, K: 10, Q: 10, J: 10, T: 10 };
+var NAME = { '7': '7', '8': '8', '9': '9', T: '10', J: 'jack', Q: 'queen', K: 'king', A: 'ace' };
+var r = cards.map(function (c) { return c.charAt(0); }), s = cards.map(function (c) { return c.charAt(1); });
+var bySuit = {};
+cards.forEach(function (c, i) { bySuit[s[i]] = (bySuit[s[i]] || 0) + (PT[r[i]] || parseInt(r[i], 10)); });
+var pt = Math.max.apply(null, Object.keys(bySuit).map(function (k) { return bySuit[k]; }));
+if (r[0] === r[1] && r[1] === r[2]) return 'three ' + NAME[r[0]] + 's';
+var pair = r[0] === r[1] ? r[0] : (r[0] === r[2] ? r[0] : (r[1] === r[2] ? r[1] : null));
+if (pair) return 'a pair of ' + NAME[pair] + 's';
+return 'point ' + pt;
+}
+function renderPrCard(g, opts) {
+opts = opts || {};
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+var card = w.log.querySelector('.pr-card[data-gid="' + g.id + '"]');
+if (!card) {
+if (!gameShowsCard(g) || newestGameId(prGames, peer) !== g.id) return;
+w.log.querySelectorAll('.pr-card').forEach(function (old) { old.remove(); });
+card = document.createElement('div'); card.className = 'pr-card'; card.dataset.gid = g.id; w.log.appendChild(card);
+}
+var mine = g.challenger_id === me.id, rec = prRecord(peer);
+var myCards = prHand[g.id] || (mine ? g.shown_challenger : g.shown_opponent) || [];
+var theirCards = mine ? g.shown_opponent : g.shown_challenger;
+var myTurn = g.status === 'active' && g.turn === me.id;
+var iAmDone = mine ? g.challenger_done : g.opponent_done;
+var picked = prPick[g.id] || [];
+var html = '<div class="ttt-hd"><span class="ttt-title">🂡 Prasta</span><span class="ttt-rec" title="Your record against ' + esc(name) + ' (last 30 days)">' + rec.w + 'W · ' + rec.l + 'L · ' + (rec.net >= 0 ? '+' : '') + rec.net + ' XP</span></div>';
+var status = '', actions = '';
+if (g.status === 'pending') {
+var short = !mine && myXp() < g.stake;
+status = mine ? 'Waiting for ' + esc(name) + ' to match ' + g.stake + ' XP…'
+: '<b>' + esc(name) + '</b> stakes <b>' + g.stake + ' XP</b> on a hand of Prasta. ' + (short ? 'You have <b>' + myXp() + ' XP</b> — you need ' + g.stake + ' to match it.' : 'Match it?');
+actions = mine ? '<button type="button" class="btn pr-cancel">Call it off</button>'
+: (short ? '' : '<button type="button" class="btn pr-accept">Match ' + g.stake + ' XP</button>') + '<button type="button" class="btn pr-decline">Walk away</button>';
+} else if (g.status === 'active' || g.status === 'finished') {
+var live = g.status === 'active';
+html += '<div class="pr-seat"><span class="pr-who">' + esc(name) + '</span><span class="pr-cards">'
++ (theirCards ? theirCards.map(function (c) { return pcHtml(c, 'sm'); }).join('') : pcHtml(null, 'sm') + pcHtml(null, 'sm') + pcHtml(null, 'sm'))
++ '</span>' + (theirCards ? '<span class="pr-name">' + esc(prHandName(theirCards)) + '</span>' : '') + '</div>';
+html += '<div class="pr-pot">' + (live ? g.stake + ' XP each' : '') + '</div>';
+html += '<div class="pr-seat me"><span class="pr-who">You</span><span class="pr-cards">'
++ myCards.map(function (c) {
+var sel = picked.indexOf(c) >= 0, pick = live && myTurn && !iAmDone;
+return '<span class="pr-c' + (sel ? ' picked' : '') + (pick ? ' pickable' : '') + '"' + (pick ? ' data-card="' + esc(c) + '" role="button" tabindex="0"' : '') + '>' + pcHtml(c) + (sel ? '<span class="pr-x" aria-hidden="true">✕</span>' : '') + '</span>';
+}).join('')
++ '</span>' + (myCards.length ? '<span class="pr-name">' + esc(prHandName(myCards)) + '</span>' : '') + '</div>';
+if (live) {
+if (myTurn && !iAmDone) {
+status = picked.length ? 'Tap cards to pick up to two, then draw.' : 'Your draw — tap up to two cards to change, or stand pat.';
+actions = '<button type="button" class="btn pr-draw"' + (picked.length ? '' : ' disabled') + '>Change ' + (picked.length || '') + '</button><button type="button" class="btn pr-stand">Stand pat</button><button type="button" class="btn pr-resign">Throw it in</button>';
+} else {
+status = iAmDone ? 'Waiting for ' + esc(name) + '…' : esc(name) + ' is drawing…';
+actions = '<button type="button" class="btn pr-resign">Throw it in</button>';
+}
+} else {
+status = esc(g.last_action || '');
+actions = '<button type="button" class="btn pr-rematch">Play again</button>';
+}
+} else {
+status = esc(g.last_action || 'That hand is over.');
+}
+html += '<div class="ttt-status">' + status + '</div>';
+if (g.status === 'active' && g.turn) html += turnClockHtml(g);
+if (actions) html += '<div class="ttt-actions">' + actions + '</div>';
+card.innerHTML = html;
+if (opts.scroll !== false) { w.log.scrollTop = w.log.scrollHeight; }
+}
+async function prFetchHand(gid) {
+var r = await sb.from('prasta_hands').select('cards').eq('game_id', gid).eq('user_id', me.id).maybeSingle();
+if (!r.error) { prHand[gid] = r.data ? (r.data.cards || []) : []; if (prGames[gid]) renderPrCard(prGames[gid], { scroll: false }); }
+}
+function prHandArrived(row) {
+if (!row || row.user_id !== me.id) return;
+prHand[row.game_id] = row.cards || [];
+if (prGames[row.game_id]) renderPrCard(prGames[row.game_id], { scroll: false });
+}
+async function prCall(fn, args, peerId) {
+var r = await sb.rpc(fn, args);
+if (r.error) { imSys(peerId, r.error.message.replace(/^.*?:\s*/, '')); return null; }
+if (r.data) prArrived(r.data, false, true);
+return r.data;
+}
+async function challengePrasta(peerId, name) {
+if (!me) return;
+if (!(await whisperAllowed(peerId))) { imSys(peerId, 'Add ' + name + ' as a friend to play them.'); return; }
+var have = myXp(), theirs = xpOfUser(peerId);
+if (have < 1) { imSys(peerId, 'You need at least 1 XP to stake a hand. XP comes from reactions and from winning games.'); return; }
+if (theirs < 1) { imSys(peerId, name + ' has no XP to stake yet.'); return; }
+var top = Math.min(9000, have, theirs);
+var v = await showPromptModal('Stake how much XP?', { value: String(Math.min(top, 10)), placeholder: '1–' + top, maxLength: 4,
+hint: 'Prasta: three cards each, change up to two, best hand takes both stakes. Tricon beats a pair, a pair beats point. ' + name + ' has ' + theirs + ' XP; you have ' + have + '.' });
+if (v === null) return;
+var amt = parseInt(v, 10);
+if (!(amt >= 1 && amt <= 9000)) { imSys(peerId, 'The stake has to be between 1 and 9000 XP.'); return; }
+if (amt > theirs) { imSys(peerId, name + ' only has ' + theirs + ' XP and can’t match a ' + amt + '-XP stake. Try ' + theirs + ' or less.'); return; }
+if (amt > have) { imSys(peerId, 'You only have ' + have + ' XP to stake.'); return; }
+var r = await sb.rpc('prasta_challenge', { p_opponent: peerId, p_stake: amt });
+if (r.error) {
+if (/unique|one_open/i.test(r.error.message)) imSys(peerId, 'You already have a hand of Prasta open with ' + name + ' — finish it first.');
+else imSys(peerId, r.error.message.replace(/^.*?:\s*/, ''));
+return;
+}
+prArrived(r.data, false, true); refreshMyStats();
+triggerPush(peerId, me.name + ' stakes ' + amt + ' XP on a hand of Prasta', 'Open your whispers to match it.', 'gc-pr-' + r.data.id);
+}
+function prCardClick(e, peerId) {
+var card = e.target.closest('.pr-card'); if (!card) return false;
+var g = prGames[card.dataset.gid]; if (!g) return true;
+var id = g.id;
+var pc = e.target.closest('.pr-c[data-card]');
+if (pc && g.status === 'active' && g.turn === me.id) {
+var c = pc.dataset.card, picked = prPick[id] || [];
+var at = picked.indexOf(c);
+if (at >= 0) picked.splice(at, 1);
+else if (picked.length < 2) picked.push(c);
+else { imSys(peerId, 'Two cards is the most you may change.'); return true; }
+prPick[id] = picked; renderPrCard(g, { scroll: false });
+return true;
+}
+var b = e.target.closest('button'); if (!b || b.disabled) return true;
+var cl = b.classList;
+if (cl.contains('pr-accept')) prCall('prasta_respond', { p_game: id, p_accept: true }, peerId);
+else if (cl.contains('pr-decline')) prCall('prasta_respond', { p_game: id, p_accept: false }, peerId);
+else if (cl.contains('pr-cancel')) prCall('prasta_cancel', { p_game: id }, peerId);
+else if (cl.contains('pr-resign')) prCall('prasta_resign', { p_game: id }, peerId);
+else if (cl.contains('pr-rematch')) challengePrasta(peerId, gamePeerName(g));
+else if (cl.contains('pr-stand')) { prPick[id] = []; prCall('prasta_exchange', { p_game: id, p_discard: [] }, peerId); }
+else if (cl.contains('pr-draw')) { var d = prPick[id] || []; prPick[id] = []; prCall('prasta_exchange', { p_game: id, p_discard: d }, peerId); }
+return true;
+}
+function prArrived(g, isNew, quiet) {
+var prev = prGames[g.id]; prGames[g.id] = g;
+noteServerTime(g);
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+if (g.status === 'active' && !prHand[g.id]) prFetchHand(g.id);
+if (g.status === 'finished' && (!prev || prev.status !== 'finished')) { delete prHand[g.id]; delete prPick[g.id]; refreshMyStats(); }
+if (['declined', 'cancelled', 'expired'].indexOf(g.status) >= 0 && (!prev || prev.status !== g.status)) refreshMyStats();
+renderPrCard(g);
+if (prev && g.status === 'active' && prev.status !== 'active') gameSfx(g.id, 'card');       // the deal
+else if (prev && g.status === 'active' && (prev.challenger_done !== g.challenger_done || prev.opponent_done !== g.opponent_done)) gameSfx(g.id, 'card');
+if (quiet) return;
+var forMe = (isNew && g.opponent_id === me.id) || (g.status === 'active' && g.turn === me.id && (!prev || prev.turn !== me.id)) || (g.status === 'finished' && (!prev || prev.status !== 'finished'));
+if (!forMe) return;
+if (isNew) w.snippet = name + ' stakes ' + g.stake + ' XP on Prasta';
+else if (g.status === 'finished') w.snippet = 'Prasta: ' + (gameMyPoints(g) > 0 ? '+' : '') + gameMyPoints(g) + ' XP';
+else w.snippet = 'Prasta: your draw';
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Prasta', seconds: turnSecondsLeft(g),
+result: gameMyPoints(g) > 0 ? 'win' : (gameMyPoints(g) < 0 ? 'lose' : 'draw'),
+accept: function () { prCall('prasta_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { prCall('prasta_respond', { p_game: g.id, p_accept: false }, peer); } });
+}
+async function loadPrasta() {
+prGames = {};
+var since = new Date(Date.now() - 30 * 86400000).toISOString();
+var r = await sb.from('prasta_games').select('*').or('challenger_id.eq.' + me.id + ',opponent_id.eq.' + me.id).gt('created_at', since).order('created_at', { ascending: true });
+if (r.error) return;
+r.data.forEach(function (g) { prGames[g.id] = g; noteServerTime(g); });
+var open = r.data.filter(function (g) { return g.status === 'active'; }).map(function (g) { return g.id; });
+if (open.length) {
+var h = await sb.from('prasta_hands').select('game_id, cards').in('game_id', open);
+if (!h.error && h.data) h.data.forEach(function (x) { prHand[x.game_id] = x.cards || []; });
+}
+r.data.forEach(function (g) { if (gameShowsCard(g)) renderPrCard(g, { scroll: false }); });
 }
 
 /* ---------- typing indicators (main room + whispers) ----------
@@ -6082,7 +6271,8 @@ if (!cur || !cur.updated_at || !row.updated_at) return true;
 return new Date(row.updated_at).getTime() >= new Date(cur.updated_at).getTime();
 }
 [['games', function () { return games; }, gameArrived], ['uno_games', function () { return unoGames; }, unoArrived],
- ['hangman_games', function () { return hmGames; }, hmArrived], ['holdem_games', function () { return hdGames; }, function (g, isNew) { hdArrived(g, isNew); }]].forEach(function (t) {
+ ['hangman_games', function () { return hmGames; }, hmArrived], ['holdem_games', function () { return hdGames; }, function (g, isNew) { hdArrived(g, isNew); }],
+['prasta_games', function () { return prGames; }, function (g, isNew) { prArrived(g, isNew); }]].forEach(function (t) {
 var table = t[0], store = t[1], arrived = t[2];
 ['challenger_id', 'opponent_id'].forEach(function (col) {
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: table, filter: col + '=eq.' + me.id }, function (p) { if (!store()[p.new.id]) arrived(p.new, true); });
@@ -6094,6 +6284,8 @@ refetchGame(table, p.new.id, function (row) { if (fresher(store(), row)) arrived
 });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'holdem_hands', filter: 'user_id=eq.' + me.id }, function (p) { hdHandArrived(p.new); });
 channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'holdem_hands', filter: 'user_id=eq.' + me.id }, function (p) { hdHandArrived(p.new); });
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'prasta_hands', filter: 'user_id=eq.' + me.id }, function (p) { prHandArrived(p.new); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prasta_hands', filter: 'user_id=eq.' + me.id }, function (p) { prHandArrived(p.new); });
 /* UNO: my hand rows (RLS only ever shows me my own). */
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_hands', filter: 'user_id=eq.' + me.id }, function (p) { unoHandArrived(p.new); });
 channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_hands', filter: 'user_id=eq.' + me.id }, function (p) { unoHandArrived(p.new); });
@@ -6192,7 +6384,7 @@ else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.')
 pinLogBottom();
 loadGames(); // Tic-Tac-Toe cards into their whisper windows (open games + results from the last hour)
 loadUno();   // same for UNO
-loadHangman(); loadHoldem();
+loadHangman(); loadHoldem(); loadPrasta();
 resetIdle();
 startRecentPeopleHeartbeat();
 autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
