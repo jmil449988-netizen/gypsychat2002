@@ -249,14 +249,15 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
    UNDER the field there (the field and Send get the full width); on a phone the dock is
    full-screen and everything fits on one line (the emoji button steps aside for the phone's own
    keyboard -- see the max-width:500px rule). */
-.im .icomp{display:grid;grid-template-columns:auto auto auto 1fr auto;gap:6px;padding:6px;flex:none}
+.im .icomp{display:grid;grid-template-columns:auto auto auto auto 1fr auto;gap:6px;padding:6px;flex:none}
 @media (min-width:501px){
-  .im .icomp{grid-template-columns:auto auto auto auto 1fr;grid-template-areas:"ta ta ta ta send" "emo img gif game ."}
+  .im .icomp{grid-template-columns:auto auto auto auto auto 1fr;grid-template-areas:"ta ta ta ta ta send" "emo img gif game uno ."}
   .im .icomp textarea{grid-area:ta}
   .im .icomp .btn.emo{grid-area:emo;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn.img{grid-area:img;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn.gif{grid-area:gif;height:28px;min-width:34px}
   .im .icomp .btn.game{grid-area:game;height:28px;min-width:34px;font-size:14px}
+  .im .icomp .btn.uno{grid-area:uno;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn:last-child{grid-area:send}
 }
 .im .icomp textarea{font:inherit;color:var(--bone);resize:none;height:44px;padding:5px 8px;outline:none;caret-color:#e2c4ff;
@@ -267,6 +268,7 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
 .im .icomp .btn.img,.im .icomp .btn.emo{font-size:15px;min-width:38px;padding:0 6px}
 .im .icomp .btn.gif{font-size:11px;min-width:38px;padding:0 6px}
 .im .icomp .btn.game{font-size:15px;min-width:38px;padding:0 6px}
+.im .icomp .btn.uno{font-size:15px;min-width:38px;padding:0 6px}
 /* the dock's inbox: one .im-tab row per conversation (newest activity first -- app.js moves a row
    to the top when a message lands in it) */
 .im-tray{display:flex;flex-direction:column}
@@ -1202,7 +1204,7 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
   .gc-root.dm-open .thread-toggle-fab,.gc-root.dm-open .roulette-toggle-fab{display:none !important}
   /* same call as the room composer (#emoBtn above): the phone keyboard already has emoji */
   .im .icomp .emo{display:none}
-  .im .icomp{grid-template-columns:auto auto auto 1fr auto}
+  .im .icomp{grid-template-columns:auto auto auto auto 1fr auto}
 }
 /* Desktop: the roulette bubble floats at the right edge, vertically centred -- right where the
    expanded dock's top-right corner lands on a typical laptop screen. While the dock is open it
@@ -1350,7 +1352,7 @@ font:15px "IM Fell English",Georgia,serif;color:#3a2a10;text-shadow:0 1px 0 rgba
    One card per game inside the whisper log (see renderGameCard in app.js). Purple trim to match
    the dock it lives in; gold X, lilac O; the winning three glow when a game ends; only the
    squares you can actually play are enabled, and only on your turn (.live). */
-.ttt-card{margin:8px 4px;padding:8px 10px;border:1px solid #7a4bb0;background:linear-gradient(180deg,#221a26,#160f19);box-shadow:0 0 0 1px #000,inset 0 0 18px #000}
+.ttt-card,.uno-card{margin:8px 4px;padding:8px 10px;border:1px solid #7a4bb0;background:linear-gradient(180deg,#221a26,#160f19);box-shadow:0 0 0 1px #000,inset 0 0 18px #000}
 .ttt-hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}
 .ttt-title{font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:#e2c4ff;text-shadow:0 1px 0 #000}
 .ttt-rec{font:11px "IM Fell English",Georgia,serif;color:var(--ash);white-space:nowrap}
@@ -1368,10 +1370,51 @@ display:flex;align-items:center;justify-content:center;cursor:default;padding:0;
 .ttt-cap{color:var(--ash);font-style:italic;font-size:11px}
 .ttt-actions{display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
 .ttt-actions .btn{min-width:0;height:26px;padding:0 12px;font-size:11px;color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
-.ttt-actions .btn.ttt-resign,.ttt-actions .btn.ttt-decline,.ttt-actions .btn.ttt-cancel{color:var(--ash);border-color:#3d2a4d}
-.ttt-actions .btn.ttt-accept{color:#cdeecd;border-color:var(--leaf)}
+.ttt-actions .btn.ttt-resign,.ttt-actions .btn.ttt-decline,.ttt-actions .btn.ttt-cancel,.ttt-actions .btn.uno-resign,.ttt-actions .btn.uno-decline,.ttt-actions .btn.uno-cancel,.ttt-actions .btn.uno-nopick{color:var(--ash);border-color:#3d2a4d}
+.ttt-actions .btn.ttt-accept,.ttt-actions .btn.uno-accept{color:#cdeecd;border-color:var(--leaf)}
+.ttt-actions .btn.uno-call{color:#fff;border-color:var(--blood);background:linear-gradient(180deg,#b3261e,#5a120e);font-weight:700;letter-spacing:1px}
+.ttt-actions .btn.uno-catch{color:var(--gold-hi);border-color:var(--gold)}
 @media (hover:none) and (pointer:coarse){.ttt-board{grid-template-columns:repeat(3,54px);grid-auto-rows:54px}.ttt-cell{font-size:28px}.ttt-actions .btn{height:34px}}
 
 /* leaderboard tabs (v110) reuse the admin page's tab styling; the streak flame sits beside the level badge */
 .lb-tabs{padding-top:8px}
 .lb-streak{flex:none;font:700 11px Cinzel,Georgia,serif;color:#ffb14a;text-shadow:0 0 6px rgba(255,140,0,.6);margin-left:2px}
+
+/* ---------- UNO (v112) ----------
+   The card chrome (.uno-card, .ttt-hd/.ttt-status/.ttt-actions) is shared with Tic-Tac-Toe above;
+   this is just the cards themselves. A card is a .uno-c button: colour class R/G/B/Y/W, .back for
+   a face-down card, .small for the opponent's fanned backs, .ok when it can be played right now. */
+.uno-c{position:relative;flex:none;width:38px;height:54px;padding:0;border-radius:5px;border:2px solid #f3ead6;box-shadow:0 0 0 1px #000,0 2px 4px #000;
+font:700 17px Cinzel,Georgia,serif;line-height:1;color:#fff;text-shadow:0 1px 0 #000,0 0 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;cursor:default}
+.uno-c::after{content:"";position:absolute;inset:4px;border-radius:50%/40%;border:1px solid rgba(255,255,255,.35);pointer-events:none}
+.uno-c.R{background:radial-gradient(circle at 50% 40%,#f25545,#9c160c)}
+.uno-c.G{background:radial-gradient(circle at 50% 40%,#57c561,#18701f)}
+.uno-c.B{background:radial-gradient(circle at 50% 40%,#4a97f2,#0f3d94)}
+.uno-c.Y{background:radial-gradient(circle at 50% 40%,#f6de5a,#a37f0c)}
+.uno-c.W{background:conic-gradient(from 45deg,#e33 0 25%,#f6de5a 0 50%,#57c561 0 75%,#4a97f2 0);color:#fff}
+.uno-c.back{background:repeating-linear-gradient(45deg,#1a1320 0 4px,#3a2a48 4px 8px);border-color:#7a4bb0;color:#e2c4ff;font-size:13px}
+.uno-c.back::after{border-color:rgba(226,196,255,.35)}
+.uno-c.small{width:22px;height:32px;font-size:10px;border-width:1px;margin-left:-9px;box-shadow:0 0 0 1px #000}
+.uno-c.small::after{inset:2px}
+.uno-opp{display:flex;align-items:center;justify-content:center;gap:8px;font:12px "IM Fell English",Georgia,serif;color:var(--ash);margin:2px 0 6px;flex-wrap:wrap}
+.uno-backs{display:flex;padding-left:9px}
+.uno-badge{font:700 10px Cinzel,Georgia,serif;letter-spacing:1px;color:#fff;background:var(--blood);padding:2px 6px;border-radius:3px;box-shadow:0 0 0 1px #000,0 0 8px rgba(179,38,30,.7)}
+.uno-table{display:flex;align-items:center;justify-content:center;gap:22px;margin:4px 0 6px}
+.uno-pile{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;padding:2px;cursor:default;color:var(--ash);font:11px "IM Fell English",Georgia,serif}
+.uno-pile:not([disabled]){cursor:pointer;color:var(--gold-hi)}
+.uno-pile:not([disabled]) .uno-c{box-shadow:0 0 0 1px #000,0 0 10px rgba(241,217,138,.6)}
+.uno-pile:not([disabled]):hover .uno-c,.uno-pile:not([disabled]):focus-visible .uno-c{transform:translateY(-2px);border-color:var(--gold-hi)}
+.uno-pile:focus-visible{outline:none}
+.uno-top{display:flex;align-items:center;gap:8px}
+.uno-top .uno-c{width:46px;height:64px;font-size:22px}
+.uno-colour{width:16px;height:16px;border-radius:50%;border:2px solid #f3ead6;box-shadow:0 0 0 1px #000;display:inline-block;flex:none}
+.uno-colour.R,.uno-col.R{background:#e0402f}.uno-colour.G,.uno-col.G{background:#3fae4a}.uno-colour.B,.uno-col.B{background:#2f7fe0}.uno-colour.Y,.uno-col.Y{background:#f0cf3c}
+.uno-hand{display:flex;gap:7px;overflow-x:auto;padding:8px 6px 6px;margin:0 -4px 4px;scrollbar-width:thin;scrollbar-color:#7a4bb0 transparent;-webkit-overflow-scrolling:touch}
+.uno-hand > .uno-c:first-child{margin-left:auto}.uno-hand > .uno-c:last-child{margin-right:auto}
+.uno-hand .uno-c{opacity:.5;filter:saturate(.7)}
+.uno-hand.live .uno-c.ok{opacity:1;filter:none;cursor:pointer;transform:translateY(-3px);box-shadow:0 0 0 1px #000,0 0 10px rgba(241,217,138,.55)}
+.uno-hand.live .uno-c.ok:hover,.uno-hand.live .uno-c.ok:focus-visible{border-color:var(--gold-hi);transform:translateY(-6px);box-shadow:0 0 0 1px #000,0 0 14px rgba(241,217,138,.9);outline:none}
+.uno-col{width:30px;height:30px;border-radius:50%;border:2px solid #f3ead6;box-shadow:0 0 0 1px #000;padding:0;cursor:pointer}
+.uno-col:hover,.uno-col:focus-visible{transform:scale(1.12);box-shadow:0 0 0 1px #000,0 0 10px rgba(241,217,138,.8);outline:none}
+.uno-last{font:italic 11px "IM Fell English",Georgia,serif;color:var(--ash);text-align:center;margin-bottom:4px}
+@media (hover:none) and (pointer:coarse){.uno-c{width:44px;height:62px;font-size:19px}.uno-top .uno-c{width:50px;height:70px}.uno-c.small{width:22px;height:32px}.uno-col{width:36px;height:36px}}
