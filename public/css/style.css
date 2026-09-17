@@ -1543,3 +1543,7 @@ html.ios .gc-root.leaderboard-open .leaderboard-panel,html.ios .gc-root.admin-op
   html.ios .dm-dock:not(.collapsed){top:calc(env(safe-area-inset-top) + 58px)}
   html.ios .gc-root.signed-on.mobile-threads-open .thread-toggle-fab{top:calc(env(safe-area-inset-top) + 49px) !important}
 }
+
+/* v118: on phones the DM toggle is pointless now that the Messages tray is its own pill, and
+   Notifications lives in the ... menu again so "Change name" isn't squeezed. Desktop unchanged. */
+@media (max-width:500px){#dmToggleBtn{display:none !important}}
