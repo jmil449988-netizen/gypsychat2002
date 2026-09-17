@@ -50,9 +50,18 @@ var NAME_RE = /^[\p{L}\p{N}\p{M}_ .'-]{2,16}$/u;
    Version history (the ones worth calling out):
      0.6.x -- invite-key beta, threads, whispers-in-windows, friends, push.
      0.7.0 -- the September overhaul: phones fit the screen, the Messages dock, the Ballot Box
-              (with @tags), the caravan wheel, the mobile scroll. Early access is aimed at
-              October 31st; that's the release that should turn this into a 1.0. */
-var APP_VERSION = 'Beta v0.7.0';
+              (with @tags), the caravan wheel, the mobile scroll.
+     0.8.0 -- the arcade and the sound pack. Five games now play inside a whisper window --
+              Tic-Tac-Toe, UNO, Hangman, Texas Hold'em and Prasta -- each one server-authoritative,
+              staked in XP, on a turn clock, with its own ladder tab on the Popularity Contest
+              (which is what the Leaderboard is called now). Every synthesised beep was replaced
+              with a recorded one: 43 files, loudness-matched, with a volume slider in the menu.
+              The UX pass added day dividers, room peek, the reconnect bar, the command palette,
+              the new-message pill and the first-run tour. Accounts got a log out button and a
+              remember-me box. Admin names carry flames everywhere they appear -- lists, menus,
+              main chat, threads. Early access is aimed at October 31st; that's the release that
+              should turn this into a 1.0. */
+var APP_VERSION = 'Beta v0.8.0';
 var WATERMARK_TEXT = 'Yogg Squad © 2027 · ' + APP_VERSION;
 if ($('madeBy')) $('madeBy').textContent = 'created by Yogg Squad © 2027 · ' + APP_VERSION;
 if ($('roomWatermark')) $('roomWatermark').textContent = WATERMARK_TEXT;
@@ -66,7 +75,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 136;
+var BUILD_NUMBER = 137;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
