@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=80">
+<link rel="stylesheet" href="./css/style.css?v=81">
 </head>
 <body>
 <div class="gc-root">
@@ -133,20 +133,18 @@
 </div>
 <div class="dm-body" id="dmBody">
 <div class="dm-inbox" id="dmInbox">
+<!-- Friend requests live at the top of the Messages inbox (v107) -- they used to be a separate
+     floating 🤝 bell with its own dropdown. Hidden until at least one request is waiting; the
+     dock's bar badge (and the phone pill's) counts them alongside unread whispers. -->
+<div class="frq-section hidden" id="frqSection">
+<div class="frq-hd">🤝 Friend requests <span class="rbadge frq-count" id="frqCount">0</span></div>
+<div class="frq-list" id="friendReqList"></div>
+</div>
 <div id="imTray" class="im-tray"></div>
 <div class="dm-empty" id="dmEmpty">No whispers yet.<br>Tap a name in the room and choose <b>Whisper</b>.</div>
 </div>
 <div id="ims"></div>
 </div>
-</div>
-
-<!-- Friend-request inbox: same reasoning as #ims/#imTray just above -- a sibling of .win, not a
-     child of it, so the bell and its dropdown stay usable even while Threads/Leaderboard/Roulette
-     have .win hidden. Hidden until signed on. -->
-<button class="friendreq-btn hidden" id="friendReqBtn" type="button" title="Friend requests" aria-label="Friend requests" aria-haspopup="true" aria-expanded="false">🤝<span class="rbadge hidden" id="friendReqBadge">0</span></button>
-<div class="friendreq-panel" id="friendReqPanel" role="menu" aria-label="Friend requests">
-<div class="frq-hd">Friend Requests</div>
-<div class="frq-list" id="friendReqList"><div class="frq-empty">No pending requests.</div></div>
 </div>
 
 <div class="picker" id="picker" role="listbox" aria-label="Emoji"></div>
@@ -421,6 +419,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=106"></script>
+<script src="./js/app.js?v=107"></script>
 </body>
 </html>
