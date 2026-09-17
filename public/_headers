@@ -1,2 +1,23 @@
+# Cloudflare Workers static-assets headers (see wrangler.jsonc: assets.directory = ./public).
+# Rules stack: a later matching rule adds to an earlier one, and "! Header" drops what an earlier
+# rule set -- so the /js, /css, /icons and /img rules first remove the no-store from /*.
+#
+# The page shell, the service worker and the manifest must never be cached by the browser -- an
+# update has to land the moment it's deployed (the service worker then tells open tabs to refresh).
+# Everything under /js and /css is version-stamped in index.html and sw.js (app.js?v=NN,
+# style.css?v=NN), so a changed file always has a new URL and the old one can be cached for a year
+# as immutable. Icons and art change rarely and get a week.
 /*
   Cache-Control: no-store
+/js/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+/css/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+/icons/*
+  ! Cache-Control
+  Cache-Control: public, max-age=604800
+/img/*
+  ! Cache-Control
+  Cache-Control: public, max-age=604800
