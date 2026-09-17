@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 116;
+var BUILD_NUMBER = 117;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -3669,12 +3669,12 @@ actions = mine ? '<button type="button" class="btn hd-cancel">Cancel</button>' :
 var inHand = g.status === 'active' && g.street !== 'between' && g.street !== 'showdown';
 var myTurn = inHand && g.turn === me.id;
 var myCards = hdHand[g.id] || myShown || [];
-html += '<div class="hd-seat them"><span class="hd-name">' + (g.dealer === peer ? '<span class="hd-btn" title="Dealer">D</span>' : '') + esc(name) + '</span><span class="hd-stack">' + theirStack + ' XP</span>' + (theirBet ? '<span class="hd-bet">' + theirBet + '</span>' : '') +
+html += '<div class="hd-seat them"><span class="hd-pname">' + (g.dealer === peer ? '<span class="hd-btn" title="Dealer">D</span>' : '') + esc(name) + '</span><span class="hd-stack">' + theirStack + ' XP</span>' + (theirBet ? '<span class="hd-bet">' + theirBet + '</span>' : '') +
 '<span class="hd-cards">' + (theirShown ? pcHtml(theirShown[0], 'sm') + pcHtml(theirShown[1], 'sm') : (inHand ? pcHtml(null, 'sm') + pcHtml(null, 'sm') : '')) + '</span></div>';
 var board = g.board || [];
 html += '<div class="hd-board">' + [0, 1, 2, 3, 4].map(function (i) { return board[i] ? pcHtml(board[i]) : '<span class="pc slot" aria-hidden="true"></span>'; }).join('') + '</div>';
 html += '<div class="hd-pot">Pot ' + (g.pot + g.challenger_bet + g.opponent_bet) + ' XP' + (g.street !== 'between' ? ' · ' + esc(g.street) : '') + '</div>';
-html += '<div class="hd-seat me"><span class="hd-name">' + (g.dealer === me.id ? '<span class="hd-btn" title="Dealer">D</span>' : '') + 'You</span><span class="hd-stack">' + myStack + ' XP</span>' + (myBet ? '<span class="hd-bet">' + myBet + '</span>' : '') +
+html += '<div class="hd-seat me"><span class="hd-pname">' + (g.dealer === me.id ? '<span class="hd-btn" title="Dealer">D</span>' : '') + 'You</span><span class="hd-stack">' + myStack + ' XP</span>' + (myBet ? '<span class="hd-bet">' + myBet + '</span>' : '') +
 '<span class="hd-cards">' + (myCards.length ? pcHtml(myCards[0]) + pcHtml(myCards[1]) : '') + '</span></div>';
 if (g.last_action) html += '<div class="uno-last">' + esc(g.last_action) + '</div>';
 if (g.status === 'active') {
