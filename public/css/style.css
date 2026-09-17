@@ -1023,8 +1023,9 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
      landing in column 1, textarea inheriting gifBtn's old auto-sized column 2, send ballooning
      into the real 1fr column 3) -- drop to 3 columns here so gif/textarea/send land right. */
   .compose{grid-template-columns:auto 1fr auto}
-  .friendreq-btn{top:auto;right:auto;bottom:8px;left:8px}
-  .friendreq-panel{top:auto;right:auto;bottom:50px;left:8px;width:calc(100vw - 16px)}
+  /* bottom offsets clear the home-indicator inset in the installed (Home Screen) app; 0 in Safari */
+  .friendreq-btn{top:auto;right:auto;bottom:calc(8px + env(safe-area-inset-bottom,0px));left:8px}
+  .friendreq-panel{top:auto;right:auto;bottom:calc(50px + env(safe-area-inset-bottom,0px));left:8px;width:calc(100vw - 16px)}
 }
 
 /* Desktop: Threads moves off the floating, vertically-centred bubble (still the mobile behaviour
@@ -1085,10 +1086,20 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
         itself can't scroll at all -- the log, threads, leaderboard and dock all scroll internally.
         The sign-on screen is left as it was: it's allowed to grow past one screen for the portrait.
         :has() is how the html/body rules key off .gc-root's class; a browser without it just keeps
-        the old behaviour. */
+        the old behaviour.
+        Sizing is a plain height:100% chain from html down, NOT 100dvh minus env() insets: in the
+        Home Screen (standalone) app the dvh/inset arithmetic came out taller than the screen and
+        clipped the status bar and footer, while Safari was fine. html's 100% is the visible area
+        in both -- Safari's layout viewport with its toolbar, the whole screen when installed --
+        and body's safe-area padding is counted INSIDE that 100% (border-box), so the frame lands
+        between the notch and the home indicator with nothing to subtract. */
   html:has(.gc-root.signed-on),body:has(.gc-root.signed-on){height:100%;overflow:hidden;overscroll-behavior:none}
-  .gc-root.signed-on{min-height:0;height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));box-sizing:border-box;overflow:hidden}
-  .gc-root.signed-on .win{height:100%}
+  body:has(.gc-root.signed-on){box-sizing:border-box}
+  .gc-root.signed-on{min-height:0;height:100%;box-sizing:border-box;overflow:hidden}
+  /* min-height:0 matters: the frame's earlier min-height of calc(100dvh - 8px) (the sign-on
+     screen's grow-to-fit floor) would otherwise hold it at full-screen height regardless, which
+     is exactly what pushed the status bar and footer off the bottom of the installed app */
+  .gc-root.signed-on .win{height:100%;min-height:0}
   /* 4. Give the room back some of its own width and height: a tighter gutter inside the frame,
         and a composer that isn't a 60px-tall block on a screen this short. The GIF/Send buttons
         stretch to the textarea's height, so shrinking it shrinks them too -- 48px is still a
