@@ -1468,3 +1468,59 @@ animation:flame-flicker .48s steps(3,jump-none) infinite}
 opacity:0;transform:translateY(6px);transition:opacity .6s ease,transform .6s ease;text-shadow:0 0 8px rgba(241,217,138,.35)}
 .rp-fortune.show{opacity:1;transform:none}
 .gc-root.mobile-roulette-open .rp-fortune{max-width:300px;font-size:17px}
+
+/* ---------- v114: Hangman + Texas Hold'em cards ----------
+   Both share the game-card chrome (.ttt-card rules above: header, status, action buttons). */
+.hm-card,.hd-card{margin:8px 4px;padding:8px 10px;border:1px solid #7a4bb0;background:linear-gradient(180deg,#221a26,#160f19);box-shadow:0 0 0 1px #000,inset 0 0 18px #000}
+.ttt-actions .btn.hm-resign,.ttt-actions .btn.hm-decline,.ttt-actions .btn.hm-cancel,.ttt-actions .btn.hd-decline,.ttt-actions .btn.hd-cancel,.ttt-actions .btn.hd-fold{color:var(--ash);border-color:#3d2a4d}
+.ttt-actions .btn.hm-accept,.ttt-actions .btn.hd-accept,.ttt-actions .btn.hd-call{color:#cdeecd;border-color:var(--leaf)}
+.ttt-actions .btn.hd-leave{color:var(--ash);border-color:#3d2a4d;font-size:10px}
+.ttt-actions .btn.hd-leave.armed{color:#fff;border-color:var(--blood);background:linear-gradient(180deg,#b3261e,#5a120e)}
+/* hangman */
+.hm-table{display:flex;align-items:center;justify-content:center;gap:14px;margin:4px 0 6px}
+.hm-gallows{width:60px;height:80px;flex:none;fill:var(--gold);shape-rendering:crispEdges;filter:drop-shadow(0 0 4px rgba(201,162,74,.35))}
+.hm-gallows .hm-man{fill:#e2c4ff}
+.hm-mid{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.hm-word{display:flex;flex-wrap:wrap;justify-content:center;gap:4px}
+.hm-ch{display:inline-flex;align-items:center;justify-content:center;width:20px;height:26px;font:700 17px Cinzel,Georgia,serif;color:var(--gold-hi);border-bottom:2px solid var(--gold-lo);text-shadow:0 1px 0 #000}
+.hm-ch.blank{color:transparent}
+.hm-tried{font:11px "IM Fell English",Georgia,serif;color:var(--ash);letter-spacing:1px;text-align:center}
+.hm-miss{font:700 10px Cinzel,Georgia,serif;letter-spacing:1px;color:#c9a3e6}
+.hm-keys{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin:4px 0 6px}
+.hm-key{height:26px;padding:0;font:700 12px Cinzel,Georgia,serif;color:#e2c4ff;background:linear-gradient(180deg,#3a2a48,#1a1320);border:1px solid #7a4bb0;border-radius:2px;cursor:pointer;box-shadow:0 1px 0 #000}
+.hm-key:hover:not([disabled]),.hm-key:focus-visible:not([disabled]){color:var(--gold-hi);border-color:var(--gold);outline:none;box-shadow:0 0 8px rgba(241,217,138,.5)}
+.hm-key[disabled]{opacity:.35;cursor:default}
+.hm-key.used{opacity:.2;text-decoration:line-through}
+.hm-solve-row{display:flex;gap:6px;margin-bottom:4px}
+.hm-solve-in{flex:1;min-width:0;font:inherit;font-size:13px;color:var(--bone);padding:4px 8px;background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;outline:none;box-shadow:inset 0 0 12px #000}
+.hm-solve-in:focus{box-shadow:inset 0 0 12px #000,0 0 0 1px #a67ad1}
+.hm-solve-row .btn{min-width:0;height:28px;padding:0 12px;font-size:11px;color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
+@media (hover:none) and (pointer:coarse){.hm-keys{grid-template-columns:repeat(7,1fr)}.hm-key{height:34px;font-size:14px}.hm-solve-in{font-size:16px}}
+/* hold'em: playing cards */
+.pc{position:relative;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:34px;height:48px;border-radius:4px;background:linear-gradient(180deg,#fbf6e8,#e9dfc6);color:#1a1410;border:1px solid #6e5323;box-shadow:0 0 0 1px #000,0 2px 4px #000;font:700 15px Cinzel,Georgia,serif;line-height:1;flex:none}
+.pc.red{color:#b3261e}
+.pc .pc-s{font-size:14px;margin-top:1px}
+.pc.sm{width:26px;height:36px;font-size:11px}.pc.sm .pc-s{font-size:10px}
+.pc.back{background:repeating-linear-gradient(45deg,#1a1320 0 4px,#3a2a48 4px 8px);border-color:#7a4bb0}
+.pc.back::after{content:"";position:absolute;inset:3px;border-radius:2px;border:1px solid rgba(226,196,255,.35)}
+.pc.slot{background:none;border:1px dashed #3d2a4d;box-shadow:none}
+.hd-seat{display:flex;align-items:center;gap:8px;font:12px "IM Fell English",Georgia,serif;color:var(--ash);margin:3px 0;min-height:36px}
+.hd-seat.me{flex-direction:row}
+.hd-name{font:700 12px Cinzel,Georgia,serif;letter-spacing:.5px;color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;display:flex;align-items:center;gap:5px}
+.hd-btn{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--gold-hi);color:#1a1410;font:700 9px Cinzel,Georgia,serif;box-shadow:0 0 0 1px #000;flex:none}
+.hd-stack{font:700 12px Cinzel,Georgia,serif;color:var(--gold-hi);white-space:nowrap;text-shadow:0 0 6px rgba(241,217,138,.4)}
+.hd-bet{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;padding:0 6px;border-radius:10px;background:radial-gradient(circle at 40% 35%,#e0402f,#7a1f17);color:#fff;font:700 11px Cinzel,Georgia,serif;box-shadow:0 0 0 1px #000,0 0 6px rgba(224,64,47,.6)}
+.hd-cards{display:flex;gap:4px;margin-left:auto}
+.hd-board{display:flex;justify-content:center;gap:5px;margin:6px 0 4px;padding:6px;background:radial-gradient(ellipse at center,#1f3a2a,#0e1a13);border:1px solid #2f5a34;border-radius:24px;box-shadow:inset 0 0 18px #000}
+.hd-pot{text-align:center;font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);margin-bottom:4px}
+.hd-actions{flex-direction:column;align-items:stretch;gap:6px}
+.hd-actions>.btn{width:100%}
+.hd-fc{display:flex;gap:6px}
+.hd-fc .btn{flex:1;min-width:0}
+.hd-raise{display:flex;flex-direction:column;gap:4px}
+.hd-presets{display:flex;gap:4px}
+.hd-presets .btn{flex:1;min-width:0;height:24px;padding:0;font-size:10px;color:var(--ash);border-color:#3d2a4d;background:linear-gradient(180deg,#2a2036,#171320)}
+.hd-raise-row{display:flex;gap:4px}
+.hd-amt{width:64px;font:inherit;font-size:13px;color:var(--bone);padding:3px 6px;background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;outline:none;text-align:center}
+.hd-raise-row .btn{flex:1;min-width:0;height:26px;font-size:11px;color:var(--gold-hi);border-color:var(--gold)}
+@media (hover:none) and (pointer:coarse){.pc{width:40px;height:56px;font-size:17px}.pc.sm{width:28px;height:40px}.hd-amt{font-size:16px;width:76px}}
