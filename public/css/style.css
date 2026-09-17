@@ -1327,18 +1327,22 @@ font:15px "IM Fell English",Georgia,serif;color:#3a2a10;text-shadow:0 1px 0 rgba
 .mention-menu.above-modal{z-index:75}
 
 /* ==================== takeover-page chrome (v77, desktop only since v78) ====================
-   While the Threads board has the whole screen on a desktop, the two floating controls that stay
-   visible -- the 💬 "back to chat" toggle -- moves into the board's own header row, at its right
-   corner, instead of keeping the offset it uses over the chat
-   window (those are measured against .win's 760px cap and against the ballot strip -- which the
-   board covers anyway -- so they landed a row too low, on top of "Create new post"). The header
-   gets a fixed 44px height so both 34px controls centre on it exactly. Phones are left alone: the
-   bubbles keep floating wherever they were dragged, and the bell stays in its bottom-left corner.
-   Last in the file so it wins over the desktop top:36px rules (hence the !importants, matching
-   the existing desktop rule for the same reason). */
+   While the Threads board has the whole screen on a desktop, the 💬 "back to chat" toggle floated
+   over the board's top-right corner rather than keeping the offset it uses over the chat window
+   (that one is measured against .win's 760px cap and against the ballot strip -- which the board
+   covers anyway -- so it landed a row too low, on top of "Create new post"). The header keeps its
+   fixed 44px height so a control centres on it exactly.
+
+   As of v104 this is only a fallback. placeThreadBtn() in app.js moves the button into the board's
+   header for real on desktop, and .in-header then styles it as a plain glyph beside the title (see
+   the v104 block at the end of this file) -- so the :not(.in-header) below is what stands down and
+   lets that happen. It is kept rather than deleted so that a desktop browser which somehow never
+   ran the move still gets a button in a sensible place instead of one parked over the board at the
+   offset meant for the chat window. Phones are left alone either way: the bubble keeps floating
+   wherever it was dragged. */
 .tp-hd{min-height:44px;box-sizing:border-box;padding-top:8px;padding-bottom:8px}
 @media (min-width:501px){
-  .gc-root.signed-on.mobile-threads-open .thread-toggle-fab{position:fixed !important;top:5px !important;right:8px !important;left:auto !important;bottom:auto !important;
+  .gc-root.signed-on.mobile-threads-open .thread-toggle-fab:not(.in-header){position:fixed !important;top:5px !important;right:8px !important;left:auto !important;bottom:auto !important;
   transform:none !important;width:34px;height:34px;font-size:17px;opacity:1;z-index:56}
 }
 
@@ -1700,3 +1704,43 @@ padding:3px 0;margin:2px 0;border-top:1px solid #3d2a4d;border-bottom:1px solid 
 .pr-x{position:absolute;top:-5px;right:-5px;width:15px;height:15px;line-height:14px;text-align:center;
 font:700 9px Georgia,serif;color:#fff;background:var(--blood);border:1px solid #000;border-radius:50%;pointer-events:none}
 @media (prefers-reduced-motion:reduce){.pr-c{transition:none}}
+
+/* ==================== v104: the Threads button joins the header (desktop only) ====================
+   Until now the Threads toggle was a self-contained bubble with its own double border, gradient
+   fill and drop shadow, parked in the top-right corner well away from the title -- it read as a
+   second, competing piece of chrome sitting beside the window rather than as part of it. On
+   desktop it now moves INTO whichever title bar is on screen and drops its box entirely: just the
+   glyph, in the same gold as the words next to it, one gap away from "Gypsy Chat 2000". The move
+   is a real DOM move done by placeThreadBtn() in app.js -- .in-header is the class it adds -- so
+   the button simply takes its place in the header's existing centred flex row and needs no
+   hand-tuned offsets to stay put when the window is resized.
+
+   Nothing here applies below 501px. On a phone the button is still the draggable, sweepable bubble
+   it has always been, still parented to .gc-root, and none of these rules can reach it. */
+@media (min-width:501px){
+  /* Beats the position:fixed !important block further up the file on specificity (two classes to
+     its one), which is why every property it overrides has to carry !important too. */
+  .thread-toggle-fab.in-header{position:static !important;top:auto !important;right:auto !important;
+  left:auto !important;bottom:auto !important;transform:none !important;
+  width:26px;height:auto;flex:none;justify-content:center;padding:0;
+  border:none;border-radius:0;background:none;box-shadow:none;
+  font-size:18px;line-height:1;color:var(--gold-hi);opacity:.92;
+  filter:drop-shadow(0 0 6px rgba(201,162,74,.5));transition:transform .15s ease,filter .15s ease,opacity .15s ease}
+  .thread-toggle-fab.in-header.ready{display:inline-flex}
+  .thread-toggle-fab.in-header:hover,.thread-toggle-fab.in-header:focus-visible{
+  border:none;box-shadow:none;outline:none;opacity:1;
+  transform:translateY(-1px) scale(1.14) !important;filter:drop-shadow(0 0 11px rgba(201,162,74,.95))}
+  /* .open (threads showing, so the glyph is 💬 "back to chat") lost its meaning once the border it
+     used to recolour is gone -- brightness is what marks it as the active state now. */
+  .thread-toggle-fab.in-header.open{opacity:1;filter:drop-shadow(0 0 10px rgba(201,162,74,.9))}
+  /* The title is flanked by a lantern on each side; hanging one more glyph off the right would
+     have pulled the whole centred row off-balance. An empty flex item the same width as the
+     button, on the left, puts the words back exactly in the middle. Scoped to .signed-on because
+     the button is hidden on the sign-on screen, where a spacer would only bias the title left. */
+  .gc-root.signed-on .win > .title::before{content:"";flex:none;width:26px}
+  .gc-root.signed-on .tp-list > .tp-hd::before{content:"";flex:none;width:22px}
+  /* An open thread's header already carries the ← back arrow on the left, so the toggle on the
+     right balances it on its own and wants no spacer. */
+  .tp-hd .thread-toggle-fab.in-header{font-size:15px;width:22px}
+}
+@media (prefers-reduced-motion:reduce){.thread-toggle-fab.in-header{transition:none}}
