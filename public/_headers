@@ -21,3 +21,6 @@
 /img/*
   ! Cache-Control
   Cache-Control: public, max-age=604800
+/sounds/*
+  ! Cache-Control
+  Cache-Control: public, max-age=604800

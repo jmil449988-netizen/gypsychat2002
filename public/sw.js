@@ -3,8 +3,8 @@ Chat itself always needs a connection; this only makes the UI load offline.
 v2: bumped the cache name and hardened the fetch/install paths to bypass the HTTP cache — iOS
 Safari in particular can hold onto an old app.js/index.html far more stubbornly than desktop
 Chrome, which silently ran stale code (missing new features) even though the deploy succeeded. */
-var CACHE = 'gc2000-v155';
-var SHELL = ['./', './index.html', './css/style.css?v=99', './js/appconfig.js?v=2', './js/app.js?v=124', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png'];
+var CACHE = 'gc2000-v156';
+var SHELL = ['./', './index.html', './css/style.css?v=99', './js/appconfig.js?v=2', './js/app.js?v=125', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png', './sounds/airhorn.mp3', './sounds/badum.mp3', './sounds/boo.mp3', './sounds/burp.mp3', './sounds/cheers.mp3', './sounds/clap.mp3', './sounds/crickets.mp3', './sounds/cry.mp3', './sounds/friend-logon.mp3', './sounds/gunshot.mp3', './sounds/howl.mp3', './sounds/kiss.mp3', './sounds/knock.mp3', './sounds/laugh.mp3', './sounds/slap.mp3', './sounds/sneeze.mp3'];
 self.addEventListener('install', function (e) {
 e.waitUntil(
 caches.open(CACHE).then(function (c) {
