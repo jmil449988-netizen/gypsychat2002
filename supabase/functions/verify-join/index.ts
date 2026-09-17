@@ -5,8 +5,14 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // Verifies a join attempt before letting an anonymous identity fully enter the room:
 //   1. Confirms the caller has a valid Supabase session (JWT).
 //   2. Verifies their Cloudflare Turnstile token server-side against the secret key.
-//      A missing/failed token gets this brand-new identity permanently muted immediately --
-//      it either skipped the widget or failed the challenge, so it is not a normal join.
+//      A missing/failed token REFUSES the join (the client shows "Verification failed") and
+//      nothing else -- it no longer mutes the account permanently. That used to be
+//      the rule, and on 2026-09-17 it muted a real person: a second tap on the join button
+//      re-sent the same single-use token, siteverify answered "timeout-or-duplicate", and the
+//      account was muted for good before the first (successful) join had even finished. A
+//      failed human check is not proof of a bot -- tokens expire, get re-used by a double
+//      submit, or fail to verify over a network blip -- so it costs a retry, not the account.
+//      The error codes are logged so a real pattern can still be spotted.
 //   3. Logs the join under a salted hash of the client IP (never the raw IP) and, if this is
 //      the 4th+ new identity from that same IP within a short window, applies a brief shadow
 //      cooldown -- enough friction to blunt "clear storage, rejoin" mute-dodging without
@@ -73,16 +79,15 @@ Deno.serve(async (req) => {
       });
       const verifyJson = await verifyRes.json();
       turnstileOk = verifyJson && verifyJson.success === true;
+      if (!turnstileOk) console.warn("turnstile siteverify failed", userId, JSON.stringify(verifyJson && verifyJson["error-codes"]));
+    } else {
+      console.warn("turnstile token missing", userId);
     }
 
     if (!turnstileOk) {
-      await admin.from("chat_moderation").upsert({
-        user_id: userId,
-        muted: true,
-        muted_permanent: true,
-        muted_at: new Date().toISOString(),
-      }, { onConflict: "user_id" });
-
+      // No moderation write at all: a cooldown here would land on an account whose FIRST join
+      // may have just succeeded (the double-submit case), and gc_check_and_record_send counts a
+      // send during a cooldown as an offense -- the person would be punished for typing hello.
       return Response.json({ ok: false, reason: "turnstile_failed" }, { status: 403, headers: corsHeaders });
     }
 
