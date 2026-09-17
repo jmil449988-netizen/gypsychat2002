@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 121;
+var BUILD_NUMBER = 122;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -3138,6 +3138,7 @@ if ($('roomWatermark')) $('roomWatermark').classList.add('hidden');
 if ($('statusBtn')) $('statusBtn').classList.add('hidden');
 if ($('avaBtn')) $('avaBtn').classList.add('hidden');
 if ($('saveBtn')) $('saveBtn').classList.add('hidden');
+if ($('logoutBtn')) $('logoutBtn').classList.add('hidden');
 if ($('moreBtn')) { $('moreBtn').classList.add('hidden'); closeMoreMenu(); }
 if (st) { st.classList.remove('renamable'); st.removeAttribute('title'); }
 Object.keys(wins).forEach(function (k) { wins[k].el.remove(); if (wins[k].tab) wins[k].tab.remove(); }); wins = {};
@@ -5603,6 +5604,13 @@ sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
 var s = await sb.auth.getSession(); // reads localStorage only -- never creates an account
 var user = s.data.session && s.data.session.user;
 if (!user) return;
+/* v122: "Remember me on this device" unticked at the last sign-on means: never auto-enter.
+   An email account is signed out here so the password is asked again; an anonymous character
+   has nowhere else to live, so its session stays and the screen offers "Enter as X" instead. */
+var remember = true; try { remember = localStorage.getItem('gc_remember') !== '0'; } catch (e) {}
+if ($('rememberMe')) $('rememberMe').checked = remember;
+var isEmailUser = user.is_anonymous === false || !!user.email;
+if (!remember && isEmailUser) { try { await sb.auth.signOut(); } catch (e) {} return; }
 var p = await sb.from('profiles').select('name').eq('user_id', user.id).maybeSingle();
 var n = p.data && p.data.name;
 if (!n) return;
@@ -5611,6 +5619,7 @@ var sn = $('sn');
 sn.value = n; sn.readOnly = true; sn.classList.add('locked');
 if (!emailMode) $('join').textContent = 'Enter as ' + n;
 if ($('snNote')) $('snNote').classList.remove('hidden');
+if (!remember) return; // the character is remembered, entering the room is not
 /* Reconnect straight into the room instead of leaving a returning visitor sitting on the
    login screen every time they refresh. A device that reaches this point already has a
    session AND a claimed name, which only happens after successfully joining at least once
@@ -5655,6 +5664,44 @@ el.classList.remove('hidden');
 } catch (e) { peekChannel = null; }
 }
 async function stopPeek() { if (!peekChannel) return; var ch = peekChannel; peekChannel = null; try { await sb.removeChannel(ch); } catch (e) {} }
+
+/* ---------- v122: Log out ----------
+   Ends the session on this device and returns to the sign-on screen. An email account just
+   signs back in later. An anonymous character has no other home, so the dialog says so and
+   offers "Save with email" first; going ahead anyway drops the session (the name stays reserved
+   30 days, or comes straight back to the same invite key -- see claim_name). */
+function openLogout() {
+if (!me) return;
+var body = $('logoutBody'), saveB = $('logoutSave'), goB = $('logoutGo');
+if (isAnonAccount) {
+body.innerHTML = '<b>' + esc(me.name) + '</b> lives only in this browser. Log out now and this character, your friends list and your whispers are left behind — unless you save it with an email first.';
+saveB.classList.remove('hidden'); goB.textContent = 'Log out anyway';
+} else {
+body.innerHTML = 'You will be signed out of <b>' + esc(me.name) + '</b> on this device. Sign back in any time with your email and password.';
+saveB.classList.add('hidden'); goB.textContent = 'Log out';
+}
+$('logoutOverlay').classList.remove('hidden');
+$('logoutCancel').focus();
+}
+function closeLogout() { $('logoutOverlay').classList.add('hidden'); }
+async function doLogout() {
+closeLogout();
+var wasAnon = isAnonAccount, name = me && me.name;
+leaveRoom('', true);
+try { if (sb) await sb.auth.signOut(); } catch (e) { /* the local session is cleared either way */ }
+unlockName();
+if (wasAnon) { try { localStorage.removeItem('gc_tour_seen'); } catch (e) {} }
+else if (!emailMode && adminToggle) adminToggle.click(); // an email account is going to sign back in with email -- open that form
+fail('You are logged out' + (name ? ' of ' + name : '') + '.');
+if ($('loginTag')) $('loginTag').textContent = 'Stay awhile, and chat.';
+peekRoom();
+}
+if ($('logoutBtn')) $('logoutBtn').onclick = function () { closeMoreMenu(); openLogout(); };
+if ($('logoutCancel')) $('logoutCancel').onclick = closeLogout;
+if ($('logoutGo')) $('logoutGo').onclick = doLogout;
+if ($('logoutSave')) $('logoutSave').onclick = function () { closeLogout(); openSaveAccount(); };
+if ($('logoutOverlay')) $('logoutOverlay').onclick = function (e) { if (e.target === $('logoutOverlay')) closeLogout(); };
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('logoutOverlay') && !$('logoutOverlay').classList.contains('hidden')) closeLogout(); });
 
 if ($('snReset')) {
 $('snReset').onclick = async function () {
@@ -5709,6 +5756,7 @@ return (a + b + num).slice(0, 16);
 }
 async function join(opts) {
 opts = opts || {};
+if (!opts.resuming && $('rememberMe')) { try { localStorage.setItem('gc_remember', $('rememberMe').checked ? '1' : '0'); } catch (e) {} }
 /* resuming: called automatically by restoreIdentity() for a device that already holds a
    session and a claimed name, to reconnect on page load/refresh without ever showing the login
    screen. Treated as its own mode rather than just "the non-email path with blanks filled in",
@@ -6007,6 +6055,7 @@ if ($('moreBtn')) $('moreBtn').classList.remove('hidden');
    below) are only offered to them -- an account with an email attached is already portable. */
 isAnonAccount = user.is_anonymous !== false && !user.email;
 if ($('saveBtn')) $('saveBtn').classList.toggle('hidden', !isAnonAccount);
+if ($('logoutBtn')) $('logoutBtn').classList.remove('hidden');
 setSignedOnStatus();
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
 setTimeout(startTour, 1500);
