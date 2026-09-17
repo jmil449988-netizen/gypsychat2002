@@ -1632,7 +1632,7 @@ html.ios .conn-bar{top:calc(env(safe-area-inset-top) + 46px)}
 /* v121: "/" command palette rows -- command on the left, what it does on the right */
 .cmd-menu{min-width:240px;max-width:min(360px,calc(100vw - 12px));max-height:230px}
 .cmd-menu button{display:flex;align-items:baseline;gap:10px}
-.cmd-menu .cmd-c{flex:none;font:700 12px Cinzel,Georgia,serif;color:var(--gold)}
+.cmd-menu .cmd-c{flex:none;font:700 12px Cinzel,Georgia,serif;color:var(--gold);text-transform:none;letter-spacing:0}
 .cmd-menu .cmd-c i{font:italic 11px "IM Fell English",Georgia,serif;color:var(--ash)}
 .cmd-menu .cmd-d{flex:1;min-width:0;font-weight:normal;font-size:11px;color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cmd-menu button.active .cmd-c{color:var(--gold-hi)}
