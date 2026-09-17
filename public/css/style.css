@@ -1467,8 +1467,8 @@ animation:flame-flicker .48s steps(3,jump-none) infinite}
 /* spin the wheel */
 .rp-wheel{cursor:pointer;outline:none}
 .rp-wheel:focus-visible{filter:drop-shadow(0 0 14px rgba(241,217,138,.7)) drop-shadow(0 6px 10px #000)}
-.rp-wheel.spinning{animation:rp-spin-fast 2.6s cubic-bezier(.12,.75,.15,1) 1 !important}
-@keyframes rp-spin-fast{to{transform:rotate(1800deg)}}
+.rp-wheel.spinning{animation:rp-spin-fast 4s cubic-bezier(.12,.75,.15,1) 1 !important} /* v128: 4 s to match the recorded ratchet */
+@keyframes rp-spin-fast{to{transform:rotate(2520deg)}}
 .rp-hint{margin-top:14px;font:700 10px Cinzel,Georgia,serif;letter-spacing:2px;text-transform:uppercase;color:var(--ash);opacity:.8}
 .rp-hint-mobile{display:none}
 @media (hover:none) and (pointer:coarse){.rp-hint-desktop{display:none}.rp-hint-mobile{display:inline}}
