@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 127;
+var BUILD_NUMBER = 128;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -488,8 +488,9 @@ osc.connect(g); g.connect(masterOut(ctx)); osc.start(t0); osc.stop(t0 + dur + 0.
    missing or fails to decode falls back to its synth recipe, so nothing ever goes silent -- which
    also means a new recording can be added just by dropping the file in and listing it here. */
 var SOUND_FILES = { slap: 1, kiss: 1, laugh: 1, cry: 1, gunshot: 1, clap: 1, boo: 1, airhorn: 1, badum: 1, crickets: 1, knock: 1, howl: 1, sneeze: 1, burp: 1, cheers: 1, spit: 1, fart: 1, drumroll: 1,
-'friend-logon': 1, 'login': 1, 'friend-request': 1, 'game-invite': 1, 'pm': 1, ding: 1, buzz: 1, turn: 1, tick: 1, tock: 1 };
-var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5 }; // the punchy ones sat a few dB under the rest after limiting
+'friend-logon': 1, 'login': 1, 'friend-request': 1, 'game-invite': 1, 'pm': 1, ding: 1, buzz: 1, turn: 1, tick: 1, tock: 1,
+coin: 1, win: 1, lose: 1, 'hm-right': 1, 'hm-wrong': 1, levelup: 1, intro: 1, logout: 1, signoff: 1, unroll: 1, wheel: 1 };
+var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5, unroll: 0.6, signoff: 0.8, coin: 0.9 }; // the punchy ones sat a few dB under the rest after limiting
 var soundBuf = {}, soundFail = {};
 function loadSoundFile(name) {
 if (soundBuf[name]) return soundBuf[name];
@@ -3454,7 +3455,7 @@ if (!forMe) return;
 if (isNew) w.snippet = name + ' challenges you to Tic-Tac-Toe';
 else if (g.status === 'finished') w.snippet = g.result === 'draw' ? 'Tic-Tac-Toe: a draw' : (g.winner === me.id ? 'Tic-Tac-Toe: you won!' : 'Tic-Tac-Toe: ' + name + ' won');
 else w.snippet = 'Tic-Tac-Toe: your move';
-gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Tic-Tac-Toe', seconds: turnSecondsLeft(g),
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Tic-Tac-Toe', seconds: turnSecondsLeft(g), result: g.result === 'draw' ? 'draw' : (g.winner === me.id ? 'win' : 'lose'),
 accept: function () { gameCall('game_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { gameCall('game_respond', { p_game: g.id, p_accept: false }, peer); } });
 }
 async function loadGames() {
@@ -3617,7 +3618,7 @@ if (!forMe) return;
 if (isNew) w.snippet = name + ' challenges you to UNO';
 else if (g.status === 'finished') w.snippet = g.winner === me.id ? 'UNO: you won!' : 'UNO: ' + name + ' won';
 else w.snippet = 'UNO: your turn';
-gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'UNO', seconds: turnSecondsLeft(g),
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'UNO', seconds: turnSecondsLeft(g), result: g.winner === me.id ? 'win' : 'lose',
 accept: function () { unoCall('uno_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { unoCall('uno_respond', { p_game: g.id, p_accept: false }, peer); } });
 }
 function unoHandArrived(row) {
@@ -3747,12 +3748,17 @@ var prev = hmGames[g.id]; hmGames[g.id] = g;
 var peer = gamePeer(g), name = gamePeerName(g);
 var w = ensureWin(peer, name);
 renderHmCard(g);
+/* v128: a guess landed (either side's) -- a miss or a hit, before any turn/finish nudge */
+if (prev && prev.status === 'active' && g.status !== 'pending') {
+if ((g.misses || 0) > (prev.misses || 0)) playSound('hm-wrong');
+else if (g.status === 'active' && g.mask !== prev.mask) playSound('hm-right');
+}
 var forMe = (isNew && g.opponent_id === me.id) || (g.status === 'active' && g.turn === me.id && (!prev || prev.turn !== me.id)) || (g.status === 'finished' && (!prev || prev.status !== 'finished'));
 if (!forMe) return;
 if (isNew) w.snippet = name + ' challenges you to Hangman';
 else if (g.status === 'finished') w.snippet = g.winner === me.id ? 'Hangman: you won!' : 'Hangman: ' + name + ' won';
 else w.snippet = 'Hangman: your turn';
-gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Hangman', seconds: turnSecondsLeft(g),
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Hangman', seconds: turnSecondsLeft(g), result: g.winner === me.id ? 'win' : 'lose',
 accept: function () { hmCall('hangman_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { hmCall('hangman_respond', { p_game: g.id, p_accept: false }, peer); } });
 }
 /* ---------- v121: toasts ----------
@@ -3788,7 +3794,7 @@ return t;
    'challenge' | 'turn' | 'finished', game: 'UNO', accept: fn, decline: fn, seconds: n }. */
 function gameNudge(w, peer, info) {
 info = info || {};
-playSound(info.kind === 'turn' ? 'turn' : (info.kind === 'challenge' ? 'challenge' : 'ding'));
+playSound(info.kind === 'turn' ? 'turn' : (info.kind === 'challenge' ? 'challenge' : (info.kind === 'finished' && info.result === 'win' ? 'win' : (info.kind === 'finished' && info.result === 'lose' ? 'lose' : 'ding'))));
 if (w.minimized || document.activeElement !== w.ta) {
 unread[peer] = (unread[peer] || 0) + 1; renderPeople();
 if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
@@ -3962,7 +3968,7 @@ if (!forMe) return;
 if (isNew) w.snippet = name + ' wants to play Hold’em for ' + g.buy_in + ' XP';
 else if (g.status === 'finished') w.snippet = 'Hold’em: ' + (gameMyPoints(g) >= 0 ? '+' : '') + gameMyPoints(g) + ' XP';
 else w.snippet = 'Hold’em: your move';
-gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Hold’em', seconds: turnSecondsLeft(g),
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Hold’em', seconds: turnSecondsLeft(g), result: gameMyPoints(g) > 0 ? 'win' : (gameMyPoints(g) < 0 ? 'lose' : 'draw'),
 accept: function () { hdCall('holdem_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { hdCall('holdem_respond', { p_game: g.id, p_accept: false }, peer); } });
 }
 function hdHandArrived(row) {
@@ -5034,13 +5040,14 @@ if (!wheelEl || wheelSpinning) return;
 wheelSpinning = true;
 if (fortuneEl) fortuneEl.classList.remove('show');
 wheelEl.classList.add('spinning');
-var i = 0, clicks = setInterval(function () { if (i++ < 18) tickSound(i % 2 === 0); }, 120);
+var clicks = null;
+if (!soundMuted && !playFile('wheel')) { var i = 0; clicks = setInterval(function () { if (i++ < 28) tickSound(i % 2 === 0); }, 120); } // v128: the recorded ratchet; synth clicks only if the file is missing
 setTimeout(function () {
-clearInterval(clicks);
+if (clicks) clearInterval(clicks);
 wheelEl.classList.remove('spinning'); wheelSpinning = false;
 if (fortuneEl) { fortuneEl.textContent = '“' + FORTUNES[Math.floor(Math.random() * FORTUNES.length)] + '”'; fortuneEl.classList.add('show'); }
 playSound('ding');
-}, 2600);
+}, 4000);
 }
 if (wheelEl) {
 wheelEl.setAttribute('role', 'button'); wheelEl.setAttribute('tabindex', '0'); wheelEl.removeAttribute('aria-hidden'); wheelEl.setAttribute('aria-label', 'Spin the wheel for a fortune');
@@ -5350,7 +5357,7 @@ if (ballotRemove) ballotRemove.onclick = async function () { if (await removeBal
    on a phone) and the prompt dialog. */
 var ballotMobile = $('ballotMobile'), ballotMobileText = $('ballotMobileText'), ballotMobileParch = $('ballotMobileParch');
 var ballotMobileRoller = $('ballotMobileRoller'), ballotMobileRemove = $('ballotMobileRemove'), ballotBtn = $('ballotBtn');
-var mobileBallotTimer = null, mobileBallotHide = null, mobileBallotHeld = false, mobileBallotShowing = null;
+var mobileBallotTimer = null, mobileBallotHide = null, mobileBallotHeld = false, mobileBallotShowing = null, lastUnrollAt = 0;
 var MOBILE_BALLOT_EVERY = 15000, MOBILE_BALLOT_FIRST = 5000, MOBILE_BALLOT_HOLD = 6000, MOBILE_BALLOT_GLIDE_PX_PER_S = 45;
 function mobileBallotActive() { return !!ballotMobile; } // v123: the unrolling scroll is the one note display on every width now (the parchment header strip is retired)
 function rollUpMobileBallot() {
@@ -5369,6 +5376,7 @@ ballotMobileText.style.animation = 'none'; ballotMobileText.style.animationPlayS
 if (ballotMobileRemove) ballotMobileRemove.classList.toggle('hidden', !(isAdmin && note));
 clearTimeout(mobileBallotHide);
 ballotMobile.classList.add('open');
+if (me && note && !document.hidden && Date.now() - lastUnrollAt > 60000) { lastUnrollAt = Date.now(); playSound('unroll'); } // v128
 /* once unrolled (transition in style.css, ~.5s), decide whether the text needs to glide */
 mobileBallotHide = setTimeout(function () {
 var room = ballotMobileParch ? ballotMobileParch.clientWidth - 24 : 0;
@@ -5732,6 +5740,7 @@ function closeLogout() { $('logoutOverlay').classList.add('hidden'); }
 async function doLogout() {
 closeLogout();
 var wasAnon = isAnonAccount, name = me && me.name;
+playSound('logout');
 leaveRoom('', true);
 try { if (sb) await sb.auth.signOut(); } catch (e) { /* the local session is cleared either way */ }
 unlockName();
@@ -5969,7 +5978,7 @@ if (d.to == null) { if (d.typing === false) clearRoomTyping(d.from); else markRo
 else if (d.to === me.id) { if (d.typing === false) clearImTyping(d.from); else markImTyping(d.from, d.name); }
 // d.to pointing at someone else's whisper isn't ours -- ignore, same as buzz's own 'to' above.
 });
-channel.on('presence', { event: 'leave' }, function (p) { if (p.leftPresences[0] && p.key !== me.id) addSys(p.leftPresences[0].name + ' has left the room.'); });
+channel.on('presence', { event: 'leave' }, function (p) { if (p.leftPresences[0] && p.key !== me.id) { addSys(p.leftPresences[0].name + ' has left the room.'); playSound('signoff'); } });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + (C.ROOM || 'main') }, function (p) { handleMessage(p.new); });
 /* Main-room housekeeping (messages_trim_room, see schema.sql) deletes the oldest room message
    every time the 100-cap is exceeded by a new one, so everyone else's log needs to drop that row
@@ -6040,9 +6049,13 @@ channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_
    scoped to a room server-side (see the comment above), so without that check anyone accumulating
    reactions in a thread anywhere would spam every open room with a name nobody here recognizes. */
 channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_stats' }, function (p) {
-var prevLevel = userStats[p.new.user_id] ? userStats[p.new.user_id].level : null;
+var prevRow = userStats[p.new.user_id], prevLevel = prevRow ? prevRow.level : null;
 userStats[p.new.user_id] = p.new;
 refreshLevelBadges(p.new.user_id);
+if (me && p.new.user_id === me.id && prevRow) { // v128: my own XP landing -- a coin, or the level-up fanfare
+if (p.new.level > prevLevel) playSound('levelup');
+else if (xpOf(p.new) > xpOf(prevRow)) playSound('coin');
+}
 if (prevLevel != null && p.new.level > prevLevel && people[p.new.user_id]) {
 addSys('🎉 ' + people[p.new.user_id].name + ' reached Level ' + p.new.level + '!');
 }
@@ -6103,7 +6116,10 @@ if ($('saveBtn')) $('saveBtn').classList.toggle('hidden', !isAnonAccount);
 if ($('logoutBtn')) $('logoutBtn').classList.remove('hidden');
 setSignedOnStatus();
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
-playSound('signon'); preloadSounds();
+/* v128: the lobby intro plays on arrival, but not on every refresh -- once per half hour per device; the plain login sound covers the rest */
+var introAt = 0; try { introAt = +localStorage.getItem('gc_intro_at') || 0; } catch (e) {}
+if (Date.now() - introAt > 30 * 60000) { try { localStorage.setItem('gc_intro_at', String(Date.now())); } catch (e) {} playSound('intro'); } else playSound('signon');
+preloadSounds();
 setTimeout(startTour, 1500);
 /* One-time note about the friends-only whisper rule (friends_only_whispers.sql), since it changes
    what a name menu's Whisper does for everyone who was here before it. */
