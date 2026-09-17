@@ -1679,3 +1679,24 @@ html.ios .toasts{top:calc(env(safe-area-inset-top) + 82px)}
 .tp-op.admin .nmt{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;padding:4px;margin:-4px 0}
 .tp-op.admin .nmt::before{left:0;right:0;bottom:7px}
 .tp-op.admin .nmt::after{top:4px;bottom:4px}
+
+/* ==================== Prasta (Gilet) card, v136 ====================
+   Three cards a side. Your own row is tappable during your draw: a picked card lifts and shows an
+   ✕, and the Change button counts them. Reuses the Hold'em .pc playing cards. */
+.pr-card{margin:6px 0 2px;padding:6px 8px 8px;background:linear-gradient(180deg,#221a26,#141017);
+border:2px double #7a4bb0;outline:1px solid #000;border-radius:10px;box-shadow:0 0 0 1px #000,0 3px 10px #000}
+.pr-seat{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:3px 0}
+.pr-seat .pr-who{font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:#e2c4ff;min-width:52px}
+.pr-seat.me .pr-who{color:var(--gold-hi)}
+.pr-cards{display:flex;gap:4px;align-items:flex-end}
+.pr-name{font:italic 11px "IM Fell English",Georgia,serif;color:var(--ash)}
+.pr-pot{text-align:center;font:700 10px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);
+padding:3px 0;margin:2px 0;border-top:1px solid #3d2a4d;border-bottom:1px solid #3d2a4d}
+.pr-c{position:relative;display:inline-block;transition:transform .12s ease}
+.pr-c.pickable{cursor:pointer}
+.pr-c.pickable:hover,.pr-c.pickable:focus-visible{transform:translateY(-3px);outline:none}
+.pr-c.picked{transform:translateY(-6px)}
+.pr-c.picked .pc{box-shadow:0 0 0 1px #000,0 0 0 2px var(--blood),0 3px 8px #000;filter:brightness(.72)}
+.pr-x{position:absolute;top:-5px;right:-5px;width:15px;height:15px;line-height:14px;text-align:center;
+font:700 9px Georgia,serif;color:#fff;background:var(--blood);border:1px solid #000;border-radius:50%;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.pr-c{transition:none}}
