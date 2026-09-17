@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=94">
+<link rel="stylesheet" href="./css/style.css?v=95">
 </head>
 <body>
 <div class="gc-root">
@@ -74,6 +74,7 @@
 </div>
 <div class="turnstile-wrap" id="turnstileWrap"><div class="cf-turnstile" id="cfTurnstile" data-sitekey="0x4AAAAAAEyldNKwDh4-t-S5" data-theme="dark" data-callback="onTurnstileSuccess" data-expired-callback="onTurnstileExpired" data-error-callback="onTurnstileExpired"></div></div>
 <div class="err" id="err"></div>
+<div class="room-peek hidden" id="roomPeek" aria-live="polite"></div>
 <button class="btn" id="join" style="height:32px">Enter the room</button>
 <div class="admin-toggle-wrap"><button type="button" class="admin-toggle" id="adminToggle">Sign in with email</button></div>
 <div class="madeby" id="gateNote">Testing is invite-only right now. No key? Ask whoever sent you here.</div>
@@ -83,6 +84,7 @@
 </div>
 
 <div class="log sunk hidden" id="log" aria-live="polite" aria-label="Chat messages"></div>
+<button type="button" class="new-pill hidden" id="newMsgPill" aria-live="polite">1 new message ↓</button>
 <!-- The Ballot Box as a scroll, for every screen without the right-hand gutter (see .bp-mscroll in
      style.css and "the Ballot Box on a phone" in app.js): a rolled-up parchment tucked into the
      top-right corner of the log that unrolls every 15 seconds with one anonymous note on it, then
@@ -103,7 +105,7 @@
 </div>
 </div>
 
-<div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status"><span class="btn-icon">●</span><span class="popover-label">Status</span></button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs"><span class="btn-icon">💬</span><span class="popover-label">Messages</span></button><button class="cell ballotbtn" id="ballotBtn" type="button" title="Drop an anonymous note in the Ballot Box" aria-label="Drop a note in the Ballot Box"><span class="btn-icon">📜</span><span class="popover-label">Ballot Box</span></button><button class="cell leaderboardbtn" id="leaderboardBtn" type="button" title="Popularity Contest" aria-label="Popularity Contest"><span class="btn-icon">🏆</span><span class="popover-label">Popularity Contest</span></button><button class="cell morebtn hidden" id="moreBtn" type="button" title="More options" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button><div class="status-popover" id="statusPopover" role="menu" aria-label="More options"><button class="cell avabtn hidden" id="avaBtn" type="button" title="Set your profile picture" aria-label="Set your profile picture"><span class="ava-thumb" id="avaThumb">＋</span><span class="popover-label">Picture</span></button><input type="file" id="avaFile" class="hidden" accept="image/*,.heic,.heif"><button class="cell savebtn hidden" id="saveBtn" type="button" title="Save your character with an email" aria-label="Save your character with an email"><span class="btn-icon">🔑</span><span class="popover-label">Save (email)</span></button><button class="cell notifbtn" id="notifBtn" type="button" title="Turn on notifications for whispers & mentions" aria-label="Toggle notifications"><span class="btn-icon">🔕</span><span class="popover-label">Notifications</span></button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds"><span class="btn-icon">🔊</span><span class="popover-label">Sound</span></button><button class="cell whisperbtn" id="whisperBtn" type="button" title="Only friends can whisper you — click to allow everyone" aria-label="Who can whisper you" aria-pressed="false"><span class="btn-icon">🔒</span><span class="popover-label">Whispers: Friends only</span></button><button class="cell bugbtn hidden" id="bugBtn" type="button" title="Report a bug" aria-label="Report a bug"><span class="btn-icon">🐞</span><span class="popover-label">Report a bug</span></button><button class="cell reportsbtn hidden" id="reportsBtn" type="button" title="Review user and bug reports" aria-label="Reports"><span class="btn-icon">🛡️</span><span class="popover-label">Reports</span><span class="rbadge hidden" id="reportsBadge">0</span></button><div class="popover-version" id="popoverVersion" aria-hidden="true"></div></div></div>
+<div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status"><span class="btn-icon">●</span><span class="popover-label">Status</span></button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs"><span class="btn-icon">💬</span><span class="popover-label">Messages</span></button><button class="cell ballotbtn" id="ballotBtn" type="button" title="Drop an anonymous note in the Ballot Box" aria-label="Drop a note in the Ballot Box"><span class="btn-icon">📜</span><span class="popover-label">Ballot Box</span></button><button class="cell leaderboardbtn" id="leaderboardBtn" type="button" title="Popularity Contest" aria-label="Popularity Contest"><span class="btn-icon">🏆</span><span class="popover-label">Popularity Contest</span></button><button class="cell morebtn hidden" id="moreBtn" type="button" title="More options" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button><div class="status-popover" id="statusPopover" role="menu" aria-label="More options"><div class="pop-hd" aria-hidden="true">Profile</div><button class="cell avabtn hidden" id="avaBtn" type="button" title="Set your profile picture" aria-label="Set your profile picture"><span class="ava-thumb" id="avaThumb">＋</span><span class="popover-label">Picture</span></button><input type="file" id="avaFile" class="hidden" accept="image/*,.heic,.heif"><button class="cell savebtn hidden" id="saveBtn" type="button" title="Save your character with an email" aria-label="Save your character with an email"><span class="btn-icon">🔑</span><span class="popover-label">Save (email)</span></button><div class="pop-hd" aria-hidden="true">Settings</div><button class="cell notifbtn" id="notifBtn" type="button" title="Turn on notifications for whispers & mentions" aria-label="Toggle notifications"><span class="btn-icon">🔕</span><span class="popover-label">Notifications</span></button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds"><span class="btn-icon">🔊</span><span class="popover-label">Sound</span></button><button class="cell whisperbtn" id="whisperBtn" type="button" title="Only friends can whisper you — click to allow everyone" aria-label="Who can whisper you" aria-pressed="false"><span class="btn-icon">🔒</span><span class="popover-label">Whispers: Friends only</span></button><div class="pop-hd" aria-hidden="true">Help</div><button class="cell bugbtn hidden" id="bugBtn" type="button" title="Report a bug" aria-label="Report a bug"><span class="btn-icon">🐞</span><span class="popover-label">Report a bug</span></button><button class="cell reportsbtn hidden" id="reportsBtn" type="button" title="Review user and bug reports" aria-label="Reports"><span class="btn-icon">🛡️</span><span class="popover-label">Reports</span><span class="rbadge hidden" id="reportsBadge">0</span></button><div class="popover-version" id="popoverVersion" aria-hidden="true"></div></div></div>
 <div class="room-footer hidden" id="roomWatermark" aria-live="polite"></div>
 </div>
 
@@ -271,7 +273,7 @@
 <textarea id="tpReplyBody" class="sunk" maxlength="1000" placeholder="Reply..."></textarea>
 <div class="tp-preview-wrap hidden" id="tpReplyPreviewWrap"><img class="tp-preview-img" id="tpReplyPreviewImg" alt="Selected image"><button class="tp-img-remove" type="button" id="tpReplyImgRemove" aria-label="Remove image">✕</button></div>
 <div class="tp-composebar">
-<button class="btn tp-img" type="button" id="tpReplyImgBtn" title="Attach image">🖼️</button>
+<button class="btn tp-img" type="button" id="tpReplyImgBtn" title="Attach image" aria-label="Attach image">🖼️</button>
 <button class="btn tp-img" type="button" id="tpReplyGifBtn" title="Search GIFs">GIF</button>
 <input type="file" id="tpReplyImgFile" accept="image/*,.heic,.heif" class="hidden">
 </div>
@@ -418,6 +420,7 @@
      the controllerchange listener near the bottom of app.js). Deliberately a tap-to-refresh
      prompt rather than an automatic reload -- a fresh deploy landing on someone mid-message
      shouldn't yank the page out from under them. -->
+<div class="conn-bar" id="connBar" role="status" aria-live="polite"><span class="dot"></span><span id="connText">Reconnecting…</span></div>
 <div class="update-banner hidden" id="updateBanner" role="status">
 <span>A newer version of Gypsy Chat is ready.</span>
 <button type="button" class="btn" id="updateBannerBtn">Refresh</button>
@@ -430,6 +433,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=120"></script>
+<script src="./js/app.js?v=121"></script>
 </body>
 </html>
