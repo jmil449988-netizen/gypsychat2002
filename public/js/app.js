@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 124;
+var BUILD_NUMBER = 125;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -443,8 +443,14 @@ gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
 osc.connect(gain); gain.connect(masterOut(ctx));
 osc.start(t0); osc.stop(t0 + dur + 0.02);
 }
+var SOUND_KIND_FILE = { signon: 'login', friendon: 'friend-logon', whisper: 'pm', friendreq: 'friend-request', challenge: 'game-invite' };
+var SOUND_KIND_SYNTH = { friendon: 'signon', whisper: 'ding', friendreq: 'ding', challenge: 'ding' }; // what each new kind sounds like without its file
 function playSound(kind) {
 if (soundMuted) return;
+if (SOUND_KIND_FILE[kind] && playFile(SOUND_KIND_FILE[kind], function () { playSynth(SOUND_KIND_SYNTH[kind] || kind); })) return;
+playSynth(SOUND_KIND_SYNTH[kind] || kind);
+}
+function playSynth(kind) {
 if (kind === 'signon') { tone(660, 0.09, 0, 'triangle'); tone(880, 0.12, 0.09, 'triangle'); }
 else if (kind === 'ding') { tone(1050, 0.14, 0, 'sine'); }
 else if (kind === 'turn') { tone(880, 0.08, 0, 'triangle', 0.14); tone(1320, 0.16, 0.09, 'triangle', 0.14); } // v121: "your move" -- a rising two-note chime, distinct from the whisper ding
@@ -474,6 +480,37 @@ if (wobble) { var lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequ
 g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol || 0.15, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
 osc.connect(g); g.connect(masterOut(ctx)); osc.start(t0); osc.stop(t0 + dur + 0.02);
 }
+/* ---------- v125: recorded sound pack ----------
+   Real recordings (the user's) live in /sounds/<name>.mp3 -- trimmed, loudness-matched to about
+   -16 LUFS, mono 96 kbps. Each is fetched and decoded once, then played through the same master
+   gain as the synth sounds, so the volume slider and both mutes apply. Any name whose file is
+   missing or fails to decode falls back to its synth recipe, so nothing ever goes silent -- which
+   also means a new recording can be added just by dropping the file in and listing it here. */
+var SOUND_FILES = { slap: 1, kiss: 1, laugh: 1, cry: 1, gunshot: 1, clap: 1, boo: 1, airhorn: 1, badum: 1, crickets: 1, knock: 1, howl: 1, sneeze: 1, burp: 1, cheers: 1,
+'friend-logon': 1, 'login': 1, 'friend-request': 1, 'game-invite': 1, 'pm': 1 };
+var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1 }; // the punchy ones sat a few dB under the rest after limiting
+var soundBuf = {}, soundFail = {};
+function loadSoundFile(name) {
+if (soundBuf[name]) return soundBuf[name];
+var ctx = ensureAudioCtx(); if (!ctx) return Promise.reject(new Error('no audio'));
+soundBuf[name] = fetch('./sounds/' + name + '.mp3').then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); })
+.then(function (ab) { return new Promise(function (res, rej) { ctx.decodeAudioData(ab, res, rej); }); })
+.catch(function (e) { soundFail[name] = true; delete soundBuf[name]; throw e; });
+return soundBuf[name];
+}
+/* Plays the file if there is one; returns false when the caller should run its synth version
+   instead. If the file only turns out to be missing after the fetch, the fallback runs then. */
+function playFile(name, fallback) {
+if (!SOUND_FILES[name] || soundFail[name]) return false;
+var ctx = ensureAudioCtx(); if (!ctx) return false;
+loadSoundFile(name).then(function (buf) {
+var src = ctx.createBufferSource(); src.buffer = buf;
+var g = ctx.createGain(); g.gain.value = SOUND_GAIN[name] || 1;
+src.connect(g); g.connect(masterOut(ctx)); src.start();
+}).catch(function () { if (fallback) { try { fallback(); } catch (e) {} } });
+return true;
+}
+function preloadSounds() { if (!ensureAudioCtx()) return; Object.keys(SOUND_FILES).forEach(function (n) { if (!soundFail[n]) loadSoundFile(n).catch(function () {}); }); }
 var SFX = {
 slap:    { line: 'slaps {t}', solo: 'slaps the table', play: function () { noiseBurst(0.09, 1400, 1.2, 0.7); tone(140, 0.12, 0, 'triangle', 0.3); } },
 kiss:    { line: 'blows {t} a kiss', solo: 'blows a kiss', play: function () { sweep(700, 1500, 0.16, 0, 'sine', 0.2); noiseBurst(0.03, 3000, 2, 0.4, 0.16); tone(1800, 0.05, 0.16, 'sine', 0.2); } },
@@ -495,7 +532,7 @@ cheers:  { line: 'raises a glass to {t}', solo: 'raises a glass', play: function
 drumroll:{ line: 'drumrolls for {t}', solo: 'drumrolls', play: function () { for (var i = 0; i < 16; i++) noiseBurst(0.04, 700, 1.2, 0.3, i * 0.055, 'lowpass'); noiseBurst(0.6, 5000, 0.4, 0.3, 0.9, 'highpass'); } }
 };
 var SFX_LIST = Object.keys(SFX);
-function playSfx(kind) { if (soundMuted || sfxMuted || !SFX[kind]) return; try { SFX[kind].play(); } catch (e) {} }
+function playSfx(kind) { if (soundMuted || sfxMuted || !SFX[kind]) return; if (playFile(kind, SFX[kind].play)) return; try { SFX[kind].play(); } catch (e) {} }
 function sfxLine(name, kind, target) {
 var sf = SFX[kind]; return '* ' + name + ' ' + (target ? sf.line.replace('{t}', target) : sf.solo);
 }
@@ -588,6 +625,7 @@ openSoundMenu(anchor);
 function tryUnlockAudio() {
 var ctx = ensureAudioCtx();
 if (ctx && ctx.state === 'running') {
+if (me) preloadSounds(); // v125: the recorded pack decodes once the context is live
 document.removeEventListener('pointerdown', tryUnlockAudio, true);
 document.removeEventListener('touchend', tryUnlockAudio, true);
 document.removeEventListener('click', tryUnlockAudio, true);
@@ -2319,7 +2357,7 @@ if (w.minimized) {
 if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
 if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
 }
-playSound('ding');
+playSound('whisper');
 if (document.hidden) bumpTitle();
 notifyDesktop(otherName, notifPreview(m.body), 'gc-whisper-' + otherId, function () { openIM(otherId, otherName, true); });
 if (manualStatus === 'away' && !awayReplied[otherId]) {
@@ -2874,7 +2912,7 @@ friendReqChannel = sb.channel('friend-requests-' + me.id);
 friendReqChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'friend_requests', filter: 'recipient_id=eq.' + me.id }, function (p) {
 var row = p.new; if (row.status !== 'pending') return;
 incomingRequests[row.id] = { id: row.id, senderId: row.sender_id, senderName: row.sender_name || '?', createdAt: row.created_at, intro: row.intro || '' };
-playSound('ding');
+playSound('friendreq');
 if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
 notifyDesktop((row.sender_name || 'Someone') + ' wants to be friends', row.intro || 'Tap to see your friend requests', 'gc-friendreq-' + row.id, function () { openFriendReqPanel(); });
 addSys((row.sender_name || 'Someone') + ' sent you a friend request. 🤝' + (row.intro ? ' “' + row.intro + '”' : ''));
@@ -3745,7 +3783,7 @@ return t;
    'challenge' | 'turn' | 'finished', game: 'UNO', accept: fn, decline: fn, seconds: n }. */
 function gameNudge(w, peer, info) {
 info = info || {};
-playSound(info.kind === 'turn' ? 'turn' : 'ding');
+playSound(info.kind === 'turn' ? 'turn' : (info.kind === 'challenge' ? 'challenge' : 'ding'));
 if (w.minimized || document.activeElement !== w.ta) {
 unread[peer] = (unread[peer] || 0) + 1; renderPeople();
 if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
@@ -5894,7 +5932,7 @@ channel.on('presence', { event: 'join' }, function (p) {
 if (p.key !== me.id && p.newPresences[0] && !people[p.key]) {
 var joinedName = p.newPresences[0].name;
 addSys(friends[p.key] ? '★ Your friend ' + joinedName + ' just entered the room!' : joinedName + ' has entered the room.');
-playSound('signon');
+playSound(friends[p.key] ? 'friendon' : 'signon');
 }
 if (isAdmin && bans[p.key]) channel.send({ type: 'broadcast', event: 'kick', payload: { user_id: p.key, name: p.newPresences[0].name, reason: 'banned', by: me.name } });
 });
@@ -6060,6 +6098,7 @@ if ($('saveBtn')) $('saveBtn').classList.toggle('hidden', !isAnonAccount);
 if ($('logoutBtn')) $('logoutBtn').classList.remove('hidden');
 setSignedOnStatus();
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
+playSound('signon'); preloadSounds();
 setTimeout(startTour, 1500);
 /* One-time note about the friends-only whisper rule (friends_only_whispers.sql), since it changes
    what a name menu's Whisper does for everyone who was here before it. */
