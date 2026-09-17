@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 131;
+var BUILD_NUMBER = 132;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -5964,8 +5964,13 @@ refreshPresenceDots();
 channel.on('presence', { event: 'join' }, function (p) {
 if (p.key !== me.id && p.newPresences[0] && !people[p.key]) {
 var joinedName = p.newPresences[0].name;
+/* v132: back within the grace window after a dropped connection -- they never really left, so
+   no "entered" line and no sound either (the pending "left" line is cancelled). */
+if (pendingLeaves[p.key]) { clearTimeout(pendingLeaves[p.key]); delete pendingLeaves[p.key]; }
+else {
 addSys(friends[p.key] ? '★ Your friend ' + joinedName + ' just entered the room!' : joinedName + ' has entered the room.');
 playSound(friends[p.key] ? 'friendon' : 'signon');
+}
 }
 if (isAdmin && bans[p.key]) channel.send({ type: 'broadcast', event: 'kick', payload: { user_id: p.key, name: p.newPresences[0].name, reason: 'banned', by: me.name } });
 });
@@ -5997,7 +6002,21 @@ if (d.to == null) { if (d.typing === false) clearRoomTyping(d.from); else markRo
 else if (d.to === me.id) { if (d.typing === false) clearImTyping(d.from); else markImTyping(d.from, d.name); }
 // d.to pointing at someone else's whisper isn't ours -- ignore, same as buzz's own 'to' above.
 });
-channel.on('presence', { event: 'leave' }, function (p) { if (p.leftPresences[0] && p.key !== me.id) { addSys(p.leftPresences[0].name + ' has left the room.'); playSound('signoff'); } });
+/* v132: a phone that locks its screen or switches apps drops its realtime socket after a while and
+   presence reports a "leave" -- then a "join" the moment it wakes up. That was announcing "X has
+   left the room" for people sitting idle two feet away. A leave is now held for LEAVE_GRACE_MS
+   and only announced if they have not come back by then. */
+var pendingLeaves = {}, LEAVE_GRACE_MS = 90000;
+channel.on('presence', { event: 'leave' }, function (p) {
+if (!p.leftPresences[0] || p.key === me.id) return;
+var leftName = p.leftPresences[0].name, key = p.key;
+clearTimeout(pendingLeaves[key]);
+pendingLeaves[key] = setTimeout(function () {
+delete pendingLeaves[key];
+if (people[key]) return; // came back on a fresh key/session in the meantime
+addSys(leftName + ' has left the room.'); playSound('signoff');
+}, LEAVE_GRACE_MS);
+});
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + (C.ROOM || 'main') }, function (p) { handleMessage(p.new); });
 /* Main-room housekeeping (messages_trim_room, see schema.sql) deletes the oldest room message
    every time the 100-cap is exceeded by a new one, so everyone else's log needs to drop that row
