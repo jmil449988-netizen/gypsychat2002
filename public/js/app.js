@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 130;
+var BUILD_NUMBER = 131;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -423,7 +423,7 @@ try { soundMuted = localStorage.getItem('gc_sound_muted') === '1'; sfxMuted = lo
 /* v121: every sound goes through one master gain so a single volume slider (the 🔊 menu) scales
    all of it -- dings, game clock, sound-effect commands -- instead of on/off being the only choice. */
 function masterOut(ctx) {
-if (!masterGain || masterGain.context !== ctx) { masterGain = ctx.createGain(); masterGain.gain.value = soundVolume; masterGain.connect(masterOut(ctx)); }
+if (!masterGain || masterGain.context !== ctx) { masterGain = ctx.createGain(); masterGain.gain.value = soundVolume; masterGain.connect(ctx.destination); } // v131: to the speakers. (Builds 121-130 had this as masterGain.connect(masterOut(ctx)) -- the master feeding itself in a loop and never reaching the output -- which is why every sound was silent on every device.)
 return masterGain;
 }
 function setSoundVolume(v) {
