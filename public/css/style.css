@@ -251,11 +251,12 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
    keyboard -- see the max-width:500px rule). */
 .im .icomp{display:grid;grid-template-columns:auto auto auto 1fr auto;gap:6px;padding:6px;flex:none}
 @media (min-width:501px){
-  .im .icomp{grid-template-columns:auto auto auto 1fr auto;grid-template-areas:"ta ta ta ta send" "emo img gif . ."}
+  .im .icomp{grid-template-columns:auto auto auto auto 1fr;grid-template-areas:"ta ta ta ta send" "emo img gif game ."}
   .im .icomp textarea{grid-area:ta}
   .im .icomp .btn.emo{grid-area:emo;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn.img{grid-area:img;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn.gif{grid-area:gif;height:28px;min-width:34px}
+  .im .icomp .btn.game{grid-area:game;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn:last-child{grid-area:send}
 }
 .im .icomp textarea{font:inherit;color:var(--bone);resize:none;height:44px;padding:5px 8px;outline:none;caret-color:#e2c4ff;
@@ -265,6 +266,7 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
 .im .icomp .btn:hover{box-shadow:inset 0 1px 0 rgba(241,217,138,.15),inset 0 -2px 4px #000,0 0 0 1px #000,0 0 10px rgba(166,122,209,.6)}
 .im .icomp .btn.img,.im .icomp .btn.emo{font-size:15px;min-width:38px;padding:0 6px}
 .im .icomp .btn.gif{font-size:11px;min-width:38px;padding:0 6px}
+.im .icomp .btn.game{font-size:15px;min-width:38px;padding:0 6px}
 /* the dock's inbox: one .im-tab row per conversation (newest activity first -- app.js moves a row
    to the top when a message lands in it) */
 .im-tray{display:flex;flex-direction:column}
@@ -1200,7 +1202,7 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
   .gc-root.dm-open .thread-toggle-fab,.gc-root.dm-open .roulette-toggle-fab{display:none !important}
   /* same call as the room composer (#emoBtn above): the phone keyboard already has emoji */
   .im .icomp .emo{display:none}
-  .im .icomp{grid-template-columns:auto auto 1fr auto}
+  .im .icomp{grid-template-columns:auto auto auto 1fr auto}
 }
 /* Desktop: the roulette bubble floats at the right edge, vertically centred -- right where the
    expanded dock's top-right corner lands on a typical laptop screen. While the dock is open it
@@ -1343,3 +1345,29 @@ font:15px "IM Fell English",Georgia,serif;color:#3a2a10;text-shadow:0 1px 0 rgba
   .gc-root.signed-on.mobile-threads-open .thread-toggle-fab{position:fixed !important;top:5px !important;right:8px !important;left:auto !important;bottom:auto !important;
   transform:none !important;width:34px;height:34px;font-size:17px;opacity:1;z-index:56}
 }
+
+/* ==================== Tic-Tac-Toe in whispers (v109) ====================
+   One card per game inside the whisper log (see renderGameCard in app.js). Purple trim to match
+   the dock it lives in; gold X, lilac O; the winning three glow when a game ends; only the
+   squares you can actually play are enabled, and only on your turn (.live). */
+.ttt-card{margin:8px 4px;padding:8px 10px;border:1px solid #7a4bb0;background:linear-gradient(180deg,#221a26,#160f19);box-shadow:0 0 0 1px #000,inset 0 0 18px #000}
+.ttt-hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}
+.ttt-title{font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:#e2c4ff;text-shadow:0 1px 0 #000}
+.ttt-rec{font:11px "IM Fell English",Georgia,serif;color:var(--ash);white-space:nowrap}
+.ttt-board{display:grid;grid-template-columns:repeat(3,44px);grid-auto-rows:44px;gap:3px;justify-content:center;margin:6px auto 8px;padding:4px;
+background:#7a4bb0;border-radius:3px;box-shadow:0 0 0 1px #000,0 0 10px rgba(122,75,176,.35);width:max-content}
+.ttt-cell{font:700 24px Cinzel,Georgia,serif;line-height:1;color:var(--bone);background:linear-gradient(180deg,#171310,#0f0d0b);border:0;border-radius:2px;
+display:flex;align-items:center;justify-content:center;cursor:default;padding:0;box-shadow:inset 0 0 8px #000}
+.ttt-cell.x{color:var(--gold-hi);text-shadow:0 0 8px rgba(241,217,138,.5)}
+.ttt-cell.o{color:#c9a3e6;text-shadow:0 0 8px rgba(201,163,230,.5)}
+.ttt-cell.win{background:linear-gradient(180deg,#3a2a48,#241a2c);box-shadow:inset 0 0 0 1px #e2c4ff,0 0 10px rgba(226,196,255,.6)}
+.ttt-board.live .ttt-cell:not([disabled]){cursor:pointer}
+.ttt-board.live .ttt-cell:not([disabled]):hover,.ttt-board.live .ttt-cell:not([disabled]):focus-visible{background:linear-gradient(180deg,#2a2036,#171320);box-shadow:inset 0 0 0 1px #a67ad1;outline:none}
+.ttt-status{font:13px "IM Fell English",Georgia,serif;color:var(--bone);text-align:center;margin-bottom:6px}
+.ttt-status b{color:#e2c4ff;font-weight:700}
+.ttt-cap{color:var(--ash);font-style:italic;font-size:11px}
+.ttt-actions{display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
+.ttt-actions .btn{min-width:0;height:26px;padding:0 12px;font-size:11px;color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
+.ttt-actions .btn.ttt-resign,.ttt-actions .btn.ttt-decline,.ttt-actions .btn.ttt-cancel{color:var(--ash);border-color:#3d2a4d}
+.ttt-actions .btn.ttt-accept{color:#cdeecd;border-color:var(--leaf)}
+@media (hover:none) and (pointer:coarse){.ttt-board{grid-template-columns:repeat(3,54px);grid-auto-rows:54px}.ttt-cell{font-size:28px}.ttt-actions .btn{height:34px}}
