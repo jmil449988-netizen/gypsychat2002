@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 118;
+var BUILD_NUMBER = 119;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -1689,7 +1689,7 @@ if (isAdminId(id)) classes.push('admin');
 if (showStatus) classes.push('st-' + status);
 var tag = showStatus ? ' <span class="stag">(' + status + ')</span>' : '';
 var title = (status === 'away' && p.awayMsg) ? ' title="' + esc(p.awayMsg) + '"' : '';
-return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + esc(p.name) + levelBadgeHtml(id) + tag + '</div>';
+return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + '<span class="nmt">' + esc(p.name) + '</span>' + levelBadgeHtml(id) + tag + '</div>';
 }).join('');
 /* The online count used to live in the icon-heavy status bar up top; it now lives in the main
    chat's own footer line (directly below that bar), alongside the watermark -- threads and
@@ -1733,7 +1733,7 @@ var p = people[id], online = !!p, status = online ? (p.status || 'online') : nul
 var label = online ? p.name : friends[id].name;
 var cls = (online ? ('f-' + status) : 'f-offline') + (isAdminId(id) ? ' admin' : '');
 var suffix = online ? (status !== 'online' ? ' <span class="off">(' + status + ')</span>' : '') : ' <span class="off">(offline)</span>';
-return '<div class="' + cls + '" tabindex="0" data-id="' + esc(id) + '">' + avatarHtml(id, label) + esc(label) + suffix + '</div>';
+return '<div class="' + cls + '" tabindex="0" data-id="' + esc(id) + '">' + avatarHtml(id, label) + '<span class="nmt">' + esc(label) + '</span>' + suffix + '</div>';
 }).join('');
 return '<div class="fg-hd">' + esc(g) + '</div>' + rows;
 }).join('');
