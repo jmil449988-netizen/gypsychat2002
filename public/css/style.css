@@ -221,7 +221,8 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
    whisper only ever has one other person. margin:0 since .bar's own flex `gap` already spaces it
    from .wava/.nm -- the default presence-dot margin would double up. */
 .im .bar .nm-dot{margin:0}
-.im .bar .nm{flex:1;font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:#e2c4ff;text-shadow:0 0 8px rgba(200,150,255,.5),0 1px 0 #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.im .bar .nmwrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.im .bar .nm{flex:none;font:700 13px Cinzel,Georgia,serif;letter-spacing:1.5px;color:#e2c4ff;text-shadow:0 0 8px rgba(200,150,255,.5),0 1px 0 #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .im .bar .nm:hover,.im .bar .nm:focus-visible{text-decoration:underline;outline:none}
 .im .bar .x,.im .bar .buzz,.im .bar .back{font:700 13px Cinzel,Georgia,serif;color:#c9a3e6;background:none;border:1px solid #7a4bb0;width:22px;height:20px;line-height:16px;cursor:pointer;padding:0;flex:none}
 .im .bar .x:hover,.im .bar .buzz:hover,.im .bar .back:hover{color:#fff;border-color:#e2c4ff;box-shadow:0 0 8px rgba(200,150,255,.6)}
@@ -249,15 +250,13 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
    UNDER the field there (the field and Send get the full width); on a phone the dock is
    full-screen and everything fits on one line (the emoji button steps aside for the phone's own
    keyboard -- see the max-width:500px rule). */
-.im .icomp{display:grid;grid-template-columns:auto auto auto auto 1fr auto;gap:6px;padding:6px;flex:none}
+.im .icomp{display:grid;grid-template-columns:auto auto auto 1fr auto;gap:6px;padding:6px;flex:none}
 @media (min-width:501px){
-  .im .icomp{grid-template-columns:auto auto auto auto auto 1fr;grid-template-areas:"ta ta ta ta ta send" "emo img gif game uno ."}
+  .im .icomp{grid-template-columns:auto auto auto 1fr;grid-template-areas:"ta ta ta send" "emo media games ."}
   .im .icomp textarea{grid-area:ta}
   .im .icomp .btn.emo{grid-area:emo;height:28px;min-width:34px;font-size:14px}
-  .im .icomp .btn.img{grid-area:img;height:28px;min-width:34px;font-size:14px}
-  .im .icomp .btn.gif{grid-area:gif;height:28px;min-width:34px}
-  .im .icomp .btn.game{grid-area:game;height:28px;min-width:34px;font-size:14px}
-  .im .icomp .btn.uno{grid-area:uno;height:28px;min-width:34px;font-size:14px}
+  .im .icomp .btn.media{grid-area:media;height:28px;min-width:34px;font-size:14px}
+  .im .icomp .btn.games{grid-area:games;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn:last-child{grid-area:send}
 }
 .im .icomp textarea{font:inherit;color:var(--bone);resize:none;height:44px;padding:5px 8px;outline:none;caret-color:#e2c4ff;
@@ -265,10 +264,7 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
 .im .icomp textarea:focus{box-shadow:inset 0 0 16px #000,0 0 0 1px #a67ad1}
 .im .icomp .btn{color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
 .im .icomp .btn:hover{box-shadow:inset 0 1px 0 rgba(241,217,138,.15),inset 0 -2px 4px #000,0 0 0 1px #000,0 0 10px rgba(166,122,209,.6)}
-.im .icomp .btn.img,.im .icomp .btn.emo{font-size:15px;min-width:38px;padding:0 6px}
-.im .icomp .btn.gif{font-size:11px;min-width:38px;padding:0 6px}
-.im .icomp .btn.game{font-size:15px;min-width:38px;padding:0 6px}
-.im .icomp .btn.uno{font-size:15px;min-width:38px;padding:0 6px}
+.im .icomp .btn.media,.im .icomp .btn.games,.im .icomp .btn.emo{font-size:15px;min-width:38px;padding:0 6px}
 /* the dock's inbox: one .im-tab row per conversation (newest activity first -- app.js moves a row
    to the top when a message lands in it) */
 .im-tray{display:flex;flex-direction:column}
@@ -1204,7 +1200,7 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
   .gc-root.dm-open .thread-toggle-fab,.gc-root.dm-open .roulette-toggle-fab{display:none !important}
   /* same call as the room composer (#emoBtn above): the phone keyboard already has emoji */
   .im .icomp .emo{display:none}
-  .im .icomp{grid-template-columns:auto auto auto auto 1fr auto}
+  .im .icomp{grid-template-columns:auto auto 1fr auto}
 }
 /* Desktop: the roulette bubble floats at the right edge, vertically centred -- right where the
    expanded dock's top-right corner lands on a typical laptop screen. While the dock is open it
@@ -1402,7 +1398,9 @@ font:700 17px Cinzel,Georgia,serif;line-height:1;color:#fff;text-shadow:0 1px 0 
 .uno-table{display:flex;align-items:center;justify-content:center;gap:22px;margin:4px 0 6px}
 .uno-pile{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;padding:2px;cursor:default;color:var(--ash);font:11px "IM Fell English",Georgia,serif}
 .uno-pile:not([disabled]){cursor:pointer;color:var(--gold-hi)}
-.uno-pile:not([disabled]) .uno-c{box-shadow:0 0 0 1px #000,0 0 10px rgba(241,217,138,.6)}
+.uno-pile.must .uno-c{border-color:var(--gold-hi);box-shadow:0 0 0 2px var(--gold-hi),0 0 18px 4px rgba(241,217,138,.85);animation:uno-must .9s ease-in-out infinite alternate}
+.uno-pile.must{color:var(--gold-hi);text-shadow:0 0 6px rgba(241,217,138,.8)}
+@keyframes uno-must{from{box-shadow:0 0 0 2px var(--gold-hi),0 0 10px 2px rgba(241,217,138,.6)}to{box-shadow:0 0 0 2px #fff6c8,0 0 24px 6px rgba(241,217,138,1)}}
 .uno-pile:not([disabled]):hover .uno-c,.uno-pile:not([disabled]):focus-visible .uno-c{transform:translateY(-2px);border-color:var(--gold-hi)}
 .uno-pile:focus-visible{outline:none}
 .uno-top{display:flex;align-items:center;gap:8px}
@@ -1418,3 +1416,55 @@ font:700 17px Cinzel,Georgia,serif;line-height:1;color:#fff;text-shadow:0 1px 0 
 .uno-col:hover,.uno-col:focus-visible{transform:scale(1.12);box-shadow:0 0 0 1px #000,0 0 10px rgba(241,217,138,.8);outline:none}
 .uno-last{font:italic 11px "IM Fell English",Georgia,serif;color:var(--ash);text-align:center;margin-bottom:4px}
 @media (hover:none) and (pointer:coarse){.uno-c{width:44px;height:62px;font-size:19px}.uno-top .uno-c{width:50px;height:70px}.uno-c.small{width:22px;height:32px}.uno-col{width:36px;height:36px}}
+
+/* ---------- v113: whisper title-bar banner, admin flames, turn clock, bottom row, wheel ---------- */
+.im .bar .nm.admin{color:var(--admin);text-shadow:0 0 8px rgba(209,59,47,.5),0 1px 0 #000}
+.im-sub{display:flex;align-items:center;gap:6px;min-height:14px;font:11px "IM Fell English",Georgia,serif;color:var(--ash);white-space:nowrap;overflow:hidden}
+.im-sub .presence-dot{margin:0}
+.im-sub .im-st{flex:none}
+.im-sub .im-msg{font-style:italic;color:var(--bone);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.im-sub .lvl{flex:none}
+.adm-title{flex:none;font:700 15px "Dancing Script",cursive;line-height:1;color:#ffcc66;letter-spacing:.5px;
+text-shadow:0 0 3px #ffb347,0 0 8px #ff8c00,0 0 16px rgba(255,120,0,.85),0 0 28px rgba(255,90,0,.5)}
+/* Admin names: red everywhere (see the --admin rules above), and in the main room and whispers a
+   pixel-art fire burns behind the name -- a 12x8 three-frame sprite, scaled 2x with crisp pixels,
+   repeated along the width of the name. */
+.log .m b.who.admin,.im .ilog b.who.admin{position:relative;z-index:0;color:#ff6a5a;-webkit-text-stroke:.35px #1a0604;text-shadow:0 0 2px #000,0 0 4px #000,0 1px 0 #000,0 0 10px rgba(255,80,40,.6);isolation:isolate}
+.log .m b.who.admin::before,.im .ilog b.who.admin::before{content:"";position:absolute;left:-4px;right:-4px;bottom:-6px;height:16px;z-index:-1;pointer-events:none;opacity:.75;
+background:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMiAyNCIgd2lkdGg9IjEyIiBoZWlnaHQ9IjI0IiBzaGFwZS1yZW5kZXJpbmc9ImNyaXNwRWRnZXMiPjxyZWN0IHg9IjQiIHk9IjAiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIzIiB5PSIxIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iNCIgeT0iMSIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjgiIHk9IjEiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIyIiB5PSIyIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMyIgeT0iMiIgd2lkdGg9IjIiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjciIHk9IjIiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSI4IiB5PSIyIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iOSIgeT0iMiIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjEiIHk9IjMiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIyIiB5PSIzIiB3aWR0aD0iMyIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iNiIgeT0iMyIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjciIHk9IjMiIHdpZHRoPSIzIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSIwIiB5PSI0IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMSIgeT0iNCIgd2lkdGg9IjkiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjEwIiB5PSI0IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMCIgeT0iNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjEiIHk9IjUiIHdpZHRoPSIzIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSI0IiB5PSI1IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjYjgyMzFmIi8+PHJlY3QgeD0iNSIgeT0iNSIgd2lkdGg9IjMiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjgiIHk9IjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNiODIzMWYiLz48cmVjdCB4PSI5IiB5PSI1IiB3aWR0aD0iMiIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iMTEiIHk9IjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIxIiB5PSI2IiB3aWR0aD0iMiIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iMyIgeT0iNiIgd2lkdGg9IjciIGhlaWdodD0iMSIgZmlsbD0iI2I4MjMxZiIvPjxyZWN0IHg9IjEwIiB5PSI2IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iMiIgeT0iNyIgd2lkdGg9IjgiIGhlaWdodD0iMSIgZmlsbD0iI2I4MjMxZiIvPjxyZWN0IHg9IjciIHk9IjgiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIyIiB5PSI5IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iNiIgeT0iOSIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjciIHk9IjkiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSIxIiB5PSIxMCIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjIiIHk9IjEwIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iNSIgeT0iMTAiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSI2IiB5PSIxMCIgd2lkdGg9IjIiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjkiIHk9IjEwIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMSIgeT0iMTEiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIyIiB5PSIxMSIgd2lkdGg9IjIiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjUiIHk9IjExIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iNiIgeT0iMTEiIHdpZHRoPSIyIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSI4IiB5PSIxMSIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjkiIHk9IjExIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iMTAiIHk9IjExIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMCIgeT0iMTIiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIxIiB5PSIxMiIgd2lkdGg9IjEwIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSIxMSIgeT0iMTIiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIwIiB5PSIxMyIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjEiIHk9IjEzIiB3aWR0aD0iMiIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iMyIgeT0iMTMiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNiODIzMWYiLz48cmVjdCB4PSI0IiB5PSIxMyIgd2lkdGg9IjMiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjciIHk9IjEzIiB3aWR0aD0iMiIgaGVpZ2h0PSIxIiBmaWxsPSIjYjgyMzFmIi8+PHJlY3QgeD0iOSIgeT0iMTMiIHdpZHRoPSIyIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSIxMSIgeT0iMTMiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIxIiB5PSIxNCIgd2lkdGg9IjIiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjMiIHk9IjE0IiB3aWR0aD0iNyIgaGVpZ2h0PSIxIiBmaWxsPSIjYjgyMzFmIi8+PHJlY3QgeD0iMTAiIHk9IjE0IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iMiIgeT0iMTUiIHdpZHRoPSI4IiBoZWlnaHQ9IjEiIGZpbGw9IiNiODIzMWYiLz48cmVjdCB4PSIyIiB5PSIxNiIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjEiIHk9IjE3IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMiIgeT0iMTciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSI3IiB5PSIxNyIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjEiIHk9IjE4IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMiIgeT0iMTgiIHdpZHRoPSIyIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSI2IiB5PSIxOCIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjciIHk9IjE4IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iOCIgeT0iMTgiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIxMCIgeT0iMTgiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIwIiB5PSIxOSIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmZDk0YSIvPjxyZWN0IHg9IjEiIHk9IjE5IiB3aWR0aD0iMyIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iNSIgeT0iMTkiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSI2IiB5PSIxOSIgd2lkdGg9IjMiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjEwIiB5PSIxOSIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjAiIHk9IjIwIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMSIgeT0iMjAiIHdpZHRoPSIxMCIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iMTEiIHk9IjIwIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMCIgeT0iMjEiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmQ5NGEiLz48cmVjdCB4PSIxIiB5PSIyMSIgd2lkdGg9IjMiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjQiIHk9IjIxIiB3aWR0aD0iMiIgaGVpZ2h0PSIxIiBmaWxsPSIjYjgyMzFmIi8+PHJlY3QgeD0iNiIgeT0iMjEiIHdpZHRoPSIyIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSI4IiB5PSIyMSIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2I4MjMxZiIvPjxyZWN0IHg9IjkiIHk9IjIxIiB3aWR0aD0iMiIgaGVpZ2h0PSIxIiBmaWxsPSIjZmY3YTFhIi8+PHJlY3QgeD0iMTEiIHk9IjIxIiB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjZmZkOTRhIi8+PHJlY3QgeD0iMSIgeT0iMjIiIHdpZHRoPSIyIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZjdhMWEiLz48cmVjdCB4PSIzIiB5PSIyMiIgd2lkdGg9IjciIGhlaWdodD0iMSIgZmlsbD0iI2I4MjMxZiIvPjxyZWN0IHg9IjEwIiB5PSIyMiIgd2lkdGg9IjEiIGhlaWdodD0iMSIgZmlsbD0iI2ZmN2ExYSIvPjxyZWN0IHg9IjIiIHk9IjIzIiB3aWR0aD0iOCIgaGVpZ2h0PSIxIiBmaWxsPSIjYjgyMzFmIi8+PC9zdmc+") repeat-x 0 0/24px 48px;image-rendering:pixelated;image-rendering:crisp-edges;
+animation:flame-flicker .48s steps(3,jump-none) infinite}
+@keyframes flame-flicker{from{background-position-y:0}to{background-position-y:-32px}}
+@media (prefers-reduced-motion:reduce){.log .m b.who.admin::before,.im .ilog b.who.admin::before{animation:none}}
+/* the 30-second turn clock on every active game card */
+.turn-clock{position:relative;height:14px;margin:2px 10px 6px;background:#0d0a0f;border:1px solid #3d2a4d;border-radius:2px;overflow:hidden;box-shadow:inset 0 0 6px #000}
+.turn-clock .tc-bar{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#4d2f6b,#a67ad1);transition:width .25s linear}
+.turn-clock .tc-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 10px Cinzel,Georgia,serif;color:#e2c4ff;text-shadow:0 1px 0 #000}
+.turn-clock.low .tc-bar{background:linear-gradient(90deg,#7a1f17,#e0402f)}
+.turn-clock.low .tc-num{color:#fff;animation:tc-blink 1s steps(2,jump-none) infinite}
+@keyframes tc-blink{from{opacity:1}to{opacity:.55}}
+/* desktop bottom row: bigger icons with a word under each */
+@media (min-width:501px){
+  .status{flex-wrap:wrap;justify-content:flex-start;align-items:stretch;gap:5px;padding:5px 10px}
+  .status #st{align-self:center}
+  .status button.cell:not(.hidden){display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:54px;max-width:96px;padding:4px 6px;line-height:1}
+  .status .btn-icon{font-size:19px;line-height:1}
+  .status .popover-label{display:block;font:600 8px Cinzel,Georgia,serif;letter-spacing:.5px;text-transform:uppercase;white-space:normal;text-align:center;line-height:1.2;max-width:84px}
+  .status .ava-thumb{width:20px;height:20px;font-size:15px}.status .ava-thumb img{width:20px;height:20px}
+  .status .dmbtn[aria-pressed="true"]{text-decoration:none}
+  .status .dmbtn[aria-pressed="true"] .popover-label{text-decoration:line-through}
+  .status .rbadge{position:absolute;top:2px;right:4px}
+  .status .reportsbtn{position:relative}
+}
+@media (max-width:500px){.status .ballotbtn,.status .leaderboardbtn,.status .notifbtn{padding:1px 6px}}
+/* spin the wheel */
+.rp-wheel{cursor:pointer;outline:none}
+.rp-wheel:focus-visible{filter:drop-shadow(0 0 14px rgba(241,217,138,.7)) drop-shadow(0 6px 10px #000)}
+.rp-wheel.spinning{animation:rp-spin-fast 2.6s cubic-bezier(.12,.75,.15,1) 1 !important}
+@keyframes rp-spin-fast{to{transform:rotate(1800deg)}}
+.rp-hint{margin-top:14px;font:700 10px Cinzel,Georgia,serif;letter-spacing:2px;text-transform:uppercase;color:var(--ash);opacity:.8}
+.rp-hint-mobile{display:none}
+@media (hover:none) and (pointer:coarse){.rp-hint-desktop{display:none}.rp-hint-mobile{display:inline}}
+.rp-fortune{min-height:0;max-width:230px;margin:10px auto 0;padding:0 6px;font:italic 14px "IM Fell English",Georgia,serif;line-height:1.5;color:var(--gold-hi);text-align:center;
+opacity:0;transform:translateY(6px);transition:opacity .6s ease,transform .6s ease;text-shadow:0 0 8px rgba(241,217,138,.35)}
+.rp-fortune.show{opacity:1;transform:none}
+.gc-root.mobile-roulette-open .rp-fortune{max-width:300px;font-size:17px}
