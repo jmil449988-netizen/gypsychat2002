@@ -25,6 +25,7 @@ var bugBtn = $('bugBtn'), bugFile = $('bugFile'), bugReportOverlay = $('bugRepor
 var bugReportsList = $('bugReportsList');
 var leaderboardBtn = $('leaderboardBtn'), leaderboardPanel = $('leaderboardPanel'), leaderboardList = $('leaderboardList'), leaderboardBack = $('leaderboardBack');
 var tttLeaderboardList = $('tttLeaderboardList'), lbTabXp = $('lbTabXp'), lbTabTtt = $('lbTabTtt');
+var unoLeaderboardList = $('unoLeaderboardList'), lbTabUno = $('lbTabUno');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
 var frqSection = $('frqSection'), frqCount = $('frqCount'), friendReqList = $('friendReqList');
@@ -63,7 +64,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 111;
+var BUILD_NUMBER = 112;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1488,10 +1489,12 @@ renderLeaderboard(rows, profById);
    Top players by wins (ties: fewer losses, then more draws) with their current win streak, from
    ttt_leaderboard() on the server -- game rows are only readable by their two players, so the
    ladder can't be counted in the browser. The W·L·D line in each whisper stays as it was. */
-function renderTttLeaderboard(rows, profById) {
-if (!tttLeaderboardList) return;
-if (!rows.length) { tttLeaderboardList.innerHTML = '<div class="empty">No games finished yet — tap ⚔ in a whisper to challenge someone.</div>'; return; }
-tttLeaderboardList.innerHTML = rows.map(function (x, i) {
+/* One renderer for both game ladders: rows come from ttt_leaderboard() / uno_leaderboard(), the
+   `count` callback formats the record column (W·L·D for Tic-Tac-Toe, W·L for UNO). */
+function renderGameLadder(list, rows, profById, empty, count) {
+if (!list) return;
+if (!rows.length) { list.innerHTML = '<div class="empty">' + empty + '</div>'; return; }
+list.innerHTML = rows.map(function (x, i) {
 var prof = profById[x.user_id] || {};
 var live = people[x.user_id];
 var name = (live && live.name) || prof.name || 'Unknown';
@@ -1503,33 +1506,38 @@ var pct = x.played ? Math.round(100 * x.wins / x.played) : 0;
 var streak = x.streak >= 2 ? '<span class="lb-streak" title="' + x.streak + ' wins in a row">🔥' + x.streak + '</span>' : '';
 return '<div class="lb-row' + (i < 3 ? ' lb-top' : '') + '" data-id="' + esc(x.user_id) + '" data-name="' + esc(name) + '" tabindex="0">' + rank + ava +
 '<span class="lb-name' + (isAdminId(x.user_id) ? ' admin' : '') + '">' + esc(name) + '</span>' + lvl + streak +
-'<span class="lb-count" title="' + x.played + ' game' + (x.played === 1 ? '' : 's') + ', ' + pct + '% won">' + x.wins + 'W · ' + x.losses + 'L · ' + x.draws + 'D</span></div>';
+'<span class="lb-count" title="' + x.played + ' game' + (x.played === 1 ? '' : 's') + ', ' + pct + '% won">' + count(x) + '</span></div>';
 }).join('');
 }
-async function loadTttLeaderboard() {
-if (!tttLeaderboardList) return;
-tttLeaderboardList.innerHTML = '<div class="empty">Loading…</div>';
-var r = await sb.rpc('ttt_leaderboard', { p_limit: 20 });
-if (r.error) { tttLeaderboardList.innerHTML = '<div class="empty">Could not load the ladder: ' + esc(r.error.message) + '</div>'; return; }
+async function loadGameLadder(list, fn, empty, count) {
+if (!list) return;
+list.innerHTML = '<div class="empty">Loading…</div>';
+var r = await sb.rpc(fn, { p_limit: 20 });
+if (r.error) { list.innerHTML = '<div class="empty">Could not load the ladder: ' + esc(r.error.message) + '</div>'; return; }
 var rows = r.data || [];
 var profById = {};
 if (rows.length) {
 var pr = await sb.from('profiles').select('user_id, name, avatar_url').in('user_id', rows.map(function (x) { return x.user_id; }));
 (pr.data || []).forEach(function (p) { profById[p.user_id] = p; });
 }
-renderTttLeaderboard(rows, profById);
+renderGameLadder(list, rows, profById, empty, count);
 }
+function loadTttLeaderboard() { return loadGameLadder(tttLeaderboardList, 'ttt_leaderboard', 'No games finished yet — tap ⚔ in a whisper to challenge someone.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + x.draws + 'D'; }); }
+function loadUnoLeaderboard() { return loadGameLadder(unoLeaderboardList, 'uno_leaderboard', 'No UNO games finished yet — tap 🃏 in a whisper to challenge someone.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
 function showLeaderboardTab(which) {
-var xp = which !== 'ttt';
-if (lbTabXp) { lbTabXp.classList.toggle('active', xp); lbTabXp.setAttribute('aria-selected', xp ? 'true' : 'false'); }
-if (lbTabTtt) { lbTabTtt.classList.toggle('active', !xp); lbTabTtt.setAttribute('aria-selected', xp ? 'false' : 'true'); }
-if (leaderboardList) leaderboardList.classList.toggle('hidden', !xp);
-if (tttLeaderboardList) tttLeaderboardList.classList.toggle('hidden', xp);
-if (xp) loadLeaderboard(); else loadTttLeaderboard();
+which = which === 'ttt' || which === 'uno' ? which : 'xp';
+[[lbTabXp, leaderboardList, 'xp'], [lbTabTtt, tttLeaderboardList, 'ttt'], [lbTabUno, unoLeaderboardList, 'uno']].forEach(function (t) {
+var on = t[2] === which;
+if (t[0]) { t[0].classList.toggle('active', on); t[0].setAttribute('aria-selected', on ? 'true' : 'false'); }
+if (t[1]) t[1].classList.toggle('hidden', !on);
+});
+if (which === 'xp') loadLeaderboard(); else if (which === 'ttt') loadTttLeaderboard(); else loadUnoLeaderboard();
 }
+function activeLeaderboardTab() { return lbTabUno && lbTabUno.classList.contains('active') ? 'uno' : lbTabTtt && lbTabTtt.classList.contains('active') ? 'ttt' : 'xp'; }
 if (lbTabXp) lbTabXp.onclick = function () { showLeaderboardTab('xp'); };
 if (lbTabTtt) lbTabTtt.onclick = function () { showLeaderboardTab('ttt'); };
-[leaderboardList, tttLeaderboardList].forEach(function (list) {
+if (lbTabUno) lbTabUno.onclick = function () { showLeaderboardTab('uno'); };
+[leaderboardList, tttLeaderboardList, unoLeaderboardList].forEach(function (list) {
 if (!list) return;
 /* Tapping a row opens the same Get Info / Whisper / Block / ... menu as tapping their name
    anywhere else, rather than the leaderboard being a dead-end list. The panel sits at z-index 40,
@@ -1741,6 +1749,7 @@ el.innerHTML = '<div class="bar"><button class="back" type="button" title="Back 
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
 '<button class="btn gif" type="button" title="Search GIFs" aria-label="Search GIFs">GIF</button>' +
 '<button class="btn game" type="button" title="Challenge to Tic-Tac-Toe" aria-label="Challenge ' + esc(name) + ' to Tic-Tac-Toe">⚔</button>' +
+'<button class="btn uno" type="button" title="Challenge to UNO" aria-label="Challenge ' + esc(name) + ' to UNO">🃏</button>' +
 '<input type="file" class="im-img-file hidden" accept="image/*,.heic,.heif">' +
 '<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
 el.querySelector('.nm').textContent = name;
@@ -1760,6 +1769,7 @@ var imgBtn = el.querySelector('.icomp .img'), imgFile = el.querySelector('.im-im
 imgBtn.onclick = function () { imgFile.click(); };
 /* GIF search in a whisper: the one shared picker, told to deliver into this conversation */
 el.querySelector('.icomp .game').onclick = function () { challengeGame(id, name); };
+el.querySelector('.icomp .uno').onclick = function () { challengeUno(id, name); };
 var gifBtnWin = el.querySelector('.icomp .gif');
 gifBtnWin.onclick = function () {
 if (gifPicker.classList.contains('open') && gifTarget === 'dm:' + id) { closeGif(); return; }
@@ -1772,6 +1782,7 @@ if (f) sendIMImage(id, f);
 win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') minimizeIM(id); };
 win.log.onclick = function (e) {
 if (gameCardClick(e, id)) return;
+if (unoCardClick(e, id)) return;
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
 var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { reportMessage(rpt.dataset.mid); return; }
 /* Same Get Info / Whisper / Tag in Chat / Block menu a name click opens everywhere else (main
@@ -3031,6 +3042,181 @@ r.data.forEach(function (g) { if (gameShowsCard(g)) renderGameCard(g, { scroll: 
 gamesLoaded = true;
 }
 
+/* ---------- UNO in whispers (v112) ----------
+   Same shape as Tic-Tac-Toe above, with one difference: hands are secret. uno_games holds what
+   both players may see (whose turn, the top card and colour, how many cards each side holds,
+   UNO flags, pile size, the last action); uno_hands holds MY cards (RLS: only the owner can read
+   their row); the deck never leaves the server. Every move is an rpc -- uno_respond / uno_play /
+   uno_draw / uno_pass / uno_call / uno_catch / uno_resign / uno_cancel -- and the client repaints
+   from whatever comes back and from realtime. Standard two-player rules: the challenged player
+   goes first, Draw Two / Wild Draw Four hit at once and skip the victim, Skip and Reverse give
+   another turn, a drawn card may be played at once if it fits, UNO must be called on one card or
+   the other side can catch you for two. A win is worth 5 XP under the shared 15-a-day cap.
+   Cards are short strings: R7, G+2, BS (skip), YR (reverse), W (wild), W4 (wild draw four). */
+var unoGames = {}, unoHand = {}, unoPick = {};   // game id -> row / my cards / wild card awaiting a colour
+var UNO_COLOUR = { R: 'Red', G: 'Green', B: 'Blue', Y: 'Yellow' };
+function unoRank(c) { return c.charAt(0) === 'W' ? c : c.slice(1); }
+function unoColour(c) { return c.charAt(0) === 'W' ? 'W' : c.charAt(0); }
+function unoLabel(c) { var r = unoRank(c); return r === 'S' ? '⊘' : r === 'R' ? '⇄' : r === 'W' ? '✦' : r === 'W4' ? '+4' : r; }
+function unoName(c) { var r = unoRank(c); return c === 'W' ? 'Wild' : c === 'W4' ? 'Wild Draw Four' : UNO_COLOUR[c.charAt(0)] + ' ' + (r === '+2' ? 'Draw Two' : r === 'S' ? 'Skip' : r === 'R' ? 'Reverse' : r); }
+function unoPlayable(c, top, col) { return c.charAt(0) === 'W' || unoColour(c) === col || unoRank(c) === unoRank(top); }
+function unoCardHtml(c, cls, attrs) { return '<button type="button" class="uno-c ' + unoColour(c) + (cls ? ' ' + cls : '') + '" ' + (attrs || '') + ' aria-label="' + esc(unoName(c)) + '">' + unoLabel(c) + '</button>'; }
+/* Win / loss record against one person from every finished UNO game loaded (last 30 days). */
+function unoRecord(peerId) {
+var w = 0, l = 0;
+Object.keys(unoGames).forEach(function (k) { var g = unoGames[k]; if (g.status !== 'finished' || gamePeer(g) !== peerId) return; if (g.winner === me.id) w++; else l++; });
+return { w: w, l: l };
+}
+function renderUnoCard(g, opts) {
+opts = opts || {};
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+var card = w.log.querySelector('.uno-card[data-gid="' + g.id + '"]');
+if (!card) {
+if (!gameShowsCard(g)) return;
+card = document.createElement('div'); card.className = 'uno-card'; card.dataset.gid = g.id; w.log.appendChild(card);
+}
+var mine = g.challenger_id === me.id, rec = unoRecord(peer);
+var myCount = mine ? g.challenger_cards : g.opponent_cards, theirCount = mine ? g.opponent_cards : g.challenger_cards;
+var myUno = mine ? g.challenger_uno : g.opponent_uno, theirUno = mine ? g.opponent_uno : g.challenger_uno;
+var html = '<div class="ttt-hd"><span class="ttt-title">🃏 UNO</span><span class="ttt-rec" title="Your record against ' + esc(name) + ' (last 30 days)">' + rec.w + 'W · ' + rec.l + 'L</span></div>';
+var status = '', actions = '';
+if (g.status === 'pending') {
+status = mine ? 'Waiting for ' + esc(name) + ' to accept…' : '<b>' + esc(name) + '</b> challenges you to UNO!';
+actions = mine ? '<button type="button" class="btn uno-cancel">Cancel</button>' : '<button type="button" class="btn uno-accept">Accept</button><button type="button" class="btn uno-decline">Decline</button>';
+} else if (g.status === 'active') {
+var myTurn = g.turn === me.id, hand = unoHand[g.id] || [];
+var backs = ''; for (var i = 0; i < Math.min(theirCount, 10); i++) backs += '<span class="uno-c back small" aria-hidden="true"></span>';
+html += '<div class="uno-opp"><span class="uno-backs">' + backs + '</span><span>' + esc(name) + ' · ' + theirCount + ' card' + (theirCount === 1 ? '' : 's') + '</span>' + (theirUno ? '<span class="uno-badge">UNO!</span>' : '') + '</div>';
+var canDraw = myTurn && g.phase === 'play';
+html += '<div class="uno-table">' +
+'<button type="button" class="uno-pile"' + (canDraw ? '' : ' disabled') + ' title="Draw a card" aria-label="Draw pile, ' + g.draw_count + ' cards"><span class="uno-c back">' + g.draw_count + '</span><span class="uno-pile-lbl">' + (canDraw ? 'Draw' : 'Pile') + '</span></button>' +
+'<div class="uno-top">' + unoCardHtml(g.top_card, 'top', 'disabled') + '<span class="uno-colour ' + g.color + '" title="Current colour: ' + UNO_COLOUR[g.color] + '" aria-label="Current colour: ' + UNO_COLOUR[g.color] + '"></span></div></div>';
+var pick = unoPick[g.id];
+html += '<div class="uno-hand' + (myTurn ? ' live' : '') + '" role="group" aria-label="Your hand">' + hand.map(function (c, i) {
+var ok = myTurn && !pick && unoPlayable(c, g.top_card, g.color) && (g.phase !== 'after_draw' || i === hand.length - 1);
+return unoCardHtml(c, ok ? 'ok' : '', 'data-card="' + esc(c) + '"' + (ok ? '' : ' disabled'));
+}).join('') + '</div>';
+if (pick) {
+status = 'Pick a colour for your ' + esc(unoName(pick)) + ':';
+actions = ['R', 'G', 'B', 'Y'].map(function (k) { return '<button type="button" class="uno-col ' + k + '" data-col="' + k + '" title="' + UNO_COLOUR[k] + '" aria-label="' + UNO_COLOUR[k] + '"></button>'; }).join('') + '<button type="button" class="btn uno-nopick">Back</button>';
+} else {
+status = myTurn ? (g.phase === 'after_draw' ? '<b>Play the card you drew, or pass.</b>' : '<b>Your turn</b>') : esc(name) + '’s turn';
+if (myTurn && g.phase === 'after_draw') actions += '<button type="button" class="btn uno-pass">Pass</button>';
+if (!myUno && (myCount === 1 || (myCount === 2 && myTurn))) actions += '<button type="button" class="btn uno-call">UNO!</button>';
+if (myTurn && g.phase === 'play' && theirCount === 1 && !theirUno) actions += '<button type="button" class="btn uno-catch">Catch them!</button>';
+actions += '<button type="button" class="btn uno-resign">Resign</button>';
+}
+if (g.last_action) html += '<div class="uno-last">' + esc(g.last_action) + '</div>';
+} else if (g.status === 'finished') {
+var pts = gameMyPoints(g);
+if (g.winner === me.id) status = '<b>You won!</b>' + (g.result === 'resign' ? ' (' + esc(name) + ' resigned)' : '') + (pts ? ' +' + pts + ' XP' : ' <span class="ttt-cap">daily XP cap reached</span>');
+else status = '<b>' + esc(name) + ' won.</b>' + (g.result === 'resign' ? ' (you resigned)' : '');
+actions = '<button type="button" class="btn uno-rematch">Rematch</button>';
+} else {
+status = g.status === 'declined' ? (mine ? esc(name) + ' declined.' : 'You declined.') : g.status === 'cancelled' ? 'Challenge withdrawn.' : 'Challenge expired.';
+actions = '<button type="button" class="btn uno-rematch">Challenge again</button>';
+}
+html += '<div class="ttt-status">' + status + '</div><div class="ttt-actions">' + actions + '</div>';
+card.innerHTML = html;
+if (opts.scroll !== false) w.log.scrollTop = w.log.scrollHeight;
+}
+/* My hand for one game. Realtime on uno_hands keeps it fresh too; this is the belt to those
+   braces (called right after each of my own moves, and when a game turns active). */
+async function unoFetchHand(gid) {
+var r = await sb.from('uno_hands').select('cards').eq('game_id', gid).eq('user_id', me.id).maybeSingle();
+if (!r.error && r.data) { unoHand[gid] = r.data.cards || []; if (unoGames[gid]) renderUnoCard(unoGames[gid], { scroll: false }); }
+}
+async function unoCall(fn, args, peerId) {
+var r = await sb.rpc(fn, args);
+if (r.error) { imSys(peerId, r.error.message.replace(/^.*?:\s*/, '')); return null; }
+if (r.data) { delete unoPick[r.data.id]; unoGames[r.data.id] = r.data; renderUnoCard(r.data); if (r.data.status === 'active') unoFetchHand(r.data.id); }
+return r.data;
+}
+async function unoPlay(g, peerId, c, col) {
+var hand = unoHand[g.id] || [], i = hand.indexOf(c);
+if (i >= 0) hand.splice(i, 1);   // optimistic; the server's hand row confirms (or unoFetchHand restores it)
+delete unoPick[g.id];
+var r = await unoCall('uno_play', { p_game: g.id, p_card: c, p_color: col || null }, peerId);
+if (!r) unoFetchHand(g.id);
+}
+async function challengeUno(peerId, name) {
+if (!me) return;
+if (!(await whisperAllowed(peerId))) { imSys(peerId, 'Add ' + name + ' as a friend to challenge them.'); return; }
+var r = await sb.from('uno_games').insert({ challenger_id: me.id, challenger_name: me.name, opponent_id: peerId, opponent_name: name }).select().single();
+if (r.error) {
+if (r.error.code === '23505') imSys(peerId, 'You already have an UNO game open with ' + name + ' — finish it (or resign) first.');
+else if (/row-level security/i.test(r.error.message)) imSys(peerId, name + ' only takes whispers from friends, so no challenge yet.');
+else imSys(peerId, 'Could not send the challenge: ' + r.error.message);
+return;
+}
+unoGames[r.data.id] = r.data; renderUnoCard(r.data);
+triggerPush(peerId, me.name + ' challenges you to UNO', 'Open your whispers to accept.', 'gc-uno-' + r.data.id);
+}
+/* Card buttons: shares the delegated handler in ensureWin with Tic-Tac-Toe. */
+function unoCardClick(e, peerId) {
+var card = e.target.closest('.uno-card'); if (!card) return false;
+var g = unoGames[card.dataset.gid]; if (!g) return true;
+var b = e.target.closest('button'); if (!b || b.disabled) return true;
+var id = g.id, cl = b.classList;
+if (cl.contains('uno-accept')) unoCall('uno_respond', { p_game: id, p_accept: true }, peerId);
+else if (cl.contains('uno-decline')) unoCall('uno_respond', { p_game: id, p_accept: false }, peerId);
+else if (cl.contains('uno-cancel')) unoCall('uno_cancel', { p_game: id }, peerId);
+else if (cl.contains('uno-resign')) unoCall('uno_resign', { p_game: id }, peerId);
+else if (cl.contains('uno-rematch')) challengeUno(peerId, gamePeerName(g));
+else if (cl.contains('uno-pile')) unoCall('uno_draw', { p_game: id }, peerId);
+else if (cl.contains('uno-pass')) unoCall('uno_pass', { p_game: id }, peerId);
+else if (cl.contains('uno-call')) unoCall('uno_call', { p_game: id }, peerId);
+else if (cl.contains('uno-catch')) unoCall('uno_catch', { p_game: id }, peerId);
+else if (cl.contains('uno-nopick')) { delete unoPick[id]; renderUnoCard(g, { scroll: false }); }
+else if (cl.contains('uno-col')) { var wc = unoPick[id]; if (wc) unoPlay(g, peerId, wc, b.dataset.col); }
+else if (b.dataset.card) {
+if (b.dataset.card.charAt(0) === 'W') { unoPick[id] = b.dataset.card; renderUnoCard(g, { scroll: false }); }
+else unoPlay(g, peerId, b.dataset.card);
+}
+return true;
+}
+/* A change that arrived from the other side (realtime). */
+function unoArrived(g, isNew) {
+var prev = unoGames[g.id]; unoGames[g.id] = g;
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+if (g.status === 'active' && !unoHand[g.id]) unoFetchHand(g.id);
+renderUnoCard(g);
+var forMe = (isNew && g.opponent_id === me.id) || (g.status === 'active' && g.turn === me.id && (!prev || prev.turn !== me.id)) || (g.status === 'finished' && (!prev || prev.status !== 'finished'));
+if (!forMe) return;
+if (isNew) w.snippet = name + ' challenges you to UNO';
+else if (g.status === 'finished') w.snippet = g.winner === me.id ? 'UNO: you won!' : 'UNO: ' + name + ' won';
+else w.snippet = 'UNO: your turn';
+playSound('ding');
+if (w.minimized || document.activeElement !== w.ta) {
+unread[peer] = (unread[peer] || 0) + 1; renderPeople();
+if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
+if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
+}
+if (w.tab && tray && w.tab.parentNode === tray && tray.firstChild !== w.tab) tray.insertBefore(w.tab, tray.firstChild);
+updateTab(peer);
+if (document.hidden) bumpTitle();
+}
+function unoHandArrived(row) {
+if (!row || row.user_id !== me.id) return;
+unoHand[row.game_id] = row.cards || [];
+if (unoGames[row.game_id]) renderUnoCard(unoGames[row.game_id], { scroll: false });
+}
+async function loadUno() {
+unoGames = {}; unoHand = {};
+var since = new Date(Date.now() - 30 * 86400000).toISOString();
+var r = await sb.from('uno_games').select('*').or('challenger_id.eq.' + me.id + ',opponent_id.eq.' + me.id).gt('created_at', since).order('created_at', { ascending: true });
+if (r.error) return;
+var open = [];
+r.data.forEach(function (g) { unoGames[g.id] = g; if (g.status === 'active') open.push(g.id); });
+if (open.length) {
+var h = await sb.from('uno_hands').select('game_id, cards').in('game_id', open);
+(h.data || []).forEach(function (row) { unoHand[row.game_id] = row.cards || []; });
+}
+r.data.forEach(function (g) { if (gameShowsCard(g)) renderUnoCard(g, { scroll: false }); });
+}
+
 /* ---------- typing indicators (main room + whispers) ----------
    One 'typing' broadcast on the shared room channel -- the same pattern buzz already uses just
    above: a 'to' of null means the main room, a real user id means a whisper aimed at just that
@@ -3117,7 +3303,7 @@ var cmd = m[1].toLowerCase(), arg = m[2], rest = m[3].trim(), id;
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. The ⚔ in a whisper challenges them to Tic-Tac-Toe (a win is worth 3 XP, a draw 1). Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
+case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. The ⚔ in a whisper challenges them to Tic-Tac-Toe (a win is worth 3 XP, a draw 1); the 🃏 challenges them to UNO (a win is worth 5 XP). Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
@@ -3960,7 +4146,7 @@ if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
 if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
 rememberChatScroll();
 gcRoot.classList.add('leaderboard-open');
-showLeaderboardTab(lbTabTtt && lbTabTtt.classList.contains('active') ? 'ttt' : 'xp'); // reopen on whichever ladder was showing
+showLeaderboardTab(activeLeaderboardTab()); // reopen on whichever ladder was showing
 };
 }
 if (leaderboardBack) leaderboardBack.onclick = closeLeaderboard;
@@ -4704,7 +4890,12 @@ channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user
 ['challenger_id', 'opponent_id'].forEach(function (col) {
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'games', filter: col + '=eq.' + me.id }, function (p) { if (!games[p.new.id]) gameArrived(p.new, true); });
 channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: col + '=eq.' + me.id }, function (p) { gameArrived(p.new, false); });
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_games', filter: col + '=eq.' + me.id }, function (p) { if (!unoGames[p.new.id]) unoArrived(p.new, true); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_games', filter: col + '=eq.' + me.id }, function (p) { unoArrived(p.new, false); });
 });
+/* UNO: my hand rows (RLS only ever shows me my own). */
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_hands', filter: 'user_id=eq.' + me.id }, function (p) { unoHandArrived(p.new); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_hands', filter: 'user_id=eq.' + me.id }, function (p) { unoHandArrived(p.new); });
 /* Level-up announcement: level is a generated column (floor(sqrt(reactions_received/3))+1), so an
    UPDATE with a higher level than what was cached a moment ago is a genuine level-up, not just a
    reaction count ticking up within the same level. Only announced when the person is someone
@@ -4788,6 +4979,7 @@ else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.')
 }
 pinLogBottom();
 loadGames(); // Tic-Tac-Toe cards into their whisper windows (open games + results from the last hour)
+loadUno();   // same for UNO
 resetIdle();
 startRecentPeopleHeartbeat();
 autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
