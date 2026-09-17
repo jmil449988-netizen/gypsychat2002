@@ -1552,3 +1552,105 @@ html.ios .gc-root.leaderboard-open .leaderboard-panel,html.ios .gc-root.admin-op
 /* v118: on phones the DM toggle is pointless now that the Messages tray is its own pill, and
    Notifications lives in the ... menu again so "Change name" isn't squeezed. Desktop unchanged. */
 @media (max-width:500px){#dmToggleBtn{display:none !important}}
+
+/* ==================== v95: UX pass ====================
+   1. Rounded corners on every pill-shaped element: reaction pills, badges, the level tag, the
+      UNO/Hold'em chips, the Messages tray (collapsed pill AND the open tray), the refresh banner. */
+.react-pill{border-radius:10px;padding:1px 8px}
+.lvl{border-radius:5px;padding:0 4px}
+.uno-badge{border-radius:9px}
+.im-tab .badge,.rbadge{border-radius:9px}
+.dm-dock{border-radius:12px;overflow:hidden}
+.dm-dock.collapsed{border-radius:22px}
+.dm-dock .dm-bar{border-radius:inherit}
+.dm-dock.thread{border-radius:12px}
+.update-banner{border-radius:10px}
+.uno-pile,.turn-clock{border-radius:6px}
+.users .list div .presence-dot{border-radius:50%}
+/* 2. Reduced motion: stop the flames, the roulette wheel, the timer blink and the pulses when the
+      system setting asks for it (also saves battery on older phones). Functional transitions stay. */
+@media (prefers-reduced-motion:reduce){
+  .nmt::before,.nmenu .hd .hd-name.admin::before,.users .list div.admin .nmt::before{animation:none !important}
+  .rp-wheel,.rp-wheel.spinning{animation:none !important}
+  .tc-num.low,.uno-pile.must,.dm-bar.flash,.im.shake,.dm-dock.shake{animation:none !important}
+  *{scroll-behavior:auto !important}
+}
+/* 3. Keyboard focus: a visible gold ring on anything focusable, only for keyboard users
+      (:focus-visible), so mouse/touch taps stay clean. */
+button:focus-visible,[role=button]:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--gold-hi);outline-offset:2px}
+.dm-bar:focus-visible,.im-tab:focus-visible{outline:2px solid #e2c4ff;outline-offset:-3px}
+/* v121: day dividers in the room log and whispers */
+.day-div{display:flex;align-items:center;gap:8px;margin:8px 4px 6px;font:italic 11px "IM Fell English",Georgia,serif;color:#7a6d5a;letter-spacing:.5px}
+.day-div::before,.day-div::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,#3a3026,transparent)}
+.im .ilog .day-div{color:#8a7a9c}
+.im .ilog .day-div::before,.im .ilog .day-div::after{background:linear-gradient(90deg,transparent,#3d2a4d,transparent)}
+/* v121: read-only lines inside an .nmenu bubble (level badge details) */
+.nmenu .note{font-size:12px;line-height:1.5;color:var(--bone);padding:4px 10px;max-width:250px}
+.nmenu .note:last-child{color:var(--ash);font-style:italic;font-size:11px;border-top:1px solid #2a2119;margin-top:4px;padding-top:7px}
+.lvl{cursor:pointer}
+/* v121: "who's inside" line on the sign-on screen */
+.room-peek{font:italic 12px "IM Fell English",Georgia,serif;color:var(--ash);text-align:center;margin:2px 0 8px;line-height:1.5}
+.room-peek b{color:var(--gold);font-style:normal}
+/* v121: volume row inside the Sound menu */
+.nmenu .note.vol-row{display:flex;align-items:center;gap:8px;font-style:normal;color:var(--bone);border-top:1px solid #2a2119;margin-top:4px;padding-top:8px;font-size:12px}
+.nmenu .vol-row input[type=range]{flex:1;min-width:110px;accent-color:var(--gold);margin:0}
+.nmenu .vol-row span{min-width:34px;text-align:right;color:var(--ash);font-variant-numeric:tabular-nums}
+/* v121: connection state bar -- shows only while the realtime link is down */
+.conn-bar{position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:96;display:none;align-items:center;gap:8px;padding:6px 14px;
+font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold-hi);background:linear-gradient(180deg,#2a2118,#171310);border:2px double var(--gold-lo);border-radius:14px;box-shadow:0 0 0 1px #000,0 6px 18px #000}
+.conn-bar.show{display:flex}
+.conn-bar .dot{width:8px;height:8px;border-radius:50%;background:#e0402f;box-shadow:0 0 6px #e0402f;animation:tc-blink 1s steps(2,jump-none) infinite}
+.conn-bar.ok .dot{background:#39ff6a;box-shadow:0 0 6px #39ff6a;animation:none}
+html.ios .conn-bar{top:calc(env(safe-area-inset-top) + 46px)}
+/* v121: the phone's ⋯ menu is grouped -- Profile / Settings / Help -- so "things about me" and
+   "things about the app" are never in one undifferentiated pile. Desktop flattens the popover
+   into the bottom row (display:contents), where the headers stay hidden. */
+.pop-hd{display:none}
+@media (max-width:500px){
+  #statusPopover{gap:4px;border-radius:10px}
+  #statusPopover .pop-hd{display:block;font:700 9px Cinzel,Georgia,serif;letter-spacing:2px;text-transform:uppercase;color:var(--gold-lo);padding:6px 4px 2px;border-top:1px solid #2a2119;margin-top:2px}
+  #statusPopover .pop-hd:first-child{border-top:none;margin-top:0;padding-top:2px}
+  #statusPopover .cell{padding:6px 8px;border-radius:6px}
+}
+@media (max-width:500px){
+  /* real on/off switches beside Notifications and Sound in the ⋯ menu, driven by aria-pressed */
+  #statusPopover .notifbtn,#statusPopover .soundbtn{position:relative;padding-right:52px}
+  #statusPopover .notifbtn::after,#statusPopover .soundbtn::after{content:"OFF";position:absolute;right:8px;top:50%;transform:translateY(-50%);font:700 9px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--ash);border:1px solid #3a3026;border-radius:9px;padding:2px 7px;background:#0f0d0b}
+  #statusPopover .notifbtn[aria-pressed="true"]::after,#statusPopover .soundbtn[aria-pressed="true"]::after{content:"ON";color:#39ff6a;border-color:rgba(57,255,106,.5);box-shadow:0 0 6px rgba(57,255,106,.3)}
+}
+/* v121: "N new messages ↓" pill over the bottom edge of the room log */
+.new-pill{position:fixed;z-index:30;transform:translate(-50%,0);font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:#1a1410;background:linear-gradient(180deg,var(--gold-hi),var(--gold));border:1px solid #000;border-radius:14px;padding:5px 14px;cursor:pointer;box-shadow:0 0 0 1px var(--gold-lo),0 4px 12px #000,0 0 12px rgba(201,162,74,.5)}
+.new-pill:hover{filter:brightness(1.08)}
+.new-pill.hidden{display:none}
+/* v121: first-run tips */
+.tour{position:fixed;z-index:97;background:linear-gradient(180deg,#2a2118,#171310);border:2px double var(--gold-lo);border-radius:10px;outline:1px solid #000;box-shadow:0 0 0 1px #000,0 8px 24px #000,0 0 18px rgba(201,162,74,.25);padding:10px 12px;color:var(--bone);font-size:13px;line-height:1.5}
+.tour-n{font:700 9px Cinzel,Georgia,serif;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:4px}
+.tour-b{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.tour-b .btn{height:26px;font-size:11px}
+.tour-b .tour-skip{color:var(--ash);border-color:#3a3026}
+.tour-hi{outline:2px solid var(--gold-hi) !important;outline-offset:2px;box-shadow:0 0 16px rgba(255,223,126,.55) !important;transition:box-shadow .2s}
+/* v121: "/" command palette rows -- command on the left, what it does on the right */
+.cmd-menu{min-width:240px;max-width:min(360px,calc(100vw - 12px));max-height:230px}
+.cmd-menu button{display:flex;align-items:baseline;gap:10px}
+.cmd-menu .cmd-c{flex:none;font:700 12px Cinzel,Georgia,serif;color:var(--gold)}
+.cmd-menu .cmd-c i{font:italic 11px "IM Fell English",Georgia,serif;color:var(--ash)}
+.cmd-menu .cmd-d{flex:1;min-width:0;font-weight:normal;font-size:11px;color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmd-menu button.active .cmd-c{color:var(--gold-hi)}
+/* v121: toasts (game challenges / your move / results) */
+.toasts{position:fixed;right:10px;top:10px;z-index:94;display:flex;flex-direction:column;gap:8px;width:min(300px,calc(100vw - 20px));pointer-events:none}
+.toast{pointer-events:auto;display:flex;align-items:flex-start;gap:8px;padding:9px 10px;cursor:pointer;color:var(--bone);
+background:linear-gradient(180deg,#2a2118,#171310);border:2px double var(--gold-lo);border-radius:12px;outline:1px solid #000;
+box-shadow:0 0 0 1px #000,0 8px 24px #000,0 0 14px rgba(201,162,74,.3);animation:toast-in .22s ease-out}
+.toast.out{opacity:0;transform:translateY(-6px);transition:opacity .3s,transform .3s}
+@keyframes toast-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.toast-i{font-size:20px;line-height:1;flex:none;margin-top:1px}
+.toast-body{flex:1;min-width:0}
+.toast-t{font:700 12px Cinzel,Georgia,serif;letter-spacing:.5px;color:var(--gold-hi);line-height:1.35}
+.toast-s{font-size:11px;color:var(--ash);margin-top:2px;font-variant-numeric:tabular-nums}
+.toast-b{display:flex;gap:6px;margin-top:7px}
+.toast-b .btn{height:24px;font-size:10px;min-width:0;padding:0 10px}
+.toast-x{flex:none;background:none;border:none;color:var(--ash);font-size:16px;line-height:1;cursor:pointer;padding:0 2px;margin:-2px -2px 0 0}
+.toast-x:hover{color:var(--gold-hi)}
+@media (max-width:500px){.toasts{left:10px;right:10px;width:auto;top:44px}} /* below the connection bar's slot */
+html.ios .toasts{top:calc(env(safe-area-inset-top) + 82px)}
+@media (prefers-reduced-motion:reduce){.toast{animation:none}}
