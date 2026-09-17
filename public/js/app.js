@@ -25,7 +25,7 @@ var bugReportsBtn = $('bugReportsBtn'), bugReportsBadge = $('bugReportsBadge'), 
 var leaderboardBtn = $('leaderboardBtn'), leaderboardPanel = $('leaderboardPanel'), leaderboardList = $('leaderboardList'), leaderboardBack = $('leaderboardBack');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
-var friendReqBtn = $('friendReqBtn'), friendReqBadge = $('friendReqBadge'), friendReqPanel = $('friendReqPanel'), friendReqList = $('friendReqList');
+var frqSection = $('frqSection'), frqCount = $('frqCount'), friendReqList = $('friendReqList');
 
 var EMOJI = ['😊','😂','😎','😉','😢','😡','😱','😴','🤔','😍','🙃','😜','🤣','😭','🥺','😏','👍','👎','👋','🙏','💯','🔥','✨','🎉','❤️','💔','💀','👀','🤷','🤯','⚔️','🛡️','🧙','🐉','🏹','💎','🕯️','🌙','🙌','😤'];
 
@@ -61,7 +61,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 106;
+var BUILD_NUMBER = 107;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -641,7 +641,9 @@ try { dmTabsOff = localStorage.getItem('gc_dm_tabs_off') === '1'; } catch (e) {}
    sitting in wins, even with every window minimized. */
 function applyDmVisibility() {
 var anyOpen = Object.keys(wins).some(function (id) { return !wins[id].minimized; });
-if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff && !anyOpen);
+/* a waiting friend request keeps the dock on screen too -- it's the only place requests show now */
+var pending = typeof pendingRequestCount === 'function' && pendingRequestCount() > 0;
+if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff && !anyOpen && !pending);
 }
 function updateDmToggleBtn() {
 applyDmVisibility();
@@ -1590,9 +1592,10 @@ w.minimized = !shown;
 if (w.tab) w.tab.classList.toggle('active', id === activeDm);
 total += unread[id] || 0;
 });
+total += pendingRequestCount(); // friend requests waiting in the inbox count on the bar too
 if (dmBarBadge) { dmBarBadge.textContent = total > 9 ? '9+' : String(total); dmBarBadge.classList.toggle('hidden', !total); }
 if (dmBar) dmBar.setAttribute('aria-expanded', dockOpen ? 'true' : 'false');
-if (dmEmpty) dmEmpty.classList.toggle('hidden', ids.length > 0);
+if (dmEmpty) dmEmpty.classList.toggle('hidden', ids.length > 0 || pendingRequestCount() > 0);
 applyDmVisibility();
 if (typeof applyPill === 'function') applyPill();
 }
@@ -1864,7 +1867,7 @@ badge.classList.toggle('hidden', !n);
 w.tab.classList.toggle('unread', !!n);
 var sn = w.tab.querySelector('.snippet'); if (sn) sn.textContent = w.snippet || '';
 if (dmBarBadge) {
-var total = 0; Object.keys(wins).forEach(function (k) { total += unread[k] || 0; });
+var total = pendingRequestCount(); Object.keys(wins).forEach(function (k) { total += unread[k] || 0; });
 dmBarBadge.textContent = total > 9 ? '9+' : String(total); dmBarBadge.classList.toggle('hidden', !total);
 }
 }
@@ -2440,6 +2443,7 @@ friendReqChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', tab
 var row = p.new; if (row.status !== 'pending') return;
 incomingRequests[row.id] = { id: row.id, senderId: row.sender_id, senderName: row.sender_name || '?', createdAt: row.created_at, intro: row.intro || '' };
 playSound('ding');
+if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
 notifyDesktop((row.sender_name || 'Someone') + ' wants to be friends', row.intro || 'Tap to see your friend requests', 'gc-friendreq-' + row.id, function () { openFriendReqPanel(); });
 addSys((row.sender_name || 'Someone') + ' sent you a friend request. 🤝' + (row.intro ? ' “' + row.intro + '”' : ''));
 updateFriendReqBadge(); renderFriendReqPanel();
@@ -2524,39 +2528,31 @@ if (ur.error) { addSys('Could not decline: ' + ur.error.message); return; }
 delete incomingRequests[reqId];
 updateFriendReqBadge(); renderFriendReqPanel();
 }
+/* Friend requests live at the top of the Messages inbox now (v107; see #frqSection in index.html)
+   instead of behind their own floating 🤝 bell. The section only shows while something is
+   waiting; its count, and the dock bar's badge (which adds pending requests to unread whispers),
+   both come from here. syncDock() is what folds the count into the bar. */
+function pendingRequestCount() { return Object.keys(incomingRequests).length; }
 function updateFriendReqBadge() {
-if (!friendReqBadge || !friendReqBtn) return;
-var n = Object.keys(incomingRequests).length;
-friendReqBadge.textContent = n > 9 ? '9+' : String(n);
-friendReqBadge.classList.toggle('hidden', !n);
-friendReqBtn.classList.toggle('has-requests', !!n);
+var n = pendingRequestCount();
+if (frqSection) frqSection.classList.toggle('hidden', !n);
+if (frqCount) frqCount.textContent = n > 9 ? '9+' : String(n);
+syncDock();
 }
-function closeFriendReqPanel() {
-if (!friendReqPanel) return;
-friendReqPanel.classList.remove('open');
-if (friendReqBtn) friendReqBtn.setAttribute('aria-expanded', 'false');
-}
+/* "Open the requests" now means: expand the dock on its inbox, where the section sits first. */
 function openFriendReqPanel() {
-if (!friendReqPanel) return;
 renderFriendReqPanel();
-friendReqPanel.classList.add('open');
-if (friendReqBtn) friendReqBtn.setAttribute('aria-expanded', 'true');
+activeDm = null; dockOpen = true; saveDockOpen(); syncDock();
+if (frqSection) frqSection.scrollIntoView({ block: 'start' });
 }
-if (friendReqBtn) {
-friendReqBtn.onclick = function (e) { e.stopPropagation(); if (friendReqPanel.classList.contains('open')) closeFriendReqPanel(); else openFriendReqPanel(); };
-}
-document.addEventListener('click', function (e) {
-if (!friendReqPanel || !friendReqPanel.classList.contains('open')) return;
-if (!friendReqPanel.contains(e.target) && e.target !== friendReqBtn) closeFriendReqPanel();
-});
-document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeFriendReqPanel(); });
+function closeFriendReqPanel() {} // nothing separate to close any more; kept for the call sites
 /* Renders the inbox list and wires up each row's swipe gesture -- right = accept, left = decline,
    matching the request, with Accept/Decline buttons on every row too since a swipe-only control
    would shut out a mouse user or anyone on a screen reader. */
 function renderFriendReqPanel() {
 if (!friendReqList) return;
 var ids = Object.keys(incomingRequests).sort(function (a, b) { return new Date(incomingRequests[b].createdAt) - new Date(incomingRequests[a].createdAt); });
-if (!ids.length) { friendReqList.innerHTML = '<div class="frq-empty">No pending requests.</div>'; return; }
+if (!ids.length) { friendReqList.innerHTML = ''; return; }
 friendReqList.innerHTML = ids.map(function (reqId) {
 var req = incomingRequests[reqId];
 return '<div class="frq-row" data-req="' + esc(reqId) + '">' +
@@ -2691,7 +2687,6 @@ if (reportsBadge) reportsBadge.classList.add('hidden');
 if (reportsOverlay) reportsOverlay.classList.add('hidden');
 unsubscribeBugReports();
 unsubscribeFriendRequests();
-if (friendReqBtn) friendReqBtn.classList.add('hidden');
 closeFriendReqPanel();
 incomingRequests = {}; outgoingPending = {};
 if (bugBtn) bugBtn.classList.add('hidden');
@@ -4510,7 +4505,6 @@ updateUsersStacked(); // the panel only has a size now that it is no longer hidd
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
 if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
 if (bugBtn) bugBtn.classList.remove('hidden');
-if (friendReqBtn) friendReqBtn.classList.remove('hidden');
 if ($('moreBtn')) $('moreBtn').classList.remove('hidden');
 /* Anonymous accounts live in this browser's storage and nowhere else, so the 🔑 (and the nudge
    below) are only offered to them -- an account with an email attached is already portable. */
