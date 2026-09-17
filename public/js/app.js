@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 132;
+var BUILD_NUMBER = 133;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -3849,7 +3849,8 @@ var w = 0, l = 0, net = 0;
 Object.keys(hdGames).forEach(function (k) { var g = hdGames[k]; if (g.status !== 'finished' || gamePeer(g) !== peerId) return; if (g.winner === me.id) w++; else if (g.winner) l++; net += gameMyPoints(g); });
 return { w: w, l: l, net: net };
 }
-function myXp() { var st = userStats[me.id]; return st ? (st.xp != null ? st.xp : (st.reactions_received || 0) + (st.game_points || 0)) : 0; }
+function myXp() { return xpOfUser(me.id); }
+function xpOfUser(id) { var st = userStats[id]; return st ? (st.xp != null ? st.xp : (st.reactions_received || 0) + (st.game_points || 0)) : 0; }
 function holdemStakesMenu(peerId, name) {
 var anchor = wins[peerId] && wins[peerId].el.querySelector('.icomp .games');
 if (!anchor) return;
@@ -3862,13 +3863,17 @@ async function challengeHoldem(peerId, name, stakes) {
 if (!me) return;
 var st = HD_STAKES[stakes]; if (!st) return;
 if (!(await whisperAllowed(peerId))) { imSys(peerId, 'Add ' + name + ' as a friend to play them.'); return; }
-var have = myXp();
+var have = myXp(), theirs = xpOfUser(peerId);
 if (have < st.min) { imSys(peerId, 'You need at least ' + st.min + ' XP to sit down at the ' + st.label.toLowerCase() + ' table (you have ' + have + ').'); return; }
-var suggested = Math.min(st.max, have);
-var v = await showPromptModal('Sit down with how much XP?', { value: String(suggested), placeholder: st.min + '–' + st.max, maxLength: 3, hint: st.label + ': blinds ' + st.sb + '/' + st.bb + '. Between ' + st.min + ' and ' + Math.min(st.max, have) + ' XP — it leaves your XP now and comes back (plus or minus) when the game ends.', okLabel: 'Sit down' });
+/* v133: the other player has to cover the same buy-in -- say so before the prompt rather than
+   letting a table open that they can never sit down at (the server refuses it too). */
+if (theirs < st.min) { imSys(peerId, name + ' only has ' + theirs + ' XP — not enough for the ' + st.label.toLowerCase() + ' table (' + st.min + ' XP minimum). XP comes from reactions and from winning games.'); return; }
+var suggested = Math.min(st.max, have, theirs);
+var v = await showPromptModal('Sit down with how much XP?', { value: String(suggested), placeholder: st.min + '–' + st.max, maxLength: 3, hint: st.label + ': blinds ' + st.sb + '/' + st.bb + '. ' + name + ' has ' + theirs + ' XP. Between ' + st.min + ' and ' + Math.min(st.max, have) + ' XP — it leaves your XP now and comes back (plus or minus) when the game ends.', okLabel: 'Sit down' });
 if (v === null) return;
 var amt = parseInt(v, 10);
 if (!(amt >= st.min && amt <= st.max)) { imSys(peerId, 'Sit down with ' + st.min + ' to ' + st.max + ' XP at this table.'); return; }
+if (amt > theirs) { imSys(peerId, name + ' only has ' + theirs + ' XP and can’t cover a ' + amt + '-XP buy-in. Try ' + theirs + ' or less.'); return; }
 var r = await sb.rpc('holdem_challenge', { p_opponent: peerId, p_stakes: stakes, p_buy_in: amt });
 if (r.error) {
 if (/unique|one_open/i.test(r.error.message)) imSys(peerId, 'You already have a Hold’em game open with ' + name + ' — finish it first.');
@@ -3901,8 +3906,9 @@ var theirShown = mine ? g.shown_opponent : g.shown_challenger, myShown = mine ? 
 var html = '<div class="ttt-hd"><span class="ttt-title">♠ Hold’em · ' + st.label + '</span><span class="ttt-rec" title="Your record against ' + esc(name) + ' (last 30 days)">' + rec.w + 'W · ' + rec.l + 'L · ' + (rec.net >= 0 ? '+' : '') + rec.net + ' XP</span></div>';
 var status = '', actions = '';
 if (g.status === 'pending') {
-status = mine ? 'Waiting for ' + esc(name) + ' to sit down (' + g.buy_in + ' XP each)…' : '<b>' + esc(name) + '</b> sits down with <b>' + g.buy_in + ' XP</b> — blinds ' + g.sb + '/' + g.bb + '. Sit down for ' + g.buy_in + ' XP too?';
-actions = mine ? '<button type="button" class="btn hd-cancel">Cancel</button>' : '<button type="button" class="btn hd-accept">Sit down</button><button type="button" class="btn hd-decline">Decline</button>';
+var short = !mine && myXp() < g.buy_in; // v133: invited, but can't cover the buy-in
+status = mine ? 'Waiting for ' + esc(name) + ' to sit down (' + g.buy_in + ' XP each)…' : '<b>' + esc(name) + '</b> sits down with <b>' + g.buy_in + ' XP</b> — blinds ' + g.sb + '/' + g.bb + '. ' + (short ? 'You have <b>' + myXp() + ' XP</b> — you need ' + g.buy_in + ' to sit down. XP comes from reactions and from winning games.' : 'Sit down for ' + g.buy_in + ' XP too?');
+actions = mine ? '<button type="button" class="btn hd-cancel">Cancel</button>' : (short ? '' : '<button type="button" class="btn hd-accept">Sit down</button>') + '<button type="button" class="btn hd-decline">Decline</button>';
 } else if (g.status === 'active' || g.status === 'finished') {
 var inHand = g.status === 'active' && g.street !== 'between' && g.street !== 'showdown';
 var myTurn = inHand && g.turn === me.id;
