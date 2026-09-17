@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 128;
+var BUILD_NUMBER = 129;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -489,7 +489,11 @@ osc.connect(g); g.connect(masterOut(ctx)); osc.start(t0); osc.stop(t0 + dur + 0.
    also means a new recording can be added just by dropping the file in and listing it here. */
 var SOUND_FILES = { slap: 1, kiss: 1, laugh: 1, cry: 1, gunshot: 1, clap: 1, boo: 1, airhorn: 1, badum: 1, crickets: 1, knock: 1, howl: 1, sneeze: 1, burp: 1, cheers: 1, spit: 1, fart: 1, drumroll: 1,
 'friend-logon': 1, 'login': 1, 'friend-request': 1, 'game-invite': 1, 'pm': 1, ding: 1, buzz: 1, turn: 1, tick: 1, tock: 1,
-coin: 1, win: 1, lose: 1, 'hm-right': 1, 'hm-wrong': 1, levelup: 1, intro: 1, logout: 1, signoff: 1, unroll: 1, wheel: 1 };
+coin: 1, win: 1, lose: 1, 'hm-right': 1, 'hm-wrong': 1, levelup: 1, intro: 1, logout: 1, signoff: 1, unroll: 1, wheel: 1, card: 1, chips: 1, trapdoor: 1, fortune: 1 };
+/* v129: table sounds (a card, chips) can fire twice for one move when a multi-statement rpc relays
+   an intermediate row -- one per game per sound within 400 ms is plenty */
+var gameSfxAt = {};
+function gameSfx(gid, name) { var k = gid + ':' + name, now = Date.now(); if (gameSfxAt[k] && now - gameSfxAt[k] < 400) return; gameSfxAt[k] = now; playSound(name); }
 var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5, unroll: 0.6, signoff: 0.8, coin: 0.9 }; // the punchy ones sat a few dB under the rest after limiting
 var soundBuf = {}, soundFail = {};
 function loadSoundFile(name) {
@@ -3613,6 +3617,7 @@ var peer = gamePeer(g), name = gamePeerName(g);
 var w = ensureWin(peer, name);
 if (g.status === 'active' && !unoHand[g.id]) unoFetchHand(g.id);
 renderUnoCard(g);
+if (prev && g.status === 'active' && (prev.status !== 'active' || prev.last_action !== g.last_action)) gameSfx(g.id, 'card'); // v129: the deal, and every card played or drawn
 var forMe = (isNew && g.opponent_id === me.id) || (g.status === 'active' && g.turn === me.id && (!prev || prev.turn !== me.id)) || (g.status === 'finished' && (!prev || prev.status !== 'finished'));
 if (!forMe) return;
 if (isNew) w.snippet = name + ' challenges you to UNO';
@@ -3750,7 +3755,7 @@ var w = ensureWin(peer, name);
 renderHmCard(g);
 /* v128: a guess landed (either side's) -- a miss or a hit, before any turn/finish nudge */
 if (prev && prev.status === 'active' && g.status !== 'pending') {
-if ((g.misses || 0) > (prev.misses || 0)) playSound('hm-wrong');
+if ((g.misses || 0) > (prev.misses || 0)) playSound((g.misses || 0) >= 6 ? 'trapdoor' : 'hm-wrong'); // v129: the sixth miss drops the trapdoor
 else if (g.status === 'active' && g.mask !== prev.mask) playSound('hm-right');
 }
 var forMe = (isNew && g.opponent_id === me.id) || (g.status === 'active' && g.turn === me.id && (!prev || prev.turn !== me.id)) || (g.status === 'finished' && (!prev || prev.status !== 'finished'));
@@ -3962,6 +3967,10 @@ if (g.status === 'active' && (!prev || prev.hand_no !== g.hand_no || prev.status
 if (g.status === 'finished' && (!prev || prev.status !== 'finished')) { delete hdHand[g.id]; refreshMyStats(); }
 if (['declined', 'cancelled', 'expired'].indexOf(g.status) >= 0 && (!prev || prev.status !== g.status)) refreshMyStats();
 renderHdCard(g);
+if (prev && g.status === 'active') { // v129: cards on the deal and each street, chips whenever the pot grows
+if (prev.hand_no !== g.hand_no || (prev.street !== g.street && ['flop', 'turn', 'river'].indexOf(g.street) >= 0)) gameSfx(g.id, 'card');
+else if ((g.pot || 0) > (prev.pot || 0)) gameSfx(g.id, 'chips');
+}
 if (quiet) return;
 var forMe = (isNew && g.opponent_id === me.id) || (g.status === 'active' && g.turn === me.id && (!prev || prev.turn !== me.id || prev.hand_no !== g.hand_no)) || (g.status === 'finished' && (!prev || prev.status !== 'finished'));
 if (!forMe) return;
@@ -5046,7 +5055,7 @@ setTimeout(function () {
 if (clicks) clearInterval(clicks);
 wheelEl.classList.remove('spinning'); wheelSpinning = false;
 if (fortuneEl) { fortuneEl.textContent = '“' + FORTUNES[Math.floor(Math.random() * FORTUNES.length)] + '”'; fortuneEl.classList.add('show'); }
-playSound('ding');
+playSound('fortune');
 }, 4000);
 }
 if (wheelEl) {
