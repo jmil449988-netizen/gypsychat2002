@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 114;
+var BUILD_NUMBER = 115;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -3512,8 +3512,9 @@ status = myTurn ? '<b>Your turn</b> — pick a letter' : esc(name) + '’s turn'
 actions = '<button type="button" class="btn hm-resign">Resign</button>';
 } else {
 var pts = gameMyPoints(g);
-if (g.winner === me.id) status = '<b>You won!</b> ' + (g.result === 'solved' ? 'The word was ' + esc((g.word || g.mask).toUpperCase()) + '.' : g.result === 'hanged' ? esc(name) + ' hanged the man.' : esc(name) + ' resigned.') + (pts ? ' +' + pts + ' XP' : ' <span class="ttt-cap">daily XP cap reached</span>');
-else status = '<b>' + esc(name) + ' won.</b> ' + (g.result === 'solved' ? 'They solved ' + esc((g.word || g.mask).toUpperCase()) + '.' : g.result === 'hanged' ? 'Your miss hanged the man — it was ' + esc((g.word || g.mask).toUpperCase()) + '.' : '(you resigned)');
+var theWord = esc((g.word || g.mask).toUpperCase());
+if (g.winner === me.id) status = '<b>You won!</b> ' + (g.result === 'solved' ? 'The word was ' + theWord + '.' : g.result === 'hanged' ? esc(name) + ' hanged the man — it was ' + theWord + '.' : esc(name) + ' resigned — it was ' + theWord + '.') + (pts ? ' +' + pts + ' XP' : ' <span class="ttt-cap">daily XP cap reached</span>');
+else status = '<b>' + esc(name) + ' won.</b> ' + (g.result === 'solved' ? 'They solved ' + theWord + '.' : g.result === 'hanged' ? 'Your miss hanged the man — it was ' + theWord + '.' : 'You resigned — it was ' + theWord + '.');
 actions = '<button type="button" class="btn hm-rematch">Rematch</button>';
 }
 } else {
@@ -5527,17 +5528,36 @@ channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'dm_r
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reactions' }, function (p) { applyReactionRow(p.new, true); });
 channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reactions' }, function (p) { applyReactionRow(p.old, false); });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_stats' }, function (p) { userStats[p.new.user_id] = p.new; refreshLevelBadges(p.new.user_id); });
-/* Tic-Tac-Toe: my games, whichever side I'm on (RLS already limits rows to mine; the filters just
-   keep the two subscriptions cheap). */
+/* Games: my rows, whichever side I'm on (RLS already limits rows to mine; the filters just keep
+   the subscriptions cheap). A move is one transaction but often several UPDATE statements, and
+   realtime relays every one of them -- so an event can carry a half-way row, and one can land
+   AFTER the final row already came back from my own rpc. Two guards: a payload is only applied
+   when it is at least as new as what we hold (updated_at), and every event also schedules a
+   short-delay re-read of the row, which always returns the committed final state. */
+var refetchTimers = {};
+function refetchGame(table, id, apply) {
+var key = table + ':' + id;
+clearTimeout(refetchTimers[key]);
+refetchTimers[key] = setTimeout(function () {
+delete refetchTimers[key];
+sb.from(table).select('*').eq('id', id).maybeSingle().then(function (r) { if (!r.error && r.data) apply(r.data); });
+}, 300);
+}
+function fresher(store, row) {
+var cur = store[row.id];
+if (!cur || !cur.updated_at || !row.updated_at) return true;
+return new Date(row.updated_at).getTime() >= new Date(cur.updated_at).getTime();
+}
+[['games', function () { return games; }, gameArrived], ['uno_games', function () { return unoGames; }, unoArrived],
+ ['hangman_games', function () { return hmGames; }, hmArrived], ['holdem_games', function () { return hdGames; }, function (g, isNew) { hdArrived(g, isNew); }]].forEach(function (t) {
+var table = t[0], store = t[1], arrived = t[2];
 ['challenger_id', 'opponent_id'].forEach(function (col) {
-channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'games', filter: col + '=eq.' + me.id }, function (p) { if (!games[p.new.id]) gameArrived(p.new, true); });
-channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: col + '=eq.' + me.id }, function (p) { gameArrived(p.new, false); });
-channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_games', filter: col + '=eq.' + me.id }, function (p) { if (!unoGames[p.new.id]) unoArrived(p.new, true); });
-channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_games', filter: col + '=eq.' + me.id }, function (p) { unoArrived(p.new, false); });
-channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hangman_games', filter: col + '=eq.' + me.id }, function (p) { if (!hmGames[p.new.id]) hmArrived(p.new, true); });
-channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hangman_games', filter: col + '=eq.' + me.id }, function (p) { hmArrived(p.new, false); });
-channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'holdem_games', filter: col + '=eq.' + me.id }, function (p) { if (!hdGames[p.new.id]) hdArrived(p.new, true); });
-channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'holdem_games', filter: col + '=eq.' + me.id }, function (p) { hdArrived(p.new, false); });
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: table, filter: col + '=eq.' + me.id }, function (p) { if (!store()[p.new.id]) arrived(p.new, true); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: table, filter: col + '=eq.' + me.id }, function (p) {
+if (fresher(store(), p.new)) arrived(p.new, false);
+refetchGame(table, p.new.id, function (row) { if (fresher(store(), row)) arrived(row, false); });
+});
+});
 });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'holdem_hands', filter: 'user_id=eq.' + me.id }, function (p) { hdHandArrived(p.new); });
 channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'holdem_hands', filter: 'user_id=eq.' + me.id }, function (p) { hdHandArrived(p.new); });
