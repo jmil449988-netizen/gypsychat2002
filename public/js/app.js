@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 125;
+var BUILD_NUMBER = 126;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -488,7 +488,7 @@ osc.connect(g); g.connect(masterOut(ctx)); osc.start(t0); osc.stop(t0 + dur + 0.
    also means a new recording can be added just by dropping the file in and listing it here. */
 var SOUND_FILES = { slap: 1, kiss: 1, laugh: 1, cry: 1, gunshot: 1, clap: 1, boo: 1, airhorn: 1, badum: 1, crickets: 1, knock: 1, howl: 1, sneeze: 1, burp: 1, cheers: 1,
 'friend-logon': 1, 'login': 1, 'friend-request': 1, 'game-invite': 1, 'pm': 1 };
-var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1 }; // the punchy ones sat a few dB under the rest after limiting
+var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2 }; // the punchy ones sat a few dB under the rest after limiting
 var soundBuf = {}, soundFail = {};
 function loadSoundFile(name) {
 if (soundBuf[name]) return soundBuf[name];
