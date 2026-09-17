@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 123;
+var BUILD_NUMBER = 124;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -1459,6 +1459,7 @@ function avatarHtml(id, name, extraClass) {
 function addSys(text, t) {
 var d = document.createElement('div'); d.className = 'm sys';
 d.innerHTML = '<span class="t">' + fmt(t || Date.now()) + '</span>' + esc(text);
+dayDivider(log, 'room', t || Date.now()); // v124: system lines count too -- the 'Today' divider was never drawn when the only messages today were the welcome lines
 log.appendChild(d); log.scrollTop = log.scrollHeight;
 }
 function renderRoom(m) {
@@ -2265,7 +2266,7 @@ syncDock();
 /* Kept as a no-op so the call sites that used to raise a floating window still read naturally:
    there is only one panel now, and nothing inside it stacks. */
 function front() {}
-function imSys(id, text) { var w = wins[id]; if (!w) return; var d = document.createElement('div'); d.className = 'm sys'; d.textContent = text; w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; }
+function imSys(id, text) { var w = wins[id]; if (!w) return; var d = document.createElement('div'); d.className = 'm sys'; d.textContent = text; dayDivider(w.log, 'im:' + id, Date.now()); w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; }
 async function sendBuzz(id) {
 var now = Date.now();
 if (lastBuzz[id] && now - lastBuzz[id] < 3000) return;
