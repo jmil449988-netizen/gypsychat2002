@@ -64,7 +64,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 112;
+var BUILD_NUMBER = 113;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -277,10 +277,11 @@ var ALLOWED_IMG_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 
    The effective status (what others see) is computed by effectiveStatus() and pushed to
    presence via updateMyPresence() whenever either input changes. */
 var manualStatus = 'online', myAwayMsg = '', autoIdle = false, awayReplied = {};
+var myStatusMsg = ''; // free-text line shown beside my status (profiles.status_message, carried in presence)
 function effectiveStatus() { return (manualStatus === 'online' && autoIdle) ? 'idle' : manualStatus; }
 function updateMyPresence() {
 if (!channel || !me) return;
-channel.track({ name: me.name, status: effectiveStatus(), awayMsg: manualStatus === 'away' ? myAwayMsg : '', avatarUrl: me.avatarUrl || '' });
+channel.track({ name: me.name, status: effectiveStatus(), awayMsg: manualStatus === 'away' ? myAwayMsg : '', statusMsg: myStatusMsg || '', avatarUrl: me.avatarUrl || '' });
 }
 function updateStatusBtn() {
 var b = $('statusBtn'); if (!b) return;
@@ -291,7 +292,7 @@ var label = eff.charAt(0).toUpperCase() + eff.slice(1);
    the word used to. The word still appears in the dropdown this opens (Online/Away/Busy), and
    lives on here as the title/aria-label so it's not lost for anyone hovering or using a screen
    reader. */
-b.textContent = '●';
+var bi = b.querySelector('.btn-icon'); if (bi) bi.textContent = '●'; else b.textContent = '●';
 b.title = 'Status: ' + label + ' — click to change';
 b.setAttribute('aria-label', 'Status: ' + label + '. Click to change your status.');
 b.setAttribute('data-status', eff);
@@ -300,6 +301,13 @@ function setMyStatus(status, awayMsg) {
 if (manualStatus === 'away' && status !== 'away') awayReplied = {}; // fresh away-reply window next time I go away
 manualStatus = status; myAwayMsg = awayMsg || ''; autoIdle = false;
 updateMyPresence(); updateStatusBtn(); resetIdle();
+}
+async function setMyStatusMsg(text) {
+myStatusMsg = (text || '').slice(0, 80);
+updateMyPresence(); updateWinBanners();
+var r = await sb.from('profiles').update({ status_message: myStatusMsg || null, updated_at: new Date().toISOString() }).eq('user_id', me.id);
+if (r.error) addSys('Could not save your status message: ' + r.error.message);
+else addSys(myStatusMsg ? 'Status message set: “' + myStatusMsg + '”' : 'Status message cleared.');
 }
 var IDLE_MS = 3 * 60 * 1000; // auto-idle after 3 minutes of no activity, AIM-style
 /* Auto-disconnect after 30 minutes of no activity at all -- a harder timeout than the 3-minute
@@ -324,6 +332,31 @@ idleDisconnectTimer = setTimeout(function () { if (me) idleDisconnect(); }, IDLE
 }
 ['mousemove', 'keydown', 'touchstart', 'scroll', 'pointerdown'].forEach(function (evt) { document.addEventListener(evt, resetIdle, { passive: true }); });
 
+/* A small anchored menu for a button that has a few choices behind it (the whisper composer's
+   📎 and 🎲 buttons). Same .nmenu look as the status dropdown below. */
+var miniMenu = document.createElement('div'); miniMenu.className = 'nmenu'; miniMenu.setAttribute('role', 'menu'); document.body.appendChild(miniMenu);
+function closeMiniMenu() { miniMenu.classList.remove('open'); }
+function showMiniMenu(anchor, title, items) {
+if (miniMenu.classList.contains('open') && miniMenu._anchor === anchor) { closeMiniMenu(); return; }
+miniMenu._anchor = anchor;
+miniMenu.innerHTML = (title ? '<div class="hd">' + esc(title) + '</div>' : '') + items.map(function (it, i) { return '<button type="button" role="menuitem" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
+miniMenu.querySelectorAll('button').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); closeMiniMenu(); items[+b.dataset.i][1](); }; });
+miniMenu.classList.add('open');
+var r = anchor.getBoundingClientRect();
+miniMenu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - miniMenu.offsetWidth - 4)) + 'px';
+miniMenu.style.top = Math.max(4, r.top - miniMenu.offsetHeight - 4) + 'px';
+miniMenu.querySelector('button').focus();
+}
+document.addEventListener('click', function (e) { if (!miniMenu.contains(e.target)) closeMiniMenu(); });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMiniMenu(); });
+/* The 🎲 menu -- one place to add a game. */
+function gameMenuItems(id, name) {
+return [
+['⚔ Tic-Tac-Toe', function () { challengeGame(id, name); }],
+['🃏 UNO', function () { challengeUno(id, name); }]
+];
+}
+
 /* status dropdown (Online / Away / Busy) anchored off the status-bar pill */
 var statusMenu = document.createElement('div'); statusMenu.className = 'nmenu'; statusMenu.setAttribute('role', 'menu'); document.body.appendChild(statusMenu);
 function closeStatusMenu() { statusMenu.classList.remove('open'); }
@@ -331,7 +364,11 @@ function openStatusMenu(anchor) {
 var items = [
 ['Online', function () { setMyStatus('online', ''); }],
 ['Away', async function () { var m = await showPromptModal('Away Message', { value: myAwayMsg || '', placeholder: 'optional', hint: 'Shown to anyone who whispers you while you’re away.' }); if (m === null) return; setMyStatus('away', m); }],
-['Busy', function () { setMyStatus('busy', ''); }]
+['Busy', function () { setMyStatus('busy', ''); }],
+[myStatusMsg ? 'Status message: “' + myStatusMsg + '”' : 'Set a status message…', async function () {
+var m = await showPromptModal('Status message', { value: myStatusMsg || '', placeholder: 'e.g. back in 5, on my phone', maxLength: 80, hint: 'A short line shown under your name in whispers, next to Online / Away / Busy. Leave it empty to clear it.' });
+if (m === null) return; setMyStatusMsg(m.trim());
+}]
 ];
 statusMenu.innerHTML = '<div class="hd">Set status</div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
 statusMenu.querySelectorAll('button').forEach(function (b) { b.onclick = function () { closeStatusMenu(); items[+b.dataset.i][1](); }; });
@@ -367,6 +404,79 @@ if (soundMuted) return;
 if (kind === 'signon') { tone(660, 0.09, 0, 'triangle'); tone(880, 0.12, 0.09, 'triangle'); }
 else if (kind === 'ding') { tone(1050, 0.14, 0, 'sine'); }
 else if (kind === 'buzz') { tone(120, 0.5, 0, 'sawtooth', 0.2); tone(90, 0.5, 0.05, 'sawtooth', 0.2); }
+}
+/* ---------- sound-effect commands (/slap, /fart, /gunshot ... v113) ----------
+   Every sound is synthesized here with Web Audio in an 8-bit-ish style -- no files to host,
+   nothing to download. A command typed in the main room plays for everyone in it (with a
+   "* name slaps whoever" line); typed in a whisper it plays for the two of you. They ride the
+   same broadcast channel as buzz and typing, so they never touch the messages table. */
+function noiseBurst(dur, freq, q, vol, delay, type) {
+var ctx = ensureAudioCtx(); if (!ctx) return;
+var t0 = ctx.currentTime + (delay || 0), len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+var buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+var src = ctx.createBufferSource(); src.buffer = buf;
+var f = ctx.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q || 1;
+var g = ctx.createGain(); g.gain.setValueAtTime(vol || 0.3, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+src.connect(f); f.connect(g); g.connect(ctx.destination); src.start(t0); src.stop(t0 + dur + 0.02);
+}
+function sweep(f1, f2, dur, delay, type, vol, wobble) {
+var ctx = ensureAudioCtx(); if (!ctx) return;
+var t0 = ctx.currentTime + (delay || 0);
+var osc = ctx.createOscillator(), g = ctx.createGain();
+osc.type = type || 'sine'; osc.frequency.setValueAtTime(f1, t0); osc.frequency.exponentialRampToValueAtTime(Math.max(20, f2), t0 + dur);
+if (wobble) { var lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = wobble; lg.gain.value = f1 * 0.08; lfo.connect(lg); lg.connect(osc.frequency); lfo.start(t0); lfo.stop(t0 + dur); }
+g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol || 0.15, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+osc.connect(g); g.connect(ctx.destination); osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+var SFX = {
+slap:    { line: 'slaps {t}', solo: 'slaps the table', play: function () { noiseBurst(0.09, 1400, 1.2, 0.7); tone(140, 0.12, 0, 'triangle', 0.3); } },
+kiss:    { line: 'blows {t} a kiss', solo: 'blows a kiss', play: function () { sweep(700, 1500, 0.16, 0, 'sine', 0.2); noiseBurst(0.03, 3000, 2, 0.4, 0.16); tone(1800, 0.05, 0.16, 'sine', 0.2); } },
+laugh:   { line: 'laughs at {t}', solo: 'laughs', play: function () { for (var i = 0; i < 5; i++) sweep(340 - i * 18, 250 - i * 14, 0.11, i * 0.14, 'sawtooth', 0.09); } },
+cry:     { line: 'cries on {t}’s shoulder', solo: 'cries', play: function () { sweep(620, 300, 0.55, 0, 'sine', 0.16, 7); sweep(560, 260, 0.6, 0.6, 'sine', 0.14, 7); } },
+spit:    { line: 'spits at {t}', solo: 'spits', play: function () { noiseBurst(0.05, 4000, 0.8, 0.5, 0, 'highpass'); sweep(900, 200, 0.12, 0.05, 'square', 0.06); } },
+fart:    { line: 'farts in {t}’s direction', solo: 'farts', play: function () { sweep(110, 60, 0.45, 0, 'sawtooth', 0.22, 14); noiseBurst(0.4, 250, 0.7, 0.15, 0, 'lowpass'); } },
+gunshot: { line: 'fires a shot past {t}', solo: 'fires a shot into the air', play: function () { noiseBurst(0.22, 900, 0.5, 0.9); noiseBurst(0.5, 200, 0.6, 0.5, 0.02, 'lowpass'); sweep(90, 35, 0.4, 0, 'sine', 0.5); } },
+clap:    { line: 'applauds {t}', solo: 'claps', play: function () { for (var i = 0; i < 4; i++) noiseBurst(0.06, 1800 + i * 150, 1.4, 0.45, i * 0.13); } },
+boo:     { line: 'boos {t}', solo: 'boos', play: function () { sweep(220, 150, 0.7, 0, 'sawtooth', 0.12, 5); sweep(230, 160, 0.7, 0.05, 'triangle', 0.1, 5); } },
+airhorn: { line: 'blasts an airhorn at {t}', solo: 'blasts an airhorn', play: function () { [440, 554, 659].forEach(function (f) { sweep(f * 0.9, f, 0.9, 0, 'sawtooth', 0.09, 6); }); } },
+badum:   { line: 'ba-dum-tss at {t}', solo: 'ba-dum-tss', play: function () { sweep(180, 90, 0.16, 0, 'sine', 0.4); sweep(150, 70, 0.16, 0.18, 'sine', 0.4); noiseBurst(0.7, 6000, 0.4, 0.35, 0.38, 'highpass'); } },
+crickets:{ line: '… crickets for {t}', solo: '… crickets', play: function () { for (var i = 0; i < 6; i++) tone(4200, 0.035, i * 0.09 + Math.floor(i / 3) * 0.25, 'sine', 0.08); } },
+knock:   { line: 'knocks on {t}’s door', solo: 'knocks', play: function () { for (var i = 0; i < 3; i++) { noiseBurst(0.05, 300, 1, 0.5, i * 0.22, 'lowpass'); tone(110, 0.08, i * 0.22, 'triangle', 0.25); } } },
+howl:    { line: 'howls at {t}', solo: 'howls at the moon', play: function () { sweep(300, 640, 0.5, 0, 'sine', 0.16, 4); sweep(640, 380, 0.7, 0.5, 'sine', 0.16, 5); } },
+sneeze:  { line: 'sneezes on {t}', solo: 'sneezes', play: function () { sweep(500, 800, 0.22, 0, 'triangle', 0.08); noiseBurst(0.18, 2500, 0.6, 0.6, 0.22, 'highpass'); sweep(400, 150, 0.2, 0.24, 'sawtooth', 0.08); } },
+burp:    { line: 'burps at {t}', solo: 'burps', play: function () { sweep(160, 70, 0.35, 0, 'sawtooth', 0.18, 22); } },
+cheers:  { line: 'raises a glass to {t}', solo: 'raises a glass', play: function () { tone(2200, 0.5, 0, 'sine', 0.12); tone(3300, 0.45, 0.01, 'sine', 0.06); tone(2200, 0.5, 0.25, 'sine', 0.1); } },
+drumroll:{ line: 'drumrolls for {t}', solo: 'drumrolls', play: function () { for (var i = 0; i < 16; i++) noiseBurst(0.04, 700, 1.2, 0.3, i * 0.055, 'lowpass'); noiseBurst(0.6, 5000, 0.4, 0.3, 0.9, 'highpass'); } }
+};
+var SFX_LIST = Object.keys(SFX);
+function playSfx(kind) { if (soundMuted || !SFX[kind]) return; try { SFX[kind].play(); } catch (e) {} }
+function sfxLine(name, kind, target) {
+var sf = SFX[kind]; return '* ' + name + ' ' + (target ? sf.line.replace('{t}', target) : sf.solo);
+}
+var lastSfxSent = 0, lastSfxFrom = {};
+/* to: null = the main room, a user id = that whisper. targetName: optional "/slap Perry". */
+async function sendSfx(kind, to, targetName) {
+if (!me || !SFX[kind]) return;
+var now = Date.now();
+if (now - lastSfxSent < 3000) { if (to) imSys(to, 'One sound every few seconds — give it a moment.'); else addSys('One sound every few seconds — give it a moment.'); return; }
+if (moderation.muted || moderation.cooldownUntil > now) { if (to) imSys(to, 'You are muted right now.'); else addSys('You are muted right now.'); return; }
+if (to && !(await whisperAllowed(to))) { imSys(to, 'Add ' + (wins[to] ? wins[to].name : 'them') + ' as a friend first.'); return; }
+lastSfxSent = now;
+var target = to ? (wins[to] ? wins[to].name : '') : (targetName || '');
+if (!to && target) { var tid = findId(target); if (!tid) { addSys('No one here is named ' + target + '.'); lastSfxSent = 0; return; } target = people[tid].name; }
+channel.send({ type: 'broadcast', event: 'sfx', payload: { kind: kind, from: me.id, name: me.name, to: to || null, target: target } });
+playSfx(kind);
+if (to) imSys(to, sfxLine(me.name, kind, target)); else addSys(sfxLine(me.name, kind, target));
+}
+function sfxArrived(d) {
+if (!d || !me || d.from === me.id || !SFX[d.kind]) return;
+if (blocked[d.from]) return;
+if (d.to != null && d.to !== me.id) return;
+var now = Date.now(); if (lastSfxFrom[d.from] && now - lastSfxFrom[d.from] < 2000) return; lastSfxFrom[d.from] = now;
+playSfx(d.kind);
+if (d.to == null) addSys(sfxLine(d.name, d.kind, d.target));
+else { var w = wins[d.from] || ensureWin(d.from, d.name); imSys(d.from, sfxLine(d.name, d.kind, d.target)); if (w.minimized) { unread[d.from] = (unread[d.from] || 0) + 1; renderPeople(); updateTab(d.from); } }
 }
 function updateSoundBtn() {
 var b = $('soundBtn'); if (!b) return;
@@ -651,7 +761,7 @@ if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff && !anyOpen && !pending)
 function updateDmToggleBtn() {
 applyDmVisibility();
 if (!dmToggleBtn) return;
-dmToggleBtn.textContent = dmTabsOff ? '🚫' : '💬';
+var dmi = dmToggleBtn.querySelector('.btn-icon'); if (dmi) dmi.textContent = dmTabsOff ? '🚫' : '💬'; else dmToggleBtn.textContent = dmTabsOff ? '🚫' : '💬';
 dmToggleBtn.setAttribute('aria-pressed', dmTabsOff ? 'true' : 'false');
 dmToggleBtn.title = dmTabsOff ? 'Messages hidden — click to show them again' : 'Hide messages';
 }
@@ -1433,6 +1543,7 @@ if (s) { var tier = levelTier(s.level); el.hidden = false; el.className = 'lvl '
 else { el.hidden = true; el.textContent = ''; el.title = ''; el.className = 'lvl'; }
 });
 renderPeople();
+if (wins[id]) updateWinBanner(id);
 }
 /* "Level 3 — 14 XP (12 reactions, 2 from games)" */
 function xpTitle(s) {
@@ -1743,16 +1854,15 @@ var lastBuzz = {};
 function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
-el.innerHTML = '<div class="bar"><button class="back" type="button" title="Back to messages" aria-label="Back to messages">‹</button><span class="wava" aria-hidden="true"></span><span class="nm" tabindex="0" role="button" aria-label="' + esc(name) + ' options"></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" title="Collapse messages" aria-label="Collapse messages">–</button></div>' +
+el.innerHTML = '<div class="bar"><button class="back" type="button" title="Back to messages" aria-label="Back to messages">‹</button><span class="wava" aria-hidden="true"></span><span class="nmwrap"><span class="nm" tabindex="0" role="button" aria-label="' + esc(name) + ' options"></span><span class="im-sub" aria-live="polite"></span></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" title="Collapse messages" aria-label="Collapse messages">–</button></div>' +
 '<div class="ilog" aria-live="polite"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
-'<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
-'<button class="btn gif" type="button" title="Search GIFs" aria-label="Search GIFs">GIF</button>' +
-'<button class="btn game" type="button" title="Challenge to Tic-Tac-Toe" aria-label="Challenge ' + esc(name) + ' to Tic-Tac-Toe">⚔</button>' +
-'<button class="btn uno" type="button" title="Challenge to UNO" aria-label="Challenge ' + esc(name) + ' to UNO">🃏</button>' +
+'<button class="btn media" type="button" title="Send a photo or GIF" aria-label="Send a photo or GIF" aria-haspopup="menu">📎</button>' +
+'<button class="btn games" type="button" title="Play a game" aria-label="Challenge ' + esc(name) + ' to a game" aria-haspopup="menu">🎲</button>' +
 '<input type="file" class="im-img-file hidden" accept="image/*,.heic,.heif">' +
 '<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
 el.querySelector('.nm').textContent = name;
+if (isAdminId(id)) el.querySelector('.nm').classList.add('admin');
 // typingPeer/typingTimer track whether -- and until when -- the OTHER person in this whisper is
 // shown as typing; see markImTyping/clearImTyping in the typing-indicator section below.
 // snippet: the last line of the conversation, for this conversation's inbox row (see updateTab).
@@ -1765,16 +1875,24 @@ el.querySelector('.buzz').onclick = function () { sendBuzz(id); };
 el.querySelector('.icomp .btn:last-child').onclick = function () { sendIM(id); };
 var emoBtnWin = el.querySelector('.icomp .emo');
 emoBtnWin.onclick = function () { openEmojiPicker(win.ta, emoBtnWin); };
-var imgBtn = el.querySelector('.icomp .img'), imgFile = el.querySelector('.im-img-file');
-imgBtn.onclick = function () { imgFile.click(); };
-/* GIF search in a whisper: the one shared picker, told to deliver into this conversation */
-el.querySelector('.icomp .game').onclick = function () { challengeGame(id, name); };
-el.querySelector('.icomp .uno').onclick = function () { challengeUno(id, name); };
-var gifBtnWin = el.querySelector('.icomp .gif');
-gifBtnWin.onclick = function () {
+var imgFile = el.querySelector('.im-img-file');
+/* 📎 = photo or GIF; 🎲 = the games. Each opens a small menu (v113 -- they used to be four
+   separate buttons, which got crowded once UNO arrived). The GIF picker is the one shared picker,
+   told to deliver into this conversation. */
+var mediaBtn = el.querySelector('.icomp .media'), gamesBtn = el.querySelector('.icomp .games');
+mediaBtn.onclick = function (e) {
+e.stopPropagation();
 if (gifPicker.classList.contains('open') && gifTarget === 'dm:' + id) { closeGif(); return; }
-openGifPicker('', 'dm:' + id, gifBtnWin);
+showMiniMenu(mediaBtn, 'Send', [
+['🖼️ Photo', function () { imgFile.click(); }],
+['GIF', function () { openGifPicker('', 'dm:' + id, mediaBtn); }]
+]);
 };
+gamesBtn.onclick = function (e) {
+e.stopPropagation();
+showMiniMenu(gamesBtn, 'Play with ' + name, gameMenuItems(id, name));
+};
+var gifBtnWin = mediaBtn;
 imgFile.onchange = function () {
 var f = imgFile.files && imgFile.files[0]; imgFile.value = '';
 if (f) sendIMImage(id, f);
@@ -1912,15 +2030,33 @@ var tava = w.tab && w.tab.querySelector('.tava'); if (tava) tava.innerHTML = ava
    of next to every message, since a whisper is always with one specific person: this is the
    at-a-glance answer to "are they actually going to see this right now." Called once when the
    window is created and again on every presence sync via refreshPresenceDots(). */
-function updateWinPresenceDot(id) {
+function updateWinPresenceDot(id) { updateWinBanner(id); }
+/* The line under the name in a whisper's title bar: status dot + word, their status message (if
+   they set one), their level badge, and a scripted "Admin" title for admins. Presence is the
+   live source; for someone offline the status message comes from their profile (cached). */
+var statusMsgCache = {};
+function updateWinBanner(id) {
 var w = wins[id]; if (!w) return;
-var nm = w.el.querySelector('.nm'); if (!nm) return;
-var dot = w.el.querySelector('.bar .nm-dot');
-var cls = presenceDotClass(id);
-if (!cls) { if (dot) dot.remove(); return; }
-if (dot) dot.className = 'nm-dot ' + cls;
-else nm.insertAdjacentHTML('beforebegin', '<span class="nm-dot ' + cls + '"></span>');
+var sub = w.el.querySelector('.im-sub'); if (!sub) return;
+var p = people[id], rec = recentPeopleEntries()[id];
+var status = p ? (p.status || 'online') : (rec ? 'recent' : 'offline');
+var word = { online: 'Online', idle: 'Idle', away: 'Away', busy: 'Busy', recent: 'Just left', offline: 'Offline' }[status] || status;
+var msg = p ? (p.statusMsg || '') : (statusMsgCache[id] || '');
+if (!p && statusMsgCache[id] === undefined) {
+statusMsgCache[id] = '';
+sb.from('profiles').select('status_message').eq('user_id', id).maybeSingle().then(function (r) {
+statusMsgCache[id] = (!r.error && r.data && r.data.status_message) || '';
+if (statusMsgCache[id]) updateWinBanner(id);
+});
 }
+var html = '<span class="presence-dot presence-dot-' + status + '"></span><span class="im-st">' + word + '</span>';
+if (p && status === 'away' && p.awayMsg && !msg) msg = p.awayMsg;
+if (msg) html += '<span class="im-msg">“' + esc(msg) + '”</span>';
+html += levelBadgeHtml(id);
+if (isAdminId(id)) html += '<span class="adm-title" title="Admin">Admin</span>';
+sub.innerHTML = html;
+}
+function updateWinBanners() { Object.keys(wins).forEach(updateWinBanner); }
 /* Refreshes one conversation's inbox row: unread badge and last-line snippet. Rows are always
    listed (the inbox shows every conversation, open or not); which one is currently open is
    syncDock's business. Also re-sums the bar's total badge, since that's derived from the same
@@ -2001,7 +2137,7 @@ var w = ensureWin(otherId, otherName); // never pops the window open on its own 
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them'); d.dataset.mid = m.id;
 if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
+d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + esc(m.sender_name) + ':</b> ' + bodyHtml(m.body);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
 /* Inbox row: last line as its snippet, and newest activity floats to the top of the list.
    updateTab always runs here (not only when unread changes) so the snippet is current -- but
@@ -2033,6 +2169,9 @@ post('[Away] ' + (myAwayMsg || (me.name + ' is currently away.')), otherId, othe
 }
 async function sendIM(id) {
 var w = wins[id]; var t = w.ta.value.trim(); if (!t) return;
+var sc = t.match(/^\/(\w+)\s*$/);
+if (sc && SFX[sc[1].toLowerCase()]) { w.ta.value = ''; sendTyping(id, false); sendSfx(sc[1].toLowerCase(), id); return; }
+if (sc && sc[1].toLowerCase() === 'sounds') { w.ta.value = ''; imSys(id, 'Sounds: ' + SFX_LIST.map(function (k) { return '/' + k; }).join(' · ')); return; }
 if (w.gone) { imSys(id, w.name + ' is not here to hear you.'); return; }
 /* An old conversation can outlive the friendship (or they may have closed their whispers since):
    check before sending so the text isn't thrown away on a policy refusal. */
@@ -2934,6 +3073,12 @@ return { w: w, l: l, d: d };
 }
 /* Which games get a card: anything open, plus results from the last hour. Older finished games
    only count toward the record line. */
+/* Highest game id against one person in a store (games / unoGames): the one that gets the card. */
+function newestGameId(store, peerId) {
+var best = null;
+Object.keys(store).forEach(function (k) { var g = store[k]; if (gamePeer(g) === peerId && (best === null || Number(k) > best)) best = Number(k); });
+return best;
+}
 function gameShowsCard(g) {
 if (g.status === 'pending' || g.status === 'active') return true;
 return new Date(g.updated_at).getTime() > Date.now() - 3600000;
@@ -2944,7 +3089,9 @@ var peer = gamePeer(g), name = gamePeerName(g);
 var w = ensureWin(peer, name);
 var card = w.log.querySelector('.ttt-card[data-gid="' + g.id + '"]');
 if (!card) {
-if (!gameShowsCard(g)) return;
+if (!gameShowsCard(g) || newestGameId(games, peer) !== g.id) return;
+/* only the latest game keeps a card in the log; older ones live on in the W·L·D line */
+w.log.querySelectorAll('.ttt-card').forEach(function (old) { old.remove(); });
 card = document.createElement('div'); card.className = 'ttt-card'; card.dataset.gid = g.id; w.log.appendChild(card);
 }
 var mine = g.challenger_id === me.id, myMark = g.x_player === me.id ? 'X' : 'O';
@@ -2975,6 +3122,7 @@ var cls = 'ttt-cell' + (c === 'X' ? ' x' : c === 'O' ? ' o' : '') + (winCells.in
 return '<button type="button" class="' + cls + '" data-cell="' + i + '"' + (canPlay && c === '.' ? '' : ' disabled') + ' aria-label="Square ' + (i + 1) + (c === '.' ? '' : ', ' + c) + '">' + (c === '.' ? '' : c) + '</button>';
 }).join('') + '</div>';
 }
+if (g.status === 'active') html += turnClockHtml(g);
 html += '<div class="ttt-status">' + status + '</div><div class="ttt-actions">' + actions + '</div>';
 card.innerHTML = html;
 if (opts.scroll !== false) w.log.scrollTop = w.log.scrollHeight;
@@ -2982,9 +3130,75 @@ if (opts.scroll !== false) w.log.scrollTop = w.log.scrollHeight;
 async function gameCall(fn, args, peerId) {
 var r = await sb.rpc(fn, args);
 if (r.error) { imSys(peerId, r.error.message.replace(/^.*?:\s*/, '')); return null; }
-if (r.data) { games[r.data.id] = r.data; renderGameCard(r.data); }
+if (r.data) { noteServerTime(r.data); games[r.data.id] = r.data; renderGameCard(r.data); }
 return r.data;
 }
+/* ---------- the 30-second turn clock (every PM game, v113) ----------
+   Each active game card carries a .turn-clock drawn from the row's turn_started_at. One ticker
+   repaints them all four times a second; from 15 s down it ticks like a clock once a second
+   (for the player on the clock, and for the other player while the window is open). At zero,
+   whoever is watching asks the server to skip the slow turn (game_timeout / uno_timeout --
+   the server checks its own clock, so an early or duplicate call is harmless). The server's
+   'now' and this device's clock can disagree by a few seconds: serverSkew, learned from the
+   timestamps that come back on my own moves, corrects for that. */
+var TURN_SECONDS = 30, serverSkew = 0, timeoutsFired = {};
+function noteServerTime(row) {
+if (!row || !row.turn_started_at || !row.updated_at) return;
+var t = new Date(row.updated_at).getTime(); if (isNaN(t)) return;
+var skew = Date.now() - t; // positive = this device runs ahead of the server
+if (Math.abs(skew) < 5 * 60000) serverSkew = serverSkew ? (serverSkew * 0.5 + skew * 0.5) : skew;
+}
+function turnSecondsLeft(g) {
+var t = new Date(g.turn_started_at || g.updated_at).getTime(); if (isNaN(t)) return TURN_SECONDS;
+return Math.max(0, TURN_SECONDS - (Date.now() - serverSkew - t) / 1000);
+}
+function turnClockHtml(g) {
+var left = turnSecondsLeft(g), pct = Math.round(100 * left / TURN_SECONDS);
+return '<div class="turn-clock' + (left <= 15 ? ' low' : '') + '" data-clock="' + esc(String(g.id)) + '" aria-label="Turn clock"><span class="tc-bar" style="width:' + pct + '%"></span><span class="tc-num">' + Math.ceil(left) + '</span></div>';
+}
+function tickSound(tock) {
+if (soundMuted) return;
+var ctx = ensureAudioCtx(); if (!ctx) return;
+var t0 = ctx.currentTime, len = Math.floor(ctx.sampleRate * 0.03);
+var buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+var src = ctx.createBufferSource(); src.buffer = buf;
+var bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = tock ? 1500 : 2600; bp.Q.value = 6;
+var gain = ctx.createGain(); gain.gain.setValueAtTime(tock ? 0.45 : 0.6, t0); gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.06);
+src.connect(bp); bp.connect(gain); gain.connect(ctx.destination); src.start(t0); src.stop(t0 + 0.07);
+tone(tock ? 900 : 1300, 0.03, 0, 'square', 0.05); // a little wooden body under the click
+}
+var lastTickSecond = {};
+function clockTick() {
+var all = [];
+Object.keys(games).forEach(function (k) { var g = games[k]; if (g.status === 'active') all.push({ g: g, fn: 'game_timeout', store: games, uno: false }); });
+Object.keys(unoGames).forEach(function (k) { var g = unoGames[k]; if (g.status === 'active') all.push({ g: g, fn: 'uno_timeout', store: unoGames, uno: true }); });
+all.forEach(function (x) {
+var g = x.g, peer = gamePeer(g), w = wins[peer]; if (!w) return;
+var el = w.log.querySelector('.turn-clock[data-clock="' + g.id + '"]');
+var left = turnSecondsLeft(g), sec = Math.ceil(left);
+if (el) {
+el.classList.toggle('low', left <= 15);
+el.querySelector('.tc-bar').style.width = Math.round(100 * left / TURN_SECONDS) + '%';
+el.querySelector('.tc-num').textContent = sec;
+}
+var key = g.id + ':' + g.turn_started_at;
+if (left > 0 && left <= 15 && lastTickSecond[key] !== sec) {
+lastTickSecond[key] = sec;
+if (g.turn === me.id || !w.minimized) tickSound(sec % 2 === 0);
+}
+if (left <= 0 && !timeoutsFired[key]) {
+timeoutsFired[key] = true;
+sb.rpc(x.fn, { p_game: g.id }).then(function (r) {
+if (r.error || !r.data) return;
+noteServerTime(r.data);
+if (x.uno) { unoGames[r.data.id] = r.data; renderUnoCard(r.data, { scroll: false }); if (r.data.turn === me.id) unoFetchHand(r.data.id); }
+else { games[r.data.id] = r.data; renderGameCard(r.data, { scroll: false }); }
+});
+}
+});
+}
+setInterval(clockTick, 250);
 async function challengeGame(peerId, name) {
 if (!me) return;
 if (!(await whisperAllowed(peerId))) { imSys(peerId, 'Add ' + name + ' as a friend to challenge them.'); return; }
@@ -3073,7 +3287,8 @@ var peer = gamePeer(g), name = gamePeerName(g);
 var w = ensureWin(peer, name);
 var card = w.log.querySelector('.uno-card[data-gid="' + g.id + '"]');
 if (!card) {
-if (!gameShowsCard(g)) return;
+if (!gameShowsCard(g) || newestGameId(unoGames, peer) !== g.id) return;
+w.log.querySelectorAll('.uno-card').forEach(function (old) { old.remove(); });
 card = document.createElement('div'); card.className = 'uno-card'; card.dataset.gid = g.id; w.log.appendChild(card);
 }
 var mine = g.challenger_id === me.id, rec = unoRecord(peer);
@@ -3089,8 +3304,10 @@ var myTurn = g.turn === me.id, hand = unoHand[g.id] || [];
 var backs = ''; for (var i = 0; i < Math.min(theirCount, 10); i++) backs += '<span class="uno-c back small" aria-hidden="true"></span>';
 html += '<div class="uno-opp"><span class="uno-backs">' + backs + '</span><span>' + esc(name) + ' · ' + theirCount + ' card' + (theirCount === 1 ? '' : 's') + '</span>' + (theirUno ? '<span class="uno-badge">UNO!</span>' : '') + '</div>';
 var canDraw = myTurn && g.phase === 'play';
+var anyFits = hand.some(function (c) { return unoPlayable(c, g.top_card, g.color); });
+/* the pile only lights up when drawing is your ONLY move; a quiet pile means you have a card to play */
 html += '<div class="uno-table">' +
-'<button type="button" class="uno-pile"' + (canDraw ? '' : ' disabled') + ' title="Draw a card" aria-label="Draw pile, ' + g.draw_count + ' cards"><span class="uno-c back">' + g.draw_count + '</span><span class="uno-pile-lbl">' + (canDraw ? 'Draw' : 'Pile') + '</span></button>' +
+'<button type="button" class="uno-pile' + (canDraw && !anyFits ? ' must' : '') + '"' + (canDraw ? '' : ' disabled') + ' title="Draw a card" aria-label="Draw pile, ' + g.draw_count + ' cards"><span class="uno-c back">' + g.draw_count + '</span><span class="uno-pile-lbl">' + (canDraw ? 'Draw' : 'Pile') + '</span></button>' +
 '<div class="uno-top">' + unoCardHtml(g.top_card, 'top', 'disabled') + '<span class="uno-colour ' + g.color + '" title="Current colour: ' + UNO_COLOUR[g.color] + '" aria-label="Current colour: ' + UNO_COLOUR[g.color] + '"></span></div></div>';
 var pick = unoPick[g.id];
 html += '<div class="uno-hand' + (myTurn ? ' live' : '') + '" role="group" aria-label="Your hand">' + hand.map(function (c, i) {
@@ -3108,6 +3325,7 @@ if (myTurn && g.phase === 'play' && theirCount === 1 && !theirUno) actions += '<
 actions += '<button type="button" class="btn uno-resign">Resign</button>';
 }
 if (g.last_action) html += '<div class="uno-last">' + esc(g.last_action) + '</div>';
+html += turnClockHtml(g);
 } else if (g.status === 'finished') {
 var pts = gameMyPoints(g);
 if (g.winner === me.id) status = '<b>You won!</b>' + (g.result === 'resign' ? ' (' + esc(name) + ' resigned)' : '') + (pts ? ' +' + pts + ' XP' : ' <span class="ttt-cap">daily XP cap reached</span>');
@@ -3130,7 +3348,7 @@ if (!r.error && r.data) { unoHand[gid] = r.data.cards || []; if (unoGames[gid]) 
 async function unoCall(fn, args, peerId) {
 var r = await sb.rpc(fn, args);
 if (r.error) { imSys(peerId, r.error.message.replace(/^.*?:\s*/, '')); return null; }
-if (r.data) { delete unoPick[r.data.id]; unoGames[r.data.id] = r.data; renderUnoCard(r.data); if (r.data.status === 'active') unoFetchHand(r.data.id); }
+if (r.data) { noteServerTime(r.data); delete unoPick[r.data.id]; unoGames[r.data.id] = r.data; renderUnoCard(r.data); if (r.data.status === 'active') unoFetchHand(r.data.id); }
 return r.data;
 }
 async function unoPlay(g, peerId, c, col) {
@@ -3300,11 +3518,13 @@ function findId(name) { return Object.keys(people).filter(function (k) { return 
 async function command(t) {
 var m = t.match(/^\/(\w+)\s*(\S*)\s*([\s\S]*)$/); if (!m) return false;
 var cmd = m[1].toLowerCase(), arg = m[2], rest = m[3].trim(), id;
+if (SFX[cmd]) { sendSfx(cmd, null, arg); return true; }
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. The ⚔ in a whisper challenges them to Tic-Tac-Toe (a win is worth 3 XP, a draw 1); the 🃏 challenges them to UNO (a win is worth 5 XP). Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
+case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. The ⚔ in a whisper challenges them to Tic-Tac-Toe (a win is worth 3 XP, a draw 1); the 🃏 challenges them to UNO (a win is worth 5 XP). Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Sound commands (/slap, /kiss, /laugh, /cry, /spit, /fart, /gunshot … type /sounds for all of them) play for the whole room, or for just the two of you inside a whisper. Set a status message from your status pill. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
+case 'sounds': addSys('Sound commands (everyone in the room hears them; in a whisper, just the two of you): ' + SFX_LIST.map(function (k) { return '/' + k; }).join(' · ') + '. Add a name to aim one: /slap Perry.'); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
 case 'blocks': var bl = Object.keys(blocked).map(function (k) { return blocked[k]; }); addSys(bl.length ? 'Blocked: ' + bl.join(', ') : 'You have blocked no one.'); return true;
@@ -4099,6 +4319,87 @@ else returnToChat();
 }
 
 /* ---------- roulette teaser: same full-screen treatment on mobile as the threads board ---------- */
+/* ---------- spin the wheel (v113) ----------
+   The caravan wheel on the roulette teaser page is clickable (desktop) / swipeable (phone):
+   it whirls for a couple of seconds and lands on a fortune. Purely local -- nothing is sent. */
+var FORTUNES = [
+'The road you are avoiding is the one that knows your name.',
+'A stranger’s kindness today is a debt you will enjoy repaying.',
+'What you lost in the spring will find you before the frost.',
+'Say the thing. The silence is costing more than the words would.',
+'Your luck is not late. It is taking the scenic route.',
+'The cards do not lie, but they do enjoy a dramatic pause.',
+'Someone is thinking of you and smiling. Yes, that one.',
+'Rest is not the opposite of progress. It is the part that sticks.',
+'Beware of advice from people who have never been wrong. They are lying.',
+'The next door will open for you, but only if you stop leaning on it.',
+'You will be handed an ending. Treat it as a beginning in disguise.',
+'The moon has seen worse plans than yours succeed.',
+'A small promise kept today outweighs a grand one made tomorrow.',
+'The thing you are good at is worth more than the thing you are known for.',
+'Do not count the caravan by its wheels. Count it by the songs.',
+'Your patience will be tested by someone worth passing the test for.',
+'The wind changes direction for those who have already set sail.',
+'You are allowed to want an easier road. Just do not stop walking.',
+'Three coins will leave your pocket this week. Two will come back as stories.',
+'Old friends are gold you buried and forgot. Dig.',
+'The answer you keep getting is the answer. Ask a better question.',
+'A fire that is fed slowly burns the longest.',
+'You will laugh at this in a year. Start early.',
+'The person you are becoming would like a word with the person you were.',
+'Luck favours the one who shows up twice.',
+'Do not trade a true thing for a shiny one. The shine wears off.',
+'A message you are dreading will turn out to be a door.',
+'Your hands know a craft your head keeps doubting. Let them work.',
+'There is a table with your name on it. Sit down like you mean it.',
+'What you are protecting has already grown strong enough to protect you.',
+'Speak to the quiet one at the party. They are carrying the best story.',
+'The map is wrong about one thing: you are not lost.',
+'Take the compliment. It cost someone courage.',
+'Some debts are paid by living well. Get on with it.',
+'The mirror is an unreliable witness. Ask a friend instead.',
+'Tonight, sleep on it. Tomorrow, act on it.',
+'A wheel that never turns is only a circle.',
+'The thing you keep not saying is the truest thing you own.',
+'Your enemy is tired too. Pour two cups.',
+'Fortune is a hitchhiker. Slow down, and she will climb in.',
+'The lantern you light for others will show you the way home.',
+'You will outgrow the shoes but keep the road.',
+'A gift is coming that looks like a chore. Unwrap it anyway.',
+'The stars are not fixed. Neither are you.',
+'Keep the receipt on your worries. Most of them will need returning.',
+'Two roads, one horse. Choose the road that lets the horse rest.',
+'Whatever you are rehearsing, the audience already loves you.',
+'Your grandmother was right about the thing. You know the thing.',
+'The bruise will fade before the lesson does. That is the deal.',
+'Somewhere a kettle is on for you. Go and find it.'
+];
+var wheelEl = document.querySelector('.rp-wheel'), fortuneEl = $('rpFortune'), wheelSpinning = false;
+function spinWheel() {
+if (!wheelEl || wheelSpinning) return;
+wheelSpinning = true;
+if (fortuneEl) fortuneEl.classList.remove('show');
+wheelEl.classList.add('spinning');
+var i = 0, clicks = setInterval(function () { if (i++ < 18) tickSound(i % 2 === 0); }, 120);
+setTimeout(function () {
+clearInterval(clicks);
+wheelEl.classList.remove('spinning'); wheelSpinning = false;
+if (fortuneEl) { fortuneEl.textContent = '“' + FORTUNES[Math.floor(Math.random() * FORTUNES.length)] + '”'; fortuneEl.classList.add('show'); }
+playSound('ding');
+}, 2600);
+}
+if (wheelEl) {
+wheelEl.setAttribute('role', 'button'); wheelEl.setAttribute('tabindex', '0'); wheelEl.removeAttribute('aria-hidden'); wheelEl.setAttribute('aria-label', 'Spin the wheel for a fortune');
+wheelEl.addEventListener('click', spinWheel);
+wheelEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); spinWheel(); } });
+var swipeStart = null;
+wheelEl.addEventListener('touchstart', function (e) { var t = e.touches[0]; swipeStart = { x: t.clientX, y: t.clientY }; }, { passive: true });
+wheelEl.addEventListener('touchend', function (e) {
+if (!swipeStart) return; var t = e.changedTouches[0];
+if (Math.abs(t.clientX - swipeStart.x) > 24 || Math.abs(t.clientY - swipeStart.y) > 24) { e.preventDefault(); spinWheel(); }
+swipeStart = null;
+});
+}
 var rouletteToggleBtn = $('rouletteToggleBtn');
 function closeMobileRoulette() {
 gcRoot.classList.remove('mobile-roulette-open');
@@ -4802,8 +5103,9 @@ console.warn('verify-join check did not complete:', vjErr);
 }
 me = { id: user.id, name: n, avatarUrl: null };
 manualStatus = 'online'; myAwayMsg = ''; autoIdle = false; awayReplied = {};
-var myProf = await sb.from('profiles').select('avatar_url, whisper_policy').eq('user_id', me.id).maybeSingle();
+var myProf = await sb.from('profiles').select('avatar_url, whisper_policy, status_message').eq('user_id', me.id).maybeSingle();
 if (!myProf.error && myProf.data && myProf.data.avatar_url) me.avatarUrl = myProf.data.avatar_url;
+myStatusMsg = (!myProf.error && myProf.data && myProf.data.status_message) || '';
 whisperPolicy = (!myProf.error && myProf.data && myProf.data.whisper_policy) || 'friends';
 whisperPolicyCache = {}; // a fresh sign-on shouldn't trust last session's lookups
 updateWhisperBtn();
@@ -4851,6 +5153,7 @@ if (dmDock) { dmDock.classList.remove('shake'); void dmDock.offsetWidth; dmDock.
 }
 if (document.hidden) bumpTitle();
 });
+channel.on('broadcast', { event: 'sfx' }, function (p) { sfxArrived(p.payload); });
 channel.on('broadcast', { event: 'typing' }, function (p) {
 var d = p.payload; if (!d || !me || d.from === me.id) return;
 if (d.to == null) { if (d.typing === false) clearRoomTyping(d.from); else markRoomTyping(d.from, d.name); }
@@ -4926,7 +5229,7 @@ var ban = await sb.from('bans').select('reason, expires_at').eq('user_id', me.id
 if (ban.data && (!ban.data.expires_at || new Date(ban.data.expires_at) > new Date())) { await channel.unsubscribe(); channel = null; throw new Error('You have been removed from this room.' + (ban.data.reason ? ' Reason: ' + ban.data.reason : '')); }
 await loadBlocks(); await loadAdmin(); await loadMyModeration(); await loadFriends(); await loadFriendRequests(); await loadDmReads(); await loadUserStats();
 subscribeFriendRequests();
-await channel.track({ name: n, status: 'online', awayMsg: '', avatarUrl: me.avatarUrl || '' });
+await channel.track({ name: n, status: 'online', awayMsg: '', statusMsg: myStatusMsg || '', avatarUrl: me.avatarUrl || '' });
 
 // history: recent room messages plus my recent whispers (RLS makes the server only return what I may see)
 var h = await sb.from('messages').select('*').eq('room', C.ROOM || 'main').order('created_at', { ascending: false }).limit(C.HISTORY || 200);
