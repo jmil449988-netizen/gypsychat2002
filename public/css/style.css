@@ -1654,3 +1654,10 @@ box-shadow:0 0 0 1px #000,0 8px 24px #000,0 0 14px rgba(201,162,74,.3);animation
 @media (max-width:500px){.toasts{left:10px;right:10px;width:auto;top:44px}} /* below the connection bar's slot */
 html.ios .toasts{top:calc(env(safe-area-inset-top) + 82px)}
 @media (prefers-reduced-motion:reduce){.toast{animation:none}}
+/* v122: Log out button (same chrome as its neighbours) + remember-me row + logout dialog */
+.status .logoutbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
+.status .logoutbtn:hover{color:#e07a7a;border-color:#e07a7a}
+.login label.remember-row{display:flex;align-items:center;justify-content:center;gap:7px;font:italic 12px "IM Fell English",Georgia,serif;letter-spacing:0;text-transform:none;color:var(--ash);margin:4px 0 6px;cursor:pointer;user-select:none;-webkit-user-select:none}
+.remember-row input{accent-color:var(--gold);width:15px;height:15px;margin:0;cursor:pointer}
+.logout-actions{flex-wrap:wrap}
+.logout-actions #logoutGo{color:#e07a7a;border-color:#7a2f2a}
