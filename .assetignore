@@ -1,9 +1,0 @@
-node_modules/
-www/
-supabase/
-README.md
-package.json
-capacitor.config.json
-wrangler.jsonc
-.gitignore
-.assetsignore
