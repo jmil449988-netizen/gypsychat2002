@@ -1075,6 +1075,20 @@ background:linear-gradient(180deg,#211a15,#171310);cursor:grab;touch-action:pan-
         the viewport. Clip that instead of letting it change the zoom. Set on html so it applies
         to the viewport itself; body keeps its own overflow untouched. */
   html{overflow-x:hidden}
+  /* 3b. No vertical wiggle either, once signed on. The page was a little taller than the screen
+        on an iPhone: .gc-root's min-height is the static 100vh (which on iOS includes the space
+        behind Safari's toolbar), the frame inside it is 100dvh (the space you can actually see),
+        and body adds the safe-area insets on top -- so the document could always be dragged up and
+        down by that leftover, and the fixed-position 🤝 bell and bubbles visibly stayed put while
+        the room slid under them, which is what made them feel stuck on rather than part of the
+        page. Signed on, the room is exactly the visible height (insets included) and the document
+        itself can't scroll at all -- the log, threads, leaderboard and dock all scroll internally.
+        The sign-on screen is left as it was: it's allowed to grow past one screen for the portrait.
+        :has() is how the html/body rules key off .gc-root's class; a browser without it just keeps
+        the old behaviour. */
+  html:has(.gc-root.signed-on),body:has(.gc-root.signed-on){height:100%;overflow:hidden;overscroll-behavior:none}
+  .gc-root.signed-on{min-height:0;height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));box-sizing:border-box;overflow:hidden}
+  .gc-root.signed-on .win{height:100%}
   /* 4. Give the room back some of its own width and height: a tighter gutter inside the frame,
         and a composer that isn't a 60px-tall block on a screen this short. The GIF/Send buttons
         stretch to the textarea's height, so shrinking it shrinks them too -- 48px is still a
