@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 119;
+var BUILD_NUMBER = 120;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -2248,7 +2248,8 @@ items.push(['Get Info', function () { showInfo(id, name); }]);
    offered a friend request instead, unless that person has opened their whispers to everyone. */
 if (reachable && !blocked[id]) items.push(['Whisper', function () { tryWhisper(id, name, true); }]);
 if (reachable && !blocked[id]) items.push(['Tag in Chat', function () { tagInChat(name); }]);
-items.push(blocked[id] ? ['Unblock', function () { unblock(id); }] : ['Block', function () { block(id, name); }]);
+/* Admins can't be blocked -- by anyone, admins included (the blocks insert policy enforces it too). */
+if (blocked[id]) items.push(['Unblock', function () { unblock(id); }]); else if (!isAdminId(id)) items.push(['Block', function () { block(id, name); }]);
 items.push(['Report', async function () { var rr = await showPromptModal('Report ' + name, { placeholder: 'e.g. spam, harassment', maxLength: 300 }); if (rr) report(id, name, rr); }]);
 var incomingReqId = friends[id] ? null : incomingRequestIdFrom(id);
 if (friends[id]) items.push(['Remove Friend', function () { removeFriend(id, name); }]);
@@ -2304,6 +2305,7 @@ var r = await sb.from('blocks').select('blocked_id, blocked_name'); if (r.error)
 blocked = {}; r.data.forEach(function (b) { blocked[b.blocked_id] = b.blocked_name || '?'; });
 }
 async function block(id, name) {
+if (isAdminId(id)) { addSys(name + ' is an admin — admins can’t be blocked. Use Report if something is wrong.'); return; }
 var r = await sb.from('blocks').insert({ blocker_id: me.id, blocked_id: id, blocked_name: name });
 if (r.error) { addSys('Could not block: ' + r.error.message); return; }
 blocked[id] = name;
