@@ -1371,3 +1371,7 @@ display:flex;align-items:center;justify-content:center;cursor:default;padding:0;
 .ttt-actions .btn.ttt-resign,.ttt-actions .btn.ttt-decline,.ttt-actions .btn.ttt-cancel{color:var(--ash);border-color:#3d2a4d}
 .ttt-actions .btn.ttt-accept{color:#cdeecd;border-color:var(--leaf)}
 @media (hover:none) and (pointer:coarse){.ttt-board{grid-template-columns:repeat(3,54px);grid-auto-rows:54px}.ttt-cell{font-size:28px}.ttt-actions .btn{height:34px}}
+
+/* leaderboard tabs (v110) reuse the admin page's tab styling; the streak flame sits beside the level badge */
+.lb-tabs{padding-top:8px}
+.lb-streak{flex:none;font:700 11px Cinzel,Georgia,serif;color:#ffb14a;text-shadow:0 0 6px rgba(255,140,0,.6);margin-left:2px}
