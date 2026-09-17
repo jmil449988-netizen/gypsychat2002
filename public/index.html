@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=83">
+<link rel="stylesheet" href="./css/style.css?v=84">
 </head>
 <body>
 <div class="gc-root">
@@ -282,7 +282,13 @@
 
 <div class="leaderboard-panel" id="leaderboardPanel" role="complementary" aria-label="Leaderboard">
 <div class="tp-hd"><button class="tp-back" type="button" id="leaderboardBack" aria-label="Back to chat">←</button><span>🏆 Leaderboard</span></div>
+<!-- v110: two ladders -- XP (reactions + game points) and Tic-Tac-Toe (wins, with streaks) -->
+<div class="adm-tabs lb-tabs" role="tablist">
+<button type="button" class="adm-tab active" id="lbTabXp" role="tab" aria-selected="true" aria-controls="leaderboardList">✨ XP</button>
+<button type="button" class="adm-tab" id="lbTabTtt" role="tab" aria-selected="false" aria-controls="tttLeaderboardList">⚔ Tic-Tac-Toe</button>
+</div>
 <div class="lb-list" id="leaderboardList"></div>
+<div class="lb-list hidden" id="tttLeaderboardList"></div>
 <div class="tp-watermark" id="leaderboardWatermark" aria-hidden="true"></div>
 </div>
 
@@ -416,6 +422,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=109"></script>
+<script src="./js/app.js?v=110"></script>
 </body>
 </html>
