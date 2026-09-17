@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 126;
+var BUILD_NUMBER = 127;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -447,7 +447,8 @@ var SOUND_KIND_FILE = { signon: 'login', friendon: 'friend-logon', whisper: 'pm'
 var SOUND_KIND_SYNTH = { friendon: 'signon', whisper: 'ding', friendreq: 'ding', challenge: 'ding' }; // what each new kind sounds like without its file
 function playSound(kind) {
 if (soundMuted) return;
-if (SOUND_KIND_FILE[kind] && playFile(SOUND_KIND_FILE[kind], function () { playSynth(SOUND_KIND_SYNTH[kind] || kind); })) return;
+var file = SOUND_KIND_FILE[kind] || kind; // ding / buzz / turn have files under their own names
+if (SOUND_FILES[file] && playFile(file, function () { playSynth(SOUND_KIND_SYNTH[kind] || kind); })) return;
 playSynth(SOUND_KIND_SYNTH[kind] || kind);
 }
 function playSynth(kind) {
@@ -486,9 +487,9 @@ osc.connect(g); g.connect(masterOut(ctx)); osc.start(t0); osc.stop(t0 + dur + 0.
    gain as the synth sounds, so the volume slider and both mutes apply. Any name whose file is
    missing or fails to decode falls back to its synth recipe, so nothing ever goes silent -- which
    also means a new recording can be added just by dropping the file in and listing it here. */
-var SOUND_FILES = { slap: 1, kiss: 1, laugh: 1, cry: 1, gunshot: 1, clap: 1, boo: 1, airhorn: 1, badum: 1, crickets: 1, knock: 1, howl: 1, sneeze: 1, burp: 1, cheers: 1,
-'friend-logon': 1, 'login': 1, 'friend-request': 1, 'game-invite': 1, 'pm': 1 };
-var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2 }; // the punchy ones sat a few dB under the rest after limiting
+var SOUND_FILES = { slap: 1, kiss: 1, laugh: 1, cry: 1, gunshot: 1, clap: 1, boo: 1, airhorn: 1, badum: 1, crickets: 1, knock: 1, howl: 1, sneeze: 1, burp: 1, cheers: 1, spit: 1, fart: 1, drumroll: 1,
+'friend-logon': 1, 'login': 1, 'friend-request': 1, 'game-invite': 1, 'pm': 1, ding: 1, buzz: 1, turn: 1, tick: 1, tock: 1 };
+var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5 }; // the punchy ones sat a few dB under the rest after limiting
 var soundBuf = {}, soundFail = {};
 function loadSoundFile(name) {
 if (soundBuf[name]) return soundBuf[name];
@@ -3361,6 +3362,10 @@ return '<div class="turn-clock' + (left <= 15 ? ' low' : '') + '" data-clock="' 
 }
 function tickSound(tock) {
 if (soundMuted) return;
+if (playFile(tock ? 'tock' : 'tick', function () { synthTick(tock); })) return; // v127: one real clock tick per second, cut from the user's recording
+synthTick(tock);
+}
+function synthTick(tock) {
 var ctx = ensureAudioCtx(); if (!ctx) return;
 var t0 = ctx.currentTime, len = Math.floor(ctx.sampleRate * 0.03);
 var buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
