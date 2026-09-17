@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 133;
+var BUILD_NUMBER = 134;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -4614,7 +4614,7 @@ var preview = t.body ? '<div class="tp-preview">' + esc(String(t.body).slice(0, 
    list layout -- see the .tp-thumb size rule in the CSS for why it's a fixed small square now
    instead of a full-width banner. */
 var thumb = t.image_url ? '<img class="tp-thumb" src="' + esc(t.image_url) + '" alt="" loading="lazy">' : '';
-return '<button type="button" class="tp-item" data-id="' + id + '">' + thumb + '<div class="tp-op">' + esc(t.op_name) + '</div>' + preview +
+return '<button type="button" class="tp-item" data-id="' + id + '">' + thumb + '<div class="tp-op' + (isAdminId(t.op_id) ? ' admin' : '') + '"><span class="nmt">' + esc(t.op_name) + '</span></div>' + preview +
 '<div class="tp-meta">' + n + ' repl' + (n === 1 ? 'y' : 'ies') + ' · ' + timeAgo(t.bumped_at) + '</div></button>';
 }).join('');
 renderThreadPages(pageCount);
@@ -4694,7 +4694,7 @@ var reactId = isOp ? p.thread_id : p.id;
 /* class="who" + data-name wires this into the same name-menu click handling (see tpPosts.onclick
    below) that the main chat log and leaderboard already use, so tapping a name in a thread opens
    the familiar Get Info / Whisper / Tag in Chat / Block menu instead of doing nothing. */
-var html = '<span class="t">' + fmt(p.created_at) + '</span><b class="who" data-id="' + esc(p.sender_id) + '" data-name="' + esc(p.sender_name) + '" tabindex="0">' + presenceDotHtml(p.sender_id) + esc(p.sender_name) + levelBadgeHtml(p.sender_id) + (isOp ? ' (OP)' : '') + ':</b> ';
+var html = '<span class="t">' + fmt(p.created_at) + '</span><b class="who' + (isAdminId(p.sender_id) ? ' admin' : '') + '" data-id="' + esc(p.sender_id) + '" data-name="' + esc(p.sender_name) + '" tabindex="0">' + presenceDotHtml(p.sender_id) + '<span class="nmt">' + esc(p.sender_name) + '</span>' + levelBadgeHtml(p.sender_id) + (isOp ? ' (OP)' : '') + ':</b> ';
 if (p.body) html += bodyHtml(p.body);
 if (p.image_url) html += (p.body ? '<br>' : '') + '<img class="tp-posted-img" src="' + esc(p.image_url) + '" alt="Image" loading="lazy">';
 if (isAdmin) html += ' <button type="button" class="tp-del" data-id="' + esc(String(p.id)) + '" data-op="' + (isOp ? '1' : '0') + '" data-thread="' + esc(String(p.thread_id)) + '" title="' + (isOp ? 'Delete thread' : 'Delete reply') + '" aria-label="' + (isOp ? 'Delete thread' : 'Delete reply') + '">🗑</button>';
