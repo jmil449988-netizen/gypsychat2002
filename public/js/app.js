@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 134;
+var BUILD_NUMBER = 135;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -443,6 +443,15 @@ gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
 osc.connect(gain); gain.connect(masterOut(ctx));
 osc.start(t0); osc.stop(t0 + dur + 0.02);
 }
+/* v135: the message swoosh -- 'send' when I post, the same sound reversed ('recv') when one
+   arrives. Both fire far more often than any other sound, so arrivals are floored at one per
+   250 ms; a burst of five messages is one swoosh, not five. */
+var lastRecvSound = 0;
+function messageSound(incoming) {
+if (!incoming) { playSound('send'); return; }
+var now = Date.now(); if (now - lastRecvSound < 250) return; lastRecvSound = now;
+playSound('recv');
+}
 var SOUND_KIND_FILE = { signon: 'login', friendon: 'friend-logon', whisper: 'pm', friendreq: 'friend-request', challenge: 'game-invite' };
 var SOUND_KIND_SYNTH = { friendon: 'signon', whisper: 'ding', friendreq: 'ding', challenge: 'ding' }; // what each new kind sounds like without its file
 function playSound(kind) {
@@ -489,7 +498,7 @@ osc.connect(g); g.connect(masterOut(ctx)); osc.start(t0); osc.stop(t0 + dur + 0.
    also means a new recording can be added just by dropping the file in and listing it here. */
 var SOUND_FILES = { slap: 1, kiss: 1, laugh: 1, cry: 1, gunshot: 1, clap: 1, boo: 1, airhorn: 1, badum: 1, crickets: 1, knock: 1, howl: 1, sneeze: 1, burp: 1, cheers: 1, spit: 1, fart: 1, drumroll: 1,
 'friend-logon': 1, 'login': 1, 'friend-request': 1, 'game-invite': 1, 'pm': 1, ding: 1, buzz: 1, turn: 1, tick: 1, tock: 1,
-coin: 1, win: 1, lose: 1, 'hm-right': 1, 'hm-wrong': 1, levelup: 1, intro: 1, logout: 1, signoff: 1, unroll: 1, wheel: 1, card: 1, chips: 1, trapdoor: 1, fortune: 1 };
+coin: 1, win: 1, lose: 1, 'hm-right': 1, 'hm-wrong': 1, levelup: 1, intro: 1, logout: 1, signoff: 1, unroll: 1, wheel: 1, card: 1, chips: 1, trapdoor: 1, fortune: 1, send: 1, recv: 1 };
 /* v129: table sounds (a card, chips) can fire twice for one move when a multi-statement rpc relays
    an intermediate row -- one per game per sound within 400 ms is plenty */
 var gameSfxAt = {};
@@ -1521,6 +1530,7 @@ if (atBottom || mine) { log.scrollTop = log.scrollHeight; stickImages(log, d); }
 else if (!replayingHistory) bumpNewPill();
 if (!mine && document.hidden && !replayingHistory) bumpTitle();
 if (mentionsMe && !replayingHistory) { playSound('ding'); notifyDesktop(m.sender_name + ' mentioned you', notifPreview(m.body), 'gc-mention'); }
+else if (!mine && !replayingHistory) messageSound(true); // v135
 }
 /* v121: scrolled up reading older messages while new ones land? A "3 new messages ↓" pill sits at
    the bottom edge of the log instead of yanking the view down (or letting them go unnoticed).
@@ -2363,7 +2373,7 @@ if (w.minimized) {
 if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
 if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
 }
-playSound('whisper');
+messageSound(true); // v135 (was the 'pm' alert; the swoosh is the same sound the sender heard, reversed)
 if (document.hidden) bumpTitle();
 notifyDesktop(otherName, notifPreview(m.body), 'gc-whisper-' + otherId, function () { openIM(otherId, otherName, true); });
 if (manualStatus === 'away' && !awayReplied[otherId]) {
@@ -3237,6 +3247,7 @@ else if (wins[recipientId]) imSys(recipientId, whisperErrorText(r.error, recipie
 else addSys(whisperErrorText(r.error, recipientName));
 return;
 }
+messageSound(false); // v135
 handleMessage(r.data); // show immediately; the realtime echo is de-duplicated by id
 /* Kick off any push notifications this message should cause. This has to happen from the SENDER's
    client -- it's the only side guaranteed to be online right now -- which is also exactly why it
