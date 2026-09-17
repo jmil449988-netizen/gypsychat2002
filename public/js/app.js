@@ -26,6 +26,7 @@ var bugReportsList = $('bugReportsList');
 var leaderboardBtn = $('leaderboardBtn'), leaderboardPanel = $('leaderboardPanel'), leaderboardList = $('leaderboardList'), leaderboardBack = $('leaderboardBack');
 var tttLeaderboardList = $('tttLeaderboardList'), lbTabXp = $('lbTabXp'), lbTabTtt = $('lbTabTtt');
 var unoLeaderboardList = $('unoLeaderboardList'), lbTabUno = $('lbTabUno');
+var hmLeaderboardList = $('hmLeaderboardList'), lbTabHm = $('lbTabHm'), hdLeaderboardList = $('hdLeaderboardList'), lbTabHd = $('lbTabHd');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
 var frqSection = $('frqSection'), frqCount = $('frqCount'), friendReqList = $('friendReqList');
@@ -64,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 113;
+var BUILD_NUMBER = 114;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -353,7 +354,9 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clos
 function gameMenuItems(id, name) {
 return [
 ['⚔ Tic-Tac-Toe', function () { challengeGame(id, name); }],
-['🃏 UNO', function () { challengeUno(id, name); }]
+['🃏 UNO', function () { challengeUno(id, name); }],
+['🪢 Hangman', function () { challengeHangman(id, name); }],
+['♠ Texas Hold’em', function () { setTimeout(function () { holdemStakesMenu(id, name); }, 0); }]
 ];
 }
 
@@ -1634,21 +1637,26 @@ var pr = await sb.from('profiles').select('user_id, name, avatar_url').in('user_
 renderGameLadder(list, rows, profById, empty, count);
 }
 function loadTttLeaderboard() { return loadGameLadder(tttLeaderboardList, 'ttt_leaderboard', 'No games finished yet — tap ⚔ in a whisper to challenge someone.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + x.draws + 'D'; }); }
-function loadUnoLeaderboard() { return loadGameLadder(unoLeaderboardList, 'uno_leaderboard', 'No UNO games finished yet — tap 🃏 in a whisper to challenge someone.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
+function loadUnoLeaderboard() { return loadGameLadder(unoLeaderboardList, 'uno_leaderboard', 'No UNO games finished yet — tap 🎲 in a whisper to challenge someone.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
+function loadHmLeaderboard() { return loadGameLadder(hmLeaderboardList, 'hangman_leaderboard', 'No Hangman games finished yet — tap 🎲 in a whisper to challenge someone.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
+function loadHdLeaderboard() { return loadGameLadder(hdLeaderboardList, 'holdem_leaderboard', 'Nobody has cashed out of a Hold’em table yet — tap 🎲 in a whisper to sit down.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + (x.net >= 0 ? '+' : '') + x.net + ' XP'; }); }
+var LB_TABS = [['xp', function () { return lbTabXp; }, function () { return leaderboardList; }, function () { loadLeaderboard(); }],
+['ttt', function () { return lbTabTtt; }, function () { return tttLeaderboardList; }, loadTttLeaderboard],
+['uno', function () { return lbTabUno; }, function () { return unoLeaderboardList; }, loadUnoLeaderboard],
+['hm', function () { return lbTabHm; }, function () { return hmLeaderboardList; }, loadHmLeaderboard],
+['hd', function () { return lbTabHd; }, function () { return hdLeaderboardList; }, loadHdLeaderboard]];
 function showLeaderboardTab(which) {
-which = which === 'ttt' || which === 'uno' ? which : 'xp';
-[[lbTabXp, leaderboardList, 'xp'], [lbTabTtt, tttLeaderboardList, 'ttt'], [lbTabUno, unoLeaderboardList, 'uno']].forEach(function (t) {
-var on = t[2] === which;
-if (t[0]) { t[0].classList.toggle('active', on); t[0].setAttribute('aria-selected', on ? 'true' : 'false'); }
-if (t[1]) t[1].classList.toggle('hidden', !on);
+if (!LB_TABS.some(function (t) { return t[0] === which; })) which = 'xp';
+LB_TABS.forEach(function (t) {
+var on = t[0] === which, tab = t[1](), list = t[2]();
+if (tab) { tab.classList.toggle('active', on); tab.setAttribute('aria-selected', on ? 'true' : 'false'); }
+if (list) list.classList.toggle('hidden', !on);
+if (on) t[3]();
 });
-if (which === 'xp') loadLeaderboard(); else if (which === 'ttt') loadTttLeaderboard(); else loadUnoLeaderboard();
 }
-function activeLeaderboardTab() { return lbTabUno && lbTabUno.classList.contains('active') ? 'uno' : lbTabTtt && lbTabTtt.classList.contains('active') ? 'ttt' : 'xp'; }
-if (lbTabXp) lbTabXp.onclick = function () { showLeaderboardTab('xp'); };
-if (lbTabTtt) lbTabTtt.onclick = function () { showLeaderboardTab('ttt'); };
-if (lbTabUno) lbTabUno.onclick = function () { showLeaderboardTab('uno'); };
-[leaderboardList, tttLeaderboardList, unoLeaderboardList].forEach(function (list) {
+function activeLeaderboardTab() { var hit = LB_TABS.filter(function (t) { var tab = t[1](); return tab && tab.classList.contains('active'); })[0]; return hit ? hit[0] : 'xp'; }
+LB_TABS.forEach(function (t) { var tab = t[1](); if (tab) tab.onclick = function () { showLeaderboardTab(t[0]); }; });
+[leaderboardList, tttLeaderboardList, unoLeaderboardList, hmLeaderboardList, hdLeaderboardList].forEach(function (list) {
 if (!list) return;
 /* Tapping a row opens the same Get Info / Whisper / Block / ... menu as tapping their name
    anywhere else, rather than the leaderboard being a dead-end list. The panel sits at z-index 40,
@@ -1901,6 +1909,8 @@ win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.prev
 win.log.onclick = function (e) {
 if (gameCardClick(e, id)) return;
 if (unoCardClick(e, id)) return;
+if (hmCardClick(e, id)) return;
+if (hdCardClick(e, id)) return;
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
 var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { reportMessage(rpt.dataset.mid); return; }
 /* Same Get Info / Whisper / Tag in Chat / Block menu a name click opens everywhere else (main
@@ -3173,6 +3183,8 @@ function clockTick() {
 var all = [];
 Object.keys(games).forEach(function (k) { var g = games[k]; if (g.status === 'active') all.push({ g: g, fn: 'game_timeout', store: games, uno: false }); });
 Object.keys(unoGames).forEach(function (k) { var g = unoGames[k]; if (g.status === 'active') all.push({ g: g, fn: 'uno_timeout', store: unoGames, uno: true }); });
+Object.keys(hmGames).forEach(function (k) { var g = hmGames[k]; if (g.status === 'active') all.push({ g: g, fn: 'hangman_timeout', store: hmGames, hm: true }); });
+Object.keys(hdGames).forEach(function (k) { var g = hdGames[k]; if (g.status === 'active') all.push({ g: g, fn: 'holdem_timeout', store: hdGames, hd: true }); });
 all.forEach(function (x) {
 var g = x.g, peer = gamePeer(g), w = wins[peer]; if (!w) return;
 var el = w.log.querySelector('.turn-clock[data-clock="' + g.id + '"]');
@@ -3182,7 +3194,13 @@ el.classList.toggle('low', left <= 15);
 el.querySelector('.tc-bar').style.width = Math.round(100 * left / TURN_SECONDS) + '%';
 el.querySelector('.tc-num').textContent = sec;
 }
-var key = g.id + ':' + g.turn_started_at;
+var key = x.fn + g.id + ':' + g.turn_started_at;
+/* Hold'em between hands: no clock ticking, just deal the next hand after a short pause */
+if (x.hd && g.street === 'between') {
+if (el) el.classList.add('hidden');
+if (TURN_SECONDS - left > 7 && !timeoutsFired[key]) { timeoutsFired[key] = true; sb.rpc('holdem_next', { p_game: g.id }).then(function (r) { if (!r.error && r.data) { noteServerTime(r.data); hdArrived(r.data, false, true); } }); }
+return;
+}
 if (left > 0 && left <= 15 && lastTickSecond[key] !== sec) {
 lastTickSecond[key] = sec;
 if (g.turn === me.id || !w.minimized) tickSound(sec % 2 === 0);
@@ -3193,6 +3211,8 @@ sb.rpc(x.fn, { p_game: g.id }).then(function (r) {
 if (r.error || !r.data) return;
 noteServerTime(r.data);
 if (x.uno) { unoGames[r.data.id] = r.data; renderUnoCard(r.data, { scroll: false }); if (r.data.turn === me.id) unoFetchHand(r.data.id); }
+else if (x.hm) { hmGames[r.data.id] = r.data; renderHmCard(r.data, { scroll: false }); }
+else if (x.hd) { hdArrived(r.data, false, true); }
 else { games[r.data.id] = r.data; renderGameCard(r.data, { scroll: false }); }
 });
 }
@@ -3435,6 +3455,325 @@ var h = await sb.from('uno_hands').select('game_id, cards').in('game_id', open);
 r.data.forEach(function (g) { if (gameShowsCard(g)) renderUnoCard(g, { scroll: false }); });
 }
 
+/* ---------- Hangman in whispers (v114) ----------
+   A race for one secret word (supabase/hangman_feature.sql): the server picks it, the two of you
+   take turns guessing letters or the whole word. A right letter keeps your turn; a wrong one is a
+   miss on the shared gallows and passes the turn. Reveal the last letter (or solve it) to win
+   3 XP; the sixth miss hangs the man and whoever made it loses. */
+var hmGames = {};
+function hmRecord(peerId) {
+var w = 0, l = 0;
+Object.keys(hmGames).forEach(function (k) { var g = hmGames[k]; if (g.status !== 'finished' || gamePeer(g) !== peerId) return; if (g.winner === me.id) w++; else l++; });
+return { w: w, l: l };
+}
+/* The gallows: a little pixel drawing that grows a piece per miss (head, body, arms, legs). */
+function gallowsSvg(misses) {
+var parts = [
+'<rect x="14" y="4" width="2" height="4"/>',                                  // rope
+'<rect x="12" y="8" width="6" height="6" class="hm-man"/>',                    // head
+'<rect x="14" y="14" width="2" height="8" class="hm-man"/>',                   // body
+'<rect x="10" y="15" width="4" height="2" class="hm-man"/>',                   // left arm
+'<rect x="16" y="15" width="4" height="2" class="hm-man"/>',                   // right arm
+'<rect x="11" y="22" width="3" height="2" class="hm-man"/><rect x="10" y="24" width="2" height="3" class="hm-man"/>', // left leg
+'<rect x="16" y="22" width="3" height="2" class="hm-man"/><rect x="18" y="24" width="2" height="3" class="hm-man"/>'  // right leg
+];
+var frame = '<rect x="1" y="29" width="22" height="2"/><rect x="4" y="2" width="2" height="27"/><rect x="4" y="2" width="12" height="2"/><rect x="6" y="4" width="2" height="3"/>';
+return '<svg class="hm-gallows" viewBox="0 0 24 32" aria-hidden="true">' + frame + parts.slice(0, Math.min(7, misses + 1)).join('') + '</svg>';
+}
+function renderHmCard(g, opts) {
+opts = opts || {};
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+var card = w.log.querySelector('.hm-card[data-gid="' + g.id + '"]');
+if (!card) {
+if (!gameShowsCard(g) || newestGameId(hmGames, peer) !== g.id) return;
+w.log.querySelectorAll('.hm-card').forEach(function (old) { old.remove(); });
+card = document.createElement('div'); card.className = 'hm-card'; card.dataset.gid = g.id; w.log.appendChild(card);
+}
+var mine = g.challenger_id === me.id, rec = hmRecord(peer);
+var html = '<div class="ttt-hd"><span class="ttt-title">🪢 Hangman</span><span class="ttt-rec" title="Your record against ' + esc(name) + ' (last 30 days)">' + rec.w + 'W · ' + rec.l + 'L</span></div>';
+var status = '', actions = '';
+if (g.status === 'pending') {
+status = mine ? 'Waiting for ' + esc(name) + ' to accept…' : '<b>' + esc(name) + '</b> challenges you to Hangman!';
+actions = mine ? '<button type="button" class="btn hm-cancel">Cancel</button>' : '<button type="button" class="btn hm-accept">Accept</button><button type="button" class="btn hm-decline">Decline</button>';
+} else if (g.status === 'active' || g.status === 'finished') {
+var myTurn = g.status === 'active' && g.turn === me.id;
+html += '<div class="hm-table">' + gallowsSvg(g.misses) + '<div class="hm-mid"><div class="hm-word">' + esc(g.mask).toUpperCase().split('').map(function (c) { return '<span class="hm-ch' + (c === '_' ? ' blank' : '') + '">' + (c === '_' ? '&nbsp;' : c) + '</span>'; }).join('') + '</div>' +
+'<div class="hm-tried">' + (g.guessed ? 'Tried: ' + esc(g.guessed.toUpperCase().split('').join(' ')) : '&nbsp;') + '</div><div class="hm-miss">' + g.misses + ' of 6 misses</div></div></div>';
+if (g.status === 'active') {
+html += '<div class="hm-keys" role="group" aria-label="Letters">' + 'abcdefghijklmnopqrstuvwxyz'.split('').map(function (l) {
+var used = g.guessed.indexOf(l) >= 0;
+return '<button type="button" class="hm-key' + (used ? ' used' : '') + '" data-l="' + l + '"' + (used || !myTurn ? ' disabled' : '') + '>' + l.toUpperCase() + '</button>';
+}).join('') + '</div>';
+html += '<div class="hm-solve-row"><input type="text" class="hm-solve-in" maxlength="20" placeholder="…or solve the whole word"' + (myTurn ? '' : ' disabled') + ' autocomplete="off"><button type="button" class="btn hm-solve"' + (myTurn ? '' : ' disabled') + '>Solve</button></div>';
+if (g.last_action) html += '<div class="uno-last">' + esc(g.last_action) + '</div>';
+html += turnClockHtml(g);
+status = myTurn ? '<b>Your turn</b> — pick a letter' : esc(name) + '’s turn';
+actions = '<button type="button" class="btn hm-resign">Resign</button>';
+} else {
+var pts = gameMyPoints(g);
+if (g.winner === me.id) status = '<b>You won!</b> ' + (g.result === 'solved' ? 'The word was ' + esc((g.word || g.mask).toUpperCase()) + '.' : g.result === 'hanged' ? esc(name) + ' hanged the man.' : esc(name) + ' resigned.') + (pts ? ' +' + pts + ' XP' : ' <span class="ttt-cap">daily XP cap reached</span>');
+else status = '<b>' + esc(name) + ' won.</b> ' + (g.result === 'solved' ? 'They solved ' + esc((g.word || g.mask).toUpperCase()) + '.' : g.result === 'hanged' ? 'Your miss hanged the man — it was ' + esc((g.word || g.mask).toUpperCase()) + '.' : '(you resigned)');
+actions = '<button type="button" class="btn hm-rematch">Rematch</button>';
+}
+} else {
+status = g.status === 'declined' ? (mine ? esc(name) + ' declined.' : 'You declined.') : g.status === 'cancelled' ? 'Challenge withdrawn.' : 'Challenge expired.';
+actions = '<button type="button" class="btn hm-rematch">Challenge again</button>';
+}
+html += '<div class="ttt-status">' + status + '</div><div class="ttt-actions">' + actions + '</div>';
+card.innerHTML = html;
+if (opts.scroll !== false) w.log.scrollTop = w.log.scrollHeight;
+}
+async function hmCall(fn, args, peerId) {
+var r = await sb.rpc(fn, args);
+if (r.error) { imSys(peerId, r.error.message.replace(/^.*?:\s*/, '')); return null; }
+if (r.data) { noteServerTime(r.data); hmGames[r.data.id] = r.data; renderHmCard(r.data); }
+return r.data;
+}
+async function challengeHangman(peerId, name) {
+if (!me) return;
+if (!(await whisperAllowed(peerId))) { imSys(peerId, 'Add ' + name + ' as a friend to challenge them.'); return; }
+var r = await sb.from('hangman_games').insert({ challenger_id: me.id, challenger_name: me.name, opponent_id: peerId, opponent_name: name }).select().single();
+if (r.error) {
+if (r.error.code === '23505') imSys(peerId, 'You already have a Hangman game open with ' + name + ' — finish it (or resign) first.');
+else if (/row-level security/i.test(r.error.message)) imSys(peerId, name + ' only takes whispers from friends, so no challenge yet.');
+else imSys(peerId, 'Could not send the challenge: ' + r.error.message);
+return;
+}
+hmGames[r.data.id] = r.data; renderHmCard(r.data);
+triggerPush(peerId, me.name + ' challenges you to Hangman', 'Open your whispers to accept.', 'gc-hm-' + r.data.id);
+}
+function hmCardClick(e, peerId) {
+var card = e.target.closest('.hm-card'); if (!card) return false;
+var g = hmGames[card.dataset.gid]; if (!g) return true;
+var b = e.target.closest('button'); if (!b || b.disabled) return true;
+var id = g.id, cl = b.classList;
+if (cl.contains('hm-accept')) hmCall('hangman_respond', { p_game: id, p_accept: true }, peerId);
+else if (cl.contains('hm-decline')) hmCall('hangman_respond', { p_game: id, p_accept: false }, peerId);
+else if (cl.contains('hm-cancel')) hmCall('hangman_cancel', { p_game: id }, peerId);
+else if (cl.contains('hm-resign')) hmCall('hangman_resign', { p_game: id }, peerId);
+else if (cl.contains('hm-rematch')) challengeHangman(peerId, gamePeerName(g));
+else if (cl.contains('hm-key')) hmCall('hangman_guess', { p_game: id, p_guess: b.dataset.l }, peerId);
+else if (cl.contains('hm-solve')) { var inp = card.querySelector('.hm-solve-in'); var v = (inp && inp.value || '').trim(); if (v) hmCall('hangman_guess', { p_game: id, p_guess: v }, peerId); }
+return true;
+}
+function hmArrived(g, isNew) {
+var prev = hmGames[g.id]; hmGames[g.id] = g;
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+renderHmCard(g);
+var forMe = (isNew && g.opponent_id === me.id) || (g.status === 'active' && g.turn === me.id && (!prev || prev.turn !== me.id)) || (g.status === 'finished' && (!prev || prev.status !== 'finished'));
+if (!forMe) return;
+if (isNew) w.snippet = name + ' challenges you to Hangman';
+else if (g.status === 'finished') w.snippet = g.winner === me.id ? 'Hangman: you won!' : 'Hangman: ' + name + ' won';
+else w.snippet = 'Hangman: your turn';
+gameNudge(w, peer);
+}
+/* Shared "something happened in a game for me" nudge: sound, unread badge, flash, title bump. */
+function gameNudge(w, peer) {
+playSound('ding');
+if (w.minimized || document.activeElement !== w.ta) {
+unread[peer] = (unread[peer] || 0) + 1; renderPeople();
+if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
+if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
+}
+if (w.tab && tray && w.tab.parentNode === tray && tray.firstChild !== w.tab) tray.insertBefore(w.tab, tray.firstChild);
+updateTab(peer);
+if (document.hidden) bumpTitle();
+}
+async function loadHangman() {
+hmGames = {};
+var since = new Date(Date.now() - 30 * 86400000).toISOString();
+var r = await sb.from('hangman_games').select('*').or('challenger_id.eq.' + me.id + ',opponent_id.eq.' + me.id).gt('created_at', since).order('created_at', { ascending: true });
+if (r.error) return;
+r.data.forEach(function (g) { hmGames[g.id] = g; });
+r.data.forEach(function (g) { if (gameShowsCard(g)) renderHmCard(g, { scroll: false }); });
+}
+
+/* ---------- Texas Hold'em in whispers (v114) ----------
+   Heads-up no-limit, betting real XP (supabase/holdem_feature.sql). Two tables: LOW (blinds 1/2,
+   sit down with 5-10 XP) and HIGH (blinds 2/5, 10-50 XP). Your buy-in leaves your XP the moment
+   you sit down and your whole stack comes back when you leave, so wins and losses move your
+   level. hdGames is the public table state; hdHand holds MY two cards (RLS: nobody else can read
+   them); the deck never leaves the server. Every action is an rpc. */
+var hdGames = {}, hdHand = {}, hdLeaveArmed = {};
+var HD_STAKES = { low: { sb: 1, bb: 2, min: 5, max: 10, label: 'Low stakes' }, high: { sb: 2, bb: 5, min: 10, max: 50, label: 'High stakes' } };
+var SUIT = { h: '♥', d: '♦', c: '♣', s: '♠' };
+function pcHtml(c, extra) {
+if (!c) return '<span class="pc back' + (extra ? ' ' + extra : '') + '" aria-hidden="true"></span>';
+var r = c.charAt(0), su = c.charAt(1), red = su === 'h' || su === 'd';
+return '<span class="pc' + (red ? ' red' : '') + (extra ? ' ' + extra : '') + '" aria-label="' + esc(r + ' of ' + { h: 'hearts', d: 'diamonds', c: 'clubs', s: 'spades' }[su]) + '"><span class="pc-r">' + (r === 'T' ? '10' : r) + '</span><span class="pc-s">' + SUIT[su] + '</span></span>';
+}
+function hdRecord(peerId) {
+var w = 0, l = 0, net = 0;
+Object.keys(hdGames).forEach(function (k) { var g = hdGames[k]; if (g.status !== 'finished' || gamePeer(g) !== peerId) return; if (g.winner === me.id) w++; else if (g.winner) l++; net += gameMyPoints(g); });
+return { w: w, l: l, net: net };
+}
+function myXp() { var st = userStats[me.id]; return st ? (st.xp != null ? st.xp : (st.reactions_received || 0) + (st.game_points || 0)) : 0; }
+function holdemStakesMenu(peerId, name) {
+var anchor = wins[peerId] && wins[peerId].el.querySelector('.icomp .games');
+if (!anchor) return;
+showMiniMenu(anchor, 'Hold’em with ' + name, [
+['♠ Low stakes — blinds 1/2, sit with 5–10 XP', function () { challengeHoldem(peerId, name, 'low'); }],
+['♠ High stakes — blinds 2/5, sit with 10–50 XP', function () { challengeHoldem(peerId, name, 'high'); }]
+]);
+}
+async function challengeHoldem(peerId, name, stakes) {
+if (!me) return;
+var st = HD_STAKES[stakes]; if (!st) return;
+if (!(await whisperAllowed(peerId))) { imSys(peerId, 'Add ' + name + ' as a friend to play them.'); return; }
+var have = myXp();
+if (have < st.min) { imSys(peerId, 'You need at least ' + st.min + ' XP to sit down at the ' + st.label.toLowerCase() + ' table (you have ' + have + ').'); return; }
+var suggested = Math.min(st.max, have);
+var v = await showPromptModal('Sit down with how much XP?', { value: String(suggested), placeholder: st.min + '–' + st.max, maxLength: 3, hint: st.label + ': blinds ' + st.sb + '/' + st.bb + '. Between ' + st.min + ' and ' + Math.min(st.max, have) + ' XP — it leaves your XP now and comes back (plus or minus) when the game ends.', okLabel: 'Sit down' });
+if (v === null) return;
+var amt = parseInt(v, 10);
+if (!(amt >= st.min && amt <= st.max)) { imSys(peerId, 'Sit down with ' + st.min + ' to ' + st.max + ' XP at this table.'); return; }
+var r = await sb.rpc('holdem_challenge', { p_opponent: peerId, p_stakes: stakes, p_buy_in: amt });
+if (r.error) {
+if (/unique|one_open/i.test(r.error.message)) imSys(peerId, 'You already have a Hold’em game open with ' + name + ' — finish it first.');
+else imSys(peerId, r.error.message.replace(/^.*?:\s*/, ''));
+return;
+}
+noteServerTime(r.data); hdGames[r.data.id] = r.data; renderHdCard(r.data);
+refreshMyStats();
+triggerPush(peerId, me.name + ' wants to play Hold’em for ' + amt + ' XP', 'Open your whispers to sit down.', 'gc-hd-' + r.data.id);
+}
+/* XP moved in or out of a table: re-read my own row so the level badge follows. */
+async function refreshMyStats() {
+var r = await sb.from('user_stats').select('user_id, reactions_received, game_points, xp, level').eq('user_id', me.id).maybeSingle();
+if (!r.error && r.data) { userStats[me.id] = r.data; refreshLevelBadges(me.id); }
+}
+function renderHdCard(g, opts) {
+opts = opts || {};
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+var card = w.log.querySelector('.hd-card[data-gid="' + g.id + '"]');
+if (!card) {
+if (!gameShowsCard(g) || newestGameId(hdGames, peer) !== g.id) return;
+w.log.querySelectorAll('.hd-card').forEach(function (old) { old.remove(); });
+card = document.createElement('div'); card.className = 'hd-card'; card.dataset.gid = g.id; w.log.appendChild(card);
+}
+var mine = g.challenger_id === me.id, rec = hdRecord(peer), st = HD_STAKES[g.stakes] || HD_STAKES.low;
+var myStack = mine ? g.challenger_stack : g.opponent_stack, theirStack = mine ? g.opponent_stack : g.challenger_stack;
+var myBet = mine ? g.challenger_bet : g.opponent_bet, theirBet = mine ? g.opponent_bet : g.challenger_bet;
+var theirShown = mine ? g.shown_opponent : g.shown_challenger, myShown = mine ? g.shown_challenger : g.shown_opponent;
+var html = '<div class="ttt-hd"><span class="ttt-title">♠ Hold’em · ' + st.label + '</span><span class="ttt-rec" title="Your record against ' + esc(name) + ' (last 30 days)">' + rec.w + 'W · ' + rec.l + 'L · ' + (rec.net >= 0 ? '+' : '') + rec.net + ' XP</span></div>';
+var status = '', actions = '';
+if (g.status === 'pending') {
+status = mine ? 'Waiting for ' + esc(name) + ' to sit down (' + g.buy_in + ' XP each)…' : '<b>' + esc(name) + '</b> sits down with <b>' + g.buy_in + ' XP</b> — blinds ' + g.sb + '/' + g.bb + '. Sit down for ' + g.buy_in + ' XP too?';
+actions = mine ? '<button type="button" class="btn hd-cancel">Cancel</button>' : '<button type="button" class="btn hd-accept">Sit down</button><button type="button" class="btn hd-decline">Decline</button>';
+} else if (g.status === 'active' || g.status === 'finished') {
+var inHand = g.status === 'active' && g.street !== 'between' && g.street !== 'showdown';
+var myTurn = inHand && g.turn === me.id;
+var myCards = hdHand[g.id] || myShown || [];
+html += '<div class="hd-seat them"><span class="hd-name">' + (g.dealer === peer ? '<span class="hd-btn" title="Dealer">D</span>' : '') + esc(name) + '</span><span class="hd-stack">' + theirStack + ' XP</span>' + (theirBet ? '<span class="hd-bet">' + theirBet + '</span>' : '') +
+'<span class="hd-cards">' + (theirShown ? pcHtml(theirShown[0], 'sm') + pcHtml(theirShown[1], 'sm') : (inHand ? pcHtml(null, 'sm') + pcHtml(null, 'sm') : '')) + '</span></div>';
+var board = g.board || [];
+html += '<div class="hd-board">' + [0, 1, 2, 3, 4].map(function (i) { return board[i] ? pcHtml(board[i]) : '<span class="pc slot" aria-hidden="true"></span>'; }).join('') + '</div>';
+html += '<div class="hd-pot">Pot ' + (g.pot + g.challenger_bet + g.opponent_bet) + ' XP' + (g.street !== 'between' ? ' · ' + esc(g.street) : '') + '</div>';
+html += '<div class="hd-seat me"><span class="hd-name">' + (g.dealer === me.id ? '<span class="hd-btn" title="Dealer">D</span>' : '') + 'You</span><span class="hd-stack">' + myStack + ' XP</span>' + (myBet ? '<span class="hd-bet">' + myBet + '</span>' : '') +
+'<span class="hd-cards">' + (myCards.length ? pcHtml(myCards[0]) + pcHtml(myCards[1]) : '') + '</span></div>';
+if (g.last_action) html += '<div class="uno-last">' + esc(g.last_action) + '</div>';
+if (g.status === 'active') {
+html += turnClockHtml(g);
+if (myTurn) {
+var toCall = Math.max(0, theirBet - myBet);
+var minTo = Math.min(theirBet + Math.max(g.min_raise, g.bb), myBet + myStack), potNow = g.pot + g.challenger_bet + g.opponent_bet;
+var potTo = Math.min(myBet + myStack, theirBet + toCall + potNow), allIn = myBet + myStack;
+status = '<b>Your move</b>' + (toCall ? ' — ' + toCall + ' to call' : '');
+actions = '<span class="hd-fc"><button type="button" class="btn hd-fold">Fold</button><button type="button" class="btn hd-call">' + (toCall ? 'Call ' + Math.min(toCall, myStack) : 'Check') + '</button></span>';
+if (myStack > 0 && theirStack + (theirBet - myBet) > 0) {
+actions += '<span class="hd-raise"><span class="hd-presets"><button type="button" class="btn hd-amt-set" data-amt="' + minTo + '">Min</button><button type="button" class="btn hd-amt-set" data-amt="' + potTo + '">Pot</button><button type="button" class="btn hd-amt-set" data-amt="' + allIn + '">All-in</button></span>' +
+'<span class="hd-raise-row"><input type="number" class="hd-amt" min="' + minTo + '" max="' + allIn + '" value="' + minTo + '" aria-label="Raise to"><button type="button" class="btn hd-raise-btn">' + (theirBet ? 'Raise to' : 'Bet') + '</button></span></span>';
+}
+} else if (g.street === 'between' || g.street === 'showdown') {
+status = g.hand_result ? esc(g.hand_result) : 'Next hand coming up…';
+actions = '<button type="button" class="btn hd-next">Next hand</button>';
+} else {
+status = esc(name) + '’s move';
+}
+actions += '<button type="button" class="btn hd-leave' + (hdLeaveArmed[g.id] ? ' armed' : '') + '">' + (hdLeaveArmed[g.id] ? 'Sure? Cash out' : 'Cash out') + '</button>';
+} else {
+var net = gameMyPoints(g);
+status = (g.result === 'bust' ? (myStack === 0 ? 'You busted.' : esc(name) + ' busted!') : 'Cashed out.') + ' ' + (net > 0 ? '<b>+' + net + ' XP</b>' : net < 0 ? '<b>' + net + ' XP</b>' : 'Even.');
+actions = '<button type="button" class="btn hd-rematch">Play again</button>';
+}
+} else {
+status = g.status === 'declined' ? (mine ? esc(name) + ' declined — your XP is back.' : 'You declined.') : g.status === 'cancelled' ? 'Table closed — XP refunded.' : 'Challenge expired — XP refunded.';
+actions = '<button type="button" class="btn hd-rematch">Try again</button>';
+}
+html += '<div class="ttt-status">' + status + '</div><div class="ttt-actions hd-actions">' + actions + '</div>';
+card.innerHTML = html;
+if (opts.scroll !== false) w.log.scrollTop = w.log.scrollHeight;
+}
+async function hdFetchHand(gid) {
+var r = await sb.from('holdem_hands').select('cards').eq('game_id', gid).eq('user_id', me.id).maybeSingle();
+if (!r.error) { hdHand[gid] = r.data ? (r.data.cards || []) : []; if (hdGames[gid]) renderHdCard(hdGames[gid], { scroll: false }); }
+}
+async function hdCall(fn, args, peerId) {
+var r = await sb.rpc(fn, args);
+if (r.error) { imSys(peerId, r.error.message.replace(/^.*?:\s*/, '')); return null; }
+if (r.data) hdArrived(r.data, false, true);
+return r.data;
+}
+/* Applies a fresh row whether it came back from my own rpc (quiet = true) or over realtime. */
+function hdArrived(g, isNew, quiet) {
+var prev = hdGames[g.id]; hdGames[g.id] = g;
+noteServerTime(g);
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+if (g.status === 'active' && (!prev || prev.hand_no !== g.hand_no || prev.status !== 'active')) { delete hdLeaveArmed[g.id]; hdFetchHand(g.id); }
+if (g.status === 'finished' && (!prev || prev.status !== 'finished')) { delete hdHand[g.id]; refreshMyStats(); }
+if (['declined', 'cancelled', 'expired'].indexOf(g.status) >= 0 && (!prev || prev.status !== g.status)) refreshMyStats();
+renderHdCard(g);
+if (quiet) return;
+var forMe = (isNew && g.opponent_id === me.id) || (g.status === 'active' && g.turn === me.id && (!prev || prev.turn !== me.id || prev.hand_no !== g.hand_no)) || (g.status === 'finished' && (!prev || prev.status !== 'finished'));
+if (!forMe) return;
+if (isNew) w.snippet = name + ' wants to play Hold’em for ' + g.buy_in + ' XP';
+else if (g.status === 'finished') w.snippet = 'Hold’em: ' + (gameMyPoints(g) >= 0 ? '+' : '') + gameMyPoints(g) + ' XP';
+else w.snippet = 'Hold’em: your move';
+gameNudge(w, peer);
+}
+function hdHandArrived(row) {
+if (!row || row.user_id !== me.id) return;
+hdHand[row.game_id] = row.cards || [];
+if (hdGames[row.game_id]) renderHdCard(hdGames[row.game_id], { scroll: false });
+}
+function hdCardClick(e, peerId) {
+var card = e.target.closest('.hd-card'); if (!card) return false;
+var g = hdGames[card.dataset.gid]; if (!g) return true;
+var b = e.target.closest('button'); if (!b || b.disabled) return true;
+var id = g.id, cl = b.classList;
+if (cl.contains('hd-accept')) hdCall('holdem_respond', { p_game: id, p_accept: true }, peerId);
+else if (cl.contains('hd-decline')) hdCall('holdem_respond', { p_game: id, p_accept: false }, peerId);
+else if (cl.contains('hd-cancel')) hdCall('holdem_cancel', { p_game: id }, peerId);
+else if (cl.contains('hd-fold')) hdCall('holdem_act', { p_game: id, p_action: 'fold' }, peerId);
+else if (cl.contains('hd-call')) hdCall('holdem_act', { p_game: id, p_action: 'call' }, peerId);
+else if (cl.contains('hd-amt-set')) { var inp = card.querySelector('.hd-amt'); if (inp) inp.value = b.dataset.amt; }
+else if (cl.contains('hd-raise-btn')) { var inp2 = card.querySelector('.hd-amt'); var amt = parseInt(inp2 && inp2.value, 10); if (amt > 0) hdCall('holdem_act', { p_game: id, p_action: 'raise', p_amount: amt }, peerId); }
+else if (cl.contains('hd-next')) hdCall('holdem_next', { p_game: id }, peerId);
+else if (cl.contains('hd-leave')) {
+if (!hdLeaveArmed[id]) { hdLeaveArmed[id] = true; renderHdCard(g, { scroll: false }); setTimeout(function () { if (hdLeaveArmed[id]) { delete hdLeaveArmed[id]; if (hdGames[id]) renderHdCard(hdGames[id], { scroll: false }); } }, 5000); }
+else { delete hdLeaveArmed[id]; hdCall('holdem_leave', { p_game: id }, peerId); }
+}
+else if (cl.contains('hd-rematch')) holdemStakesMenu(peerId, gamePeerName(g));
+return true;
+}
+async function loadHoldem() {
+hdGames = {}; hdHand = {};
+var since = new Date(Date.now() - 30 * 86400000).toISOString();
+var r = await sb.from('holdem_games').select('*').or('challenger_id.eq.' + me.id + ',opponent_id.eq.' + me.id).gt('created_at', since).order('created_at', { ascending: true });
+if (r.error) return;
+var open = [];
+r.data.forEach(function (g) { hdGames[g.id] = g; if (g.status === 'active') open.push(g.id); });
+if (open.length) {
+var h = await sb.from('holdem_hands').select('game_id, cards').in('game_id', open);
+(h.data || []).forEach(function (row) { hdHand[row.game_id] = row.cards || []; });
+}
+r.data.forEach(function (g) { if (gameShowsCard(g)) renderHdCard(g, { scroll: false }); });
+}
+
 /* ---------- typing indicators (main room + whispers) ----------
    One 'typing' broadcast on the shared room channel -- the same pattern buzz already uses just
    above: a 'to' of null means the main room, a real user id means a whisper aimed at just that
@@ -3522,7 +3861,7 @@ if (SFX[cmd]) { sendSfx(cmd, null, arg); return true; }
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. The ⚔ in a whisper challenges them to Tic-Tac-Toe (a win is worth 3 XP, a draw 1); the 🃏 challenges them to UNO (a win is worth 5 XP). Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Sound commands (/slap, /kiss, /laugh, /cry, /spit, /fart, /gunshot … type /sounds for all of them) play for the whole room, or for just the two of you inside a whisper. Set a status message from your status pill. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
+case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. The ⚔ in a whisper challenges them to Tic-Tac-Toe (a win is worth 3 XP, a draw 1); the 🎲 menu has the games: Tic-Tac-Toe (3 XP a win), UNO (5), Hangman (3) and Texas Hold’em, where you bet real XP at a low (blinds 1/2) or high (2/5) stakes table. Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Sound commands (/slap, /kiss, /laugh, /cry, /spit, /fart, /gunshot … type /sounds for all of them) play for the whole room, or for just the two of you inside a whisper. Set a status message from your status pill. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'sounds': addSys('Sound commands (everyone in the room hears them; in a whisper, just the two of you): ' + SFX_LIST.map(function (k) { return '/' + k; }).join(' · ') + '. Add a name to aim one: /slap Perry.'); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
@@ -5160,7 +5499,7 @@ if (d.to == null) { if (d.typing === false) clearRoomTyping(d.from); else markRo
 else if (d.to === me.id) { if (d.typing === false) clearImTyping(d.from); else markImTyping(d.from, d.name); }
 // d.to pointing at someone else's whisper isn't ours -- ignore, same as buzz's own 'to' above.
 });
-channel.on('presence', { event: 'leave' }, function (p) { if (p.leftPresences[0]) addSys(p.leftPresences[0].name + ' has left the room.'); });
+channel.on('presence', { event: 'leave' }, function (p) { if (p.leftPresences[0] && p.key !== me.id) addSys(p.leftPresences[0].name + ' has left the room.'); });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + (C.ROOM || 'main') }, function (p) { handleMessage(p.new); });
 /* Main-room housekeeping (messages_trim_room, see schema.sql) deletes the oldest room message
    every time the 100-cap is exceeded by a new one, so everyone else's log needs to drop that row
@@ -5195,7 +5534,13 @@ channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game
 channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: col + '=eq.' + me.id }, function (p) { gameArrived(p.new, false); });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_games', filter: col + '=eq.' + me.id }, function (p) { if (!unoGames[p.new.id]) unoArrived(p.new, true); });
 channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_games', filter: col + '=eq.' + me.id }, function (p) { unoArrived(p.new, false); });
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hangman_games', filter: col + '=eq.' + me.id }, function (p) { if (!hmGames[p.new.id]) hmArrived(p.new, true); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hangman_games', filter: col + '=eq.' + me.id }, function (p) { hmArrived(p.new, false); });
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'holdem_games', filter: col + '=eq.' + me.id }, function (p) { if (!hdGames[p.new.id]) hdArrived(p.new, true); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'holdem_games', filter: col + '=eq.' + me.id }, function (p) { hdArrived(p.new, false); });
 });
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'holdem_hands', filter: 'user_id=eq.' + me.id }, function (p) { hdHandArrived(p.new); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'holdem_hands', filter: 'user_id=eq.' + me.id }, function (p) { hdHandArrived(p.new); });
 /* UNO: my hand rows (RLS only ever shows me my own). */
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_hands', filter: 'user_id=eq.' + me.id }, function (p) { unoHandArrived(p.new); });
 channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_hands', filter: 'user_id=eq.' + me.id }, function (p) { unoHandArrived(p.new); });
@@ -5283,6 +5628,7 @@ else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.')
 pinLogBottom();
 loadGames(); // Tic-Tac-Toe cards into their whisper windows (open games + results from the last hour)
 loadUno();   // same for UNO
+loadHangman(); loadHoldem();
 resetIdle();
 startRecentPeopleHeartbeat();
 autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
