@@ -62,7 +62,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 108;
+var BUILD_NUMBER = 109;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1420,20 +1420,25 @@ return LEVEL_TIERS[i];
 }
 function levelBadgeHtml(id) {
 var s = userStats[id];
-var title = s ? ('Level ' + s.level + ' — ' + s.reactions_received + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ' received') : '';
+var title = s ? xpTitle(s) : '';
 var tier = levelTier(s ? s.level : 1);
 return '<span class="lvl ' + tier.cls + '" data-lvl-for="' + esc(id) + '"' + (s ? '' : ' hidden') + ' title="' + esc(title) + '">' + (s ? (tier.icon + 'Lv' + s.level) : '') + '</span>';
 }
 function refreshLevelBadges(id) {
 var s = userStats[id];
 document.querySelectorAll('[data-lvl-for="' + id + '"]').forEach(function (el) {
-if (s) { var tier = levelTier(s.level); el.hidden = false; el.className = 'lvl ' + tier.cls; el.textContent = tier.icon + 'Lv' + s.level; el.title = 'Level ' + s.level + ' — ' + s.reactions_received + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ' received'; }
+if (s) { var tier = levelTier(s.level); el.hidden = false; el.className = 'lvl ' + tier.cls; el.textContent = tier.icon + 'Lv' + s.level; el.title = xpTitle(s); }
 else { el.hidden = true; el.textContent = ''; el.title = ''; el.className = 'lvl'; }
 });
 renderPeople();
 }
+/* "Level 3 — 14 XP (12 reactions, 2 from games)" */
+function xpTitle(s) {
+var xp = s.xp != null ? s.xp : (s.reactions_received || 0) + (s.game_points || 0);
+return 'Level ' + s.level + ' — ' + xp + ' XP (' + (s.reactions_received || 0) + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ', ' + (s.game_points || 0) + ' from games)';
+}
 async function loadUserStats() {
-var r = await sb.from('user_stats').select('user_id, reactions_received, level');
+var r = await sb.from('user_stats').select('user_id, reactions_received, game_points, xp, level');
 if (r.error || !r.data) return;
 userStats = {};
 r.data.forEach(function (x) { userStats[x.user_id] = x; });
@@ -1462,15 +1467,15 @@ var rank = i < 3 ? '<span class="lb-medal">' + LB_MEDAL[i] + '</span>' : '<span 
 return '<div class="lb-row' + (i < 3 ? ' lb-top' : '') + '" data-id="' + esc(x.user_id) + '" data-name="' + esc(name) + '" tabindex="0">' + rank + ava +
 '<span class="lb-name' + (isAdminId(x.user_id) ? ' admin' : '') + '">' + esc(name) + '</span>' +
 '<span class="lvl ' + tier.cls + '">' + tier.icon + 'Lv' + x.level + '</span>' +
-'<span class="lb-count">' + x.reactions_received.toLocaleString() + ' reaction' + (x.reactions_received === 1 ? '' : 's') + '</span></div>';
+'<span class="lb-count" title="' + esc(xpTitle(x)) + '">' + (x.xp || 0).toLocaleString() + ' XP</span></div>';
 }).join('');
 }
 async function loadLeaderboard() {
 if (!leaderboardList) return;
 leaderboardList.innerHTML = '<div class="empty">Loading…</div>';
-var r = await sb.from('user_stats').select('user_id, level, reactions_received').order('reactions_received', { ascending: false }).limit(20);
+var r = await sb.from('user_stats').select('user_id, level, reactions_received, game_points, xp').order('xp', { ascending: false }).limit(20);
 if (r.error) { leaderboardList.innerHTML = '<div class="empty">Could not load the leaderboard: ' + esc(r.error.message) + '</div>'; return; }
-var rows = (r.data || []).filter(function (x) { return x.reactions_received > 0; });
+var rows = (r.data || []).filter(function (x) { return (x.xp || 0) > 0; });
 var profById = {};
 if (rows.length) {
 var pr = await sb.from('profiles').select('user_id, name, avatar_url').in('user_id', rows.map(function (x) { return x.user_id; }));
@@ -1688,6 +1693,7 @@ el.innerHTML = '<div class="bar"><button class="back" type="button" title="Back 
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn img" type="button" title="Send a photo" aria-label="Send a photo">🖼️</button>' +
 '<button class="btn gif" type="button" title="Search GIFs" aria-label="Search GIFs">GIF</button>' +
+'<button class="btn game" type="button" title="Challenge to Tic-Tac-Toe" aria-label="Challenge ' + esc(name) + ' to Tic-Tac-Toe">⚔</button>' +
 '<input type="file" class="im-img-file hidden" accept="image/*,.heic,.heif">' +
 '<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
 el.querySelector('.nm').textContent = name;
@@ -1706,6 +1712,7 @@ emoBtnWin.onclick = function () { openEmojiPicker(win.ta, emoBtnWin); };
 var imgBtn = el.querySelector('.icomp .img'), imgFile = el.querySelector('.im-img-file');
 imgBtn.onclick = function () { imgFile.click(); };
 /* GIF search in a whisper: the one shared picker, told to deliver into this conversation */
+el.querySelector('.icomp .game').onclick = function () { challengeGame(id, name); };
 var gifBtnWin = el.querySelector('.icomp .gif');
 gifBtnWin.onclick = function () {
 if (gifPicker.classList.contains('open') && gifTarget === 'dm:' + id) { closeGif(); return; }
@@ -1717,6 +1724,7 @@ if (f) sendIMImage(id, f);
 };
 win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') minimizeIM(id); };
 win.log.onclick = function (e) {
+if (gameCardClick(e, id)) return;
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
 var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { reportMessage(rpt.dataset.mid); return; }
 /* Same Get Info / Whisper / Tag in Chat / Block menu a name click opens everywhere else (main
@@ -2839,6 +2847,143 @@ triggerPush(id, me.name + ' mentioned you', notifPreview(row.body), 'gc-mention'
 }
 }
 
+/* ---------- Tic-Tac-Toe in whispers (v109) ----------
+   A game is a row in public.games (see supabase/tictactoe_feature.sql); every state change goes
+   through one of four database functions -- game_respond / game_move / game_resign / game_cancel
+   -- so the client only ever *asks* and repaints whatever comes back (or arrives over realtime).
+   Each game is drawn as one card (.ttt-card) in the whisper window with the other player, keyed
+   by game id, and repainted in place as the row changes. The person who was challenged plays X
+   and moves first. Wins earn XP (3 a win, 1 each for a draw, capped at 15 a day server-side) --
+   user_stats.xp / level move on their own via the existing realtime handler. */
+var games = {};          // game id -> row
+var gamesLoaded = false;
+var TTT_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+function gamePeer(g) { return g.challenger_id === me.id ? g.opponent_id : g.challenger_id; }
+function gamePeerName(g) { var pid = gamePeer(g); return (people[pid] && people[pid].name) || (wins[pid] && wins[pid].name) || (g.challenger_id === me.id ? g.opponent_name : g.challenger_name) || '?'; }
+function gameMyPoints(g) { return g.challenger_id === me.id ? g.challenger_points : g.opponent_points; }
+function gameWinningCells(board) {
+for (var i = 0; i < TTT_LINES.length; i++) { var l = TTT_LINES[i]; if (board[l[0]] !== '.' && board[l[0]] === board[l[1]] && board[l[1]] === board[l[2]]) return l; }
+return [];
+}
+/* Win / loss / draw record against one person, from every finished game loaded (last 30 days). */
+function gameRecord(peerId) {
+var w = 0, l = 0, d = 0;
+Object.keys(games).forEach(function (k) {
+var g = games[k]; if (g.status !== 'finished' || gamePeer(g) !== peerId) return;
+if (g.result === 'draw') d++; else if (g.winner === me.id) w++; else l++;
+});
+return { w: w, l: l, d: d };
+}
+/* Which games get a card: anything open, plus results from the last hour. Older finished games
+   only count toward the record line. */
+function gameShowsCard(g) {
+if (g.status === 'pending' || g.status === 'active') return true;
+return new Date(g.updated_at).getTime() > Date.now() - 3600000;
+}
+function renderGameCard(g, opts) {
+opts = opts || {};
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+var card = w.log.querySelector('.ttt-card[data-gid="' + g.id + '"]');
+if (!card) {
+if (!gameShowsCard(g)) return;
+card = document.createElement('div'); card.className = 'ttt-card'; card.dataset.gid = g.id; w.log.appendChild(card);
+}
+var mine = g.challenger_id === me.id, myMark = g.x_player === me.id ? 'X' : 'O';
+var rec = gameRecord(peer);
+var html = '<div class="ttt-hd"><span class="ttt-title">⚔ Tic-Tac-Toe</span><span class="ttt-rec" title="Your record against ' + esc(name) + ' (last 30 days)">' + rec.w + 'W · ' + rec.l + 'L · ' + rec.d + 'D</span></div>';
+var status = '', actions = '', showBoard = g.status === 'active' || g.status === 'finished';
+if (g.status === 'pending') {
+status = mine ? 'Waiting for ' + esc(name) + ' to accept…' : '<b>' + esc(name) + '</b> challenges you!';
+actions = mine ? '<button type="button" class="btn ttt-cancel">Cancel</button>' : '<button type="button" class="btn ttt-accept">Accept</button><button type="button" class="btn ttt-decline">Decline</button>';
+} else if (g.status === 'active') {
+status = g.turn === me.id ? '<b>Your move</b> — you are ' + myMark : esc(name) + '’s move';
+actions = '<button type="button" class="btn ttt-resign">Resign</button>';
+} else if (g.status === 'finished') {
+var pts = gameMyPoints(g);
+if (g.result === 'draw') status = 'A draw.' + (pts ? ' +' + pts + ' XP' : '');
+else if (g.winner === me.id) status = '<b>You won!</b>' + (g.result === 'resign' ? ' (' + esc(name) + ' resigned)' : '') + (pts ? ' +' + pts + ' XP' : ' <span class="ttt-cap">daily XP cap reached</span>');
+else status = '<b>' + esc(name) + ' won.</b>' + (g.result === 'resign' ? ' (you resigned)' : '');
+actions = '<button type="button" class="btn ttt-rematch">Rematch</button>';
+} else {
+status = g.status === 'declined' ? (mine ? esc(name) + ' declined.' : 'You declined.') : g.status === 'cancelled' ? 'Challenge withdrawn.' : 'Challenge expired.';
+actions = '<button type="button" class="btn ttt-rematch">Challenge again</button>';
+}
+if (showBoard) {
+var winCells = g.status === 'finished' ? gameWinningCells(g.board) : [];
+var canPlay = g.status === 'active' && g.turn === me.id;
+html += '<div class="ttt-board' + (canPlay ? ' live' : '') + '" role="grid">' + g.board.split('').map(function (c, i) {
+var cls = 'ttt-cell' + (c === 'X' ? ' x' : c === 'O' ? ' o' : '') + (winCells.indexOf(i) >= 0 ? ' win' : '');
+return '<button type="button" class="' + cls + '" data-cell="' + i + '"' + (canPlay && c === '.' ? '' : ' disabled') + ' aria-label="Square ' + (i + 1) + (c === '.' ? '' : ', ' + c) + '">' + (c === '.' ? '' : c) + '</button>';
+}).join('') + '</div>';
+}
+html += '<div class="ttt-status">' + status + '</div><div class="ttt-actions">' + actions + '</div>';
+card.innerHTML = html;
+if (opts.scroll !== false) w.log.scrollTop = w.log.scrollHeight;
+}
+async function gameCall(fn, args, peerId) {
+var r = await sb.rpc(fn, args);
+if (r.error) { imSys(peerId, r.error.message.replace(/^.*?:\s*/, '')); return null; }
+if (r.data) { games[r.data.id] = r.data; renderGameCard(r.data); }
+return r.data;
+}
+async function challengeGame(peerId, name) {
+if (!me) return;
+if (!(await whisperAllowed(peerId))) { imSys(peerId, 'Add ' + name + ' as a friend to challenge them.'); return; }
+var r = await sb.from('games').insert({ challenger_id: me.id, challenger_name: me.name, opponent_id: peerId, opponent_name: name }).select().single();
+if (r.error) {
+if (r.error.code === '23505') imSys(peerId, 'You already have a game open with ' + name + ' — finish it (or resign) first.');
+else if (/row-level security/i.test(r.error.message)) imSys(peerId, name + ' only takes whispers from friends, so no challenge yet.');
+else imSys(peerId, 'Could not send the challenge: ' + r.error.message);
+return;
+}
+games[r.data.id] = r.data; renderGameCard(r.data);
+triggerPush(peerId, me.name + ' challenges you to Tic-Tac-Toe', 'Open your whispers to accept.', 'gc-game-' + r.data.id);
+}
+/* Card buttons: one delegated handler per whisper log (wired in ensureWin). */
+function gameCardClick(e, peerId) {
+var card = e.target.closest('.ttt-card'); if (!card) return false;
+var g = games[card.dataset.gid]; if (!g) return true;
+var b = e.target.closest('button'); if (!b) return true;
+if (b.classList.contains('ttt-accept')) gameCall('game_respond', { p_game: g.id, p_accept: true }, peerId);
+else if (b.classList.contains('ttt-decline')) gameCall('game_respond', { p_game: g.id, p_accept: false }, peerId);
+else if (b.classList.contains('ttt-cancel')) gameCall('game_cancel', { p_game: g.id }, peerId);
+else if (b.classList.contains('ttt-resign')) gameCall('game_resign', { p_game: g.id }, peerId);
+else if (b.classList.contains('ttt-rematch')) challengeGame(peerId, gamePeerName(g));
+else if (b.classList.contains('ttt-cell') && !b.disabled) gameCall('game_move', { p_game: g.id, p_cell: Number(b.dataset.cell) }, peerId);
+return true;
+}
+/* A change that arrived from the other side (realtime), as opposed to one this client asked for. */
+function gameArrived(g, isNew) {
+var prev = games[g.id]; games[g.id] = g;
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+renderGameCard(g);
+var forMe = (isNew && g.opponent_id === me.id) || (g.status === 'active' && g.turn === me.id && (!prev || prev.turn !== me.id)) || (g.status === 'finished' && (!prev || prev.status !== 'finished'));
+if (!forMe) return;
+if (isNew) w.snippet = name + ' challenges you to Tic-Tac-Toe';
+else if (g.status === 'finished') w.snippet = g.result === 'draw' ? 'Tic-Tac-Toe: a draw' : (g.winner === me.id ? 'Tic-Tac-Toe: you won!' : 'Tic-Tac-Toe: ' + name + ' won');
+else w.snippet = 'Tic-Tac-Toe: your move';
+playSound('ding');
+if (w.minimized || document.activeElement !== w.ta) {
+unread[peer] = (unread[peer] || 0) + 1; renderPeople();
+if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
+if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
+}
+if (w.tab && tray && w.tab.parentNode === tray && tray.firstChild !== w.tab) tray.insertBefore(w.tab, tray.firstChild);
+updateTab(peer);
+if (document.hidden) bumpTitle();
+}
+async function loadGames() {
+games = {};
+var since = new Date(Date.now() - 30 * 86400000).toISOString();
+var r = await sb.from('games').select('*').or('challenger_id.eq.' + me.id + ',opponent_id.eq.' + me.id).gt('created_at', since).order('created_at', { ascending: true });
+if (r.error) return;
+r.data.forEach(function (g) { games[g.id] = g; });
+r.data.forEach(function (g) { if (gameShowsCard(g)) renderGameCard(g, { scroll: false }); });
+gamesLoaded = true;
+}
+
 /* ---------- typing indicators (main room + whispers) ----------
    One 'typing' broadcast on the shared room channel -- the same pattern buzz already uses just
    above: a 'to' of null means the main room, a real user id means a whisper aimed at just that
@@ -2925,7 +3070,7 @@ var cmd = m[1].toLowerCase(), arg = m[2], rest = m[3].trim(), id;
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
+case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. The ⚔ in a whisper challenges them to Tic-Tac-Toe (a win is worth 3 XP, a draw 1). Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
 case 'unblock': id = Object.keys(blocked).filter(function (k) { return (blocked[k] || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not blocked anyone named ' + arg + '.'); return true; } unblock(id); return true;
@@ -4507,6 +4652,12 @@ channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'dm_r
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reactions' }, function (p) { applyReactionRow(p.new, true); });
 channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reactions' }, function (p) { applyReactionRow(p.old, false); });
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_stats' }, function (p) { userStats[p.new.user_id] = p.new; refreshLevelBadges(p.new.user_id); });
+/* Tic-Tac-Toe: my games, whichever side I'm on (RLS already limits rows to mine; the filters just
+   keep the two subscriptions cheap). */
+['challenger_id', 'opponent_id'].forEach(function (col) {
+channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'games', filter: col + '=eq.' + me.id }, function (p) { if (!games[p.new.id]) gameArrived(p.new, true); });
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: col + '=eq.' + me.id }, function (p) { gameArrived(p.new, false); });
+});
 /* Level-up announcement: level is a generated column (floor(sqrt(reactions_received/3))+1), so an
    UPDATE with a higher level than what was cached a moment ago is a genuine level-up, not just a
    reaction count ticking up within the same level. Only announced when the person is someone
@@ -4589,6 +4740,7 @@ if (window.matchMedia('(min-width:1340px)').matches) addSys('Tip: there\'s a Thr
 else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.');
 }
 pinLogBottom();
+loadGames(); // Tic-Tac-Toe cards into their whisper windows (open games + results from the last hour)
 resetIdle();
 startRecentPeopleHeartbeat();
 autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
