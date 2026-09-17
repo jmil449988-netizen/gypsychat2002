@@ -63,7 +63,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 110;
+var BUILD_NUMBER = 111;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1475,7 +1475,7 @@ async function loadLeaderboard() {
 if (!leaderboardList) return;
 leaderboardList.innerHTML = '<div class="empty">Loading…</div>';
 var r = await sb.from('user_stats').select('user_id, level, reactions_received, game_points, xp').order('xp', { ascending: false }).limit(20);
-if (r.error) { leaderboardList.innerHTML = '<div class="empty">Could not load the leaderboard: ' + esc(r.error.message) + '</div>'; return; }
+if (r.error) { leaderboardList.innerHTML = '<div class="empty">Could not load the Popularity Contest: ' + esc(r.error.message) + '</div>'; return; }
 var rows = (r.data || []).filter(function (x) { return (x.xp || 0) > 0; });
 var profById = {};
 if (rows.length) {
