@@ -18,10 +18,11 @@ var tpNewPreviewWrap = $('tpNewPreviewWrap'), tpNewPreviewImg = $('tpNewPreviewI
 var tpReplyImgBtn = $('tpReplyImgBtn'), tpReplyImgFile = $('tpReplyImgFile'), tpReplyGifBtn = $('tpReplyGifBtn');
 var tpReplyPreviewWrap = $('tpReplyPreviewWrap'), tpReplyPreviewImg = $('tpReplyPreviewImg'), tpReplyImgRemove = $('tpReplyImgRemove');
 var adminToggle = $('adminToggle'), adminFields = $('adminFields'), adminEmail = $('adminEmail'), adminPassword = $('adminPassword');
-var reportsBtn = $('reportsBtn'), reportsBadge = $('reportsBadge'), reportsOverlay = $('reportsOverlay'), reportsList = $('reportsList'), reportsClose = $('reportsClose');
+var reportsBtn = $('reportsBtn'), reportsBadge = $('reportsBadge'), reportsList = $('reportsList');
+var adminPanel = $('adminPanel'), adminBack = $('adminBack'), admTabUsers = $('admTabUsers'), admTabBugs = $('admTabBugs'), admUsers = $('admUsers'), admBugs = $('admBugs'), admUsersCount = $('admUsersCount'), admBugsCount = $('admBugsCount');
 var bugBtn = $('bugBtn'), bugFile = $('bugFile'), bugReportOverlay = $('bugReportOverlay'), bugDesc = $('bugDesc'),
     bugAttachBtn = $('bugAttachBtn'), bugAttachList = $('bugAttachList'), bugReportCancel = $('bugReportCancel'), bugReportSubmit = $('bugReportSubmit');
-var bugReportsBtn = $('bugReportsBtn'), bugReportsBadge = $('bugReportsBadge'), bugReportsOverlay = $('bugReportsOverlay'), bugReportsList = $('bugReportsList'), bugReportsClose = $('bugReportsClose');
+var bugReportsList = $('bugReportsList');
 var leaderboardBtn = $('leaderboardBtn'), leaderboardPanel = $('leaderboardPanel'), leaderboardList = $('leaderboardList'), leaderboardBack = $('leaderboardBack');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
@@ -61,7 +62,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 107;
+var BUILD_NUMBER = 108;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1090,7 +1091,7 @@ if ($('promptOverlay') && !$('promptOverlay').classList.contains('hidden')) $('p
 if ($('saveOverlay') && !$('saveOverlay').classList.contains('hidden')) $('saveOverlay').classList.add('hidden');
 if ($('imgLightbox') && !$('imgLightbox').classList.contains('hidden')) closeLightbox();
 if (bugReportOverlay && !bugReportOverlay.classList.contains('hidden')) closeBugReportModal();
-if (bugReportsOverlay && !bugReportsOverlay.classList.contains('hidden')) bugReportsOverlay.classList.add('hidden');
+if (typeof closeAdminPanel === 'function' && gcRoot && gcRoot.classList.contains('admin-open')) closeAdminPanel();
 });
 
 /* ---------- image lightbox: click any posted picture (room, whispers, threads) to see it full
@@ -2004,6 +2005,7 @@ function tagInChat(name) {
   if (!msg) return;
   if (gcRoot.classList.contains('mobile-threads-open') && threadToggleBtn) threadToggleBtn.click();
   if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
+  if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
   var v = msg.value;
   var s = typeof msg.selectionStart === 'number' ? msg.selectionStart : v.length;
   var e = typeof msg.selectionEnd === 'number' ? msg.selectionEnd : v.length;
@@ -2162,12 +2164,14 @@ if (up.error) { addSys('Attachment upload failed: ' + up.error.message); return 
 var pub = sb.storage.from('bug-reports').getPublicUrl(path);
 var url = pub.data && pub.data.publicUrl;
 if (!url) { addSys('Attachment upload failed.'); return null; }
-return { url: url, type: kind, name: file.name || ('attachment.' + ext) };
+/* the bucket is private now: url is kept for older readers, path is what admins sign; preview is
+   a local blob URL for the composer's own thumbnail and never leaves this page */
+return { url: url, path: path, type: kind, name: file.name || ('attachment.' + ext), preview: kind === 'image' ? URL.createObjectURL(file) : '' };
 }
 function renderBugAttachList() {
 if (!bugAttachList) return;
 bugAttachList.innerHTML = bugAttachments.map(function (a, i) {
-var thumb = a.type === 'image' ? '<img src="' + esc(a.url) + '" alt="">' : '<span class="bug-attach-video">🎥</span>';
+var thumb = a.type === 'image' ? '<img src="' + esc(a.preview || a.url) + '" alt="">' : '<span class="bug-attach-video">🎥</span>';
 return '<div class="bug-attach-chip" data-i="' + i + '">' + thumb + '<span class="bug-attach-name">' + esc(a.name) + '</span>' +
 '<button type="button" class="bug-attach-remove" data-i="' + i + '" aria-label="Remove attachment">✕</button></div>';
 }).join('');
@@ -2217,7 +2221,8 @@ if (!desc) { addSys('Describe what went wrong before sending.'); if (bugDesc) bu
 if (bugReportSubmit) bugReportSubmit.disabled = true;
 try {
 var context = navigator.userAgent + ' — ' + window.innerWidth + 'x' + window.innerHeight;
-var row = { reporter_id: me.id, reporter_name: me.name, description: desc, attachments: bugAttachments, context: context };
+var stored = bugAttachments.map(function (a) { return { url: a.url, path: a.path, type: a.type, name: a.name }; }); // no blob previews in the row
+var row = { reporter_id: me.id, reporter_name: me.name, description: desc, attachments: stored, context: context };
 var r = await sb.from('bug_reports').insert(row);
 if (r.error) { addSys('Could not send bug report: ' + r.error.message); return; }
 closeBugReportModal();
@@ -2232,25 +2237,71 @@ if (bugReportSubmit) bugReportSubmit.onclick = submitBugReport;
    Same shape as the abuse-reports queue just below: a badge on a status-bar button, a modal
    listing open reports, resolving actions on each row -- just Resolve/Dismiss instead of
    Dismiss/Discipline, since a bug report doesn't point at a person to act on. */
-function refreshBugReportsBadge() {
-if (!isAdmin || !bugReportsBadge || !sb) return;
-sb.from('bug_reports').select('id', { count: 'exact', head: true }).eq('status', 'open').then(function (r) {
-if (r.error) return;
-var n = r.count || 0;
-bugReportsBadge.textContent = String(n > 99 ? '99+' : n);
-bugReportsBadge.classList.toggle('hidden', n === 0);
+/* ---------- the admin Reports page (v108) ----------
+   User reports and bug reports share one full-page takeover (#adminPanel, two tabs) and one 🛡️
+   item in the ⋯ menu, whose badge is the sum of both open counts. The counts come from HEAD
+   count queries; those were seen returning a transient 503 right after sign-on (diagnostics,
+   17 Sept), which used to leave the badge silently at 0 -- so each one now retries once. */
+var openCounts = { users: 0, bugs: 0 };
+function countOpen(table, attempt) {
+return sb.from(table).select('id', { count: 'exact', head: true }).eq('status', 'open').then(function (r) {
+if (r.error && !attempt) return new Promise(function (res) { setTimeout(res, 1500); }).then(function () { return countOpen(table, 1); });
+return r.error ? null : (r.count || 0);
 });
 }
+function paintAdminCounts() {
+var total = openCounts.users + openCounts.bugs;
+if (reportsBadge) { reportsBadge.textContent = String(total > 99 ? '99+' : total); reportsBadge.classList.toggle('hidden', total === 0); }
+if (admUsersCount) { admUsersCount.textContent = String(openCounts.users); admUsersCount.classList.toggle('hidden', !openCounts.users); }
+if (admBugsCount) { admBugsCount.textContent = String(openCounts.bugs); admBugsCount.classList.toggle('hidden', !openCounts.bugs); }
+}
+function refreshBugReportsBadge() {
+if (!isAdmin || !sb) return;
+countOpen('bug_reports').then(function (n) { if (n !== null) { openCounts.bugs = n; paintAdminCounts(); } });
+}
+function adminOpen() { return !!(gcRoot && gcRoot.classList.contains('admin-open')); }
+function showAdminTab(which) {
+var users = which === 'users';
+if (admTabUsers) { admTabUsers.classList.toggle('active', users); admTabUsers.setAttribute('aria-selected', users ? 'true' : 'false'); }
+if (admTabBugs) { admTabBugs.classList.toggle('active', !users); admTabBugs.setAttribute('aria-selected', users ? 'false' : 'true'); }
+if (admUsers) admUsers.classList.toggle('hidden', !users);
+if (admBugs) admBugs.classList.toggle('hidden', users);
+if (users) loadReports(); else loadBugReports();
+}
+function openAdminPanel(which) {
+if (!isAdmin || !adminPanel) return;
+closeGif();
+if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
+if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
+if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
+rememberChatScroll();
+gcRoot.classList.add('admin-open');
+if (adminWatermark) adminWatermark.textContent = WATERMARK_TEXT;
+showAdminTab(which || (openCounts.users === 0 && openCounts.bugs > 0 ? 'bugs' : 'users'));
+}
+function closeAdminPanel() {
+if (!adminOpen()) return;
+gcRoot.classList.remove('admin-open');
+returnToChat();
+}
+var adminWatermark = $('adminWatermark');
+if (adminBack) adminBack.onclick = closeAdminPanel;
+if (admTabUsers) admTabUsers.onclick = function () { showAdminTab('users'); };
+if (admTabBugs) admTabBugs.onclick = function () { showAdminTab('bugs'); };
 function renderBugReports(rows) {
 if (!bugReportsList) return;
 if (!rows.length) { bugReportsList.innerHTML = '<div class="empty">No open bug reports.</div>'; return; }
 bugReportsList.innerHTML = rows.map(function (r) {
 var when = fmtDateTime(r.created_at);
 var atts = Array.isArray(r.attachments) ? r.attachments : [];
+/* The bug-reports bucket is private (hardening_2026_09_17.sql): the stored url no longer opens on
+   its own, so each attachment is drawn with its object path and resolved to a signed URL right
+   after the list is painted -- see signBugAttachments below. */
 var attHtml = atts.length ? '<div class="rr-attachments">' + atts.map(function (a) {
+var path = bugAttachmentPath(a);
 return a.type === 'video'
-? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener" class="rr-att rr-att-video" title="' + esc(a.name || 'recording') + '">🎥</a>'
-: '<a href="' + esc(a.url) + '" target="_blank" rel="noopener" class="rr-att"><img src="' + esc(a.url) + '" alt="' + esc(a.name || 'screenshot') + '"></a>';
+? '<a href="#" data-path="' + esc(path) + '" target="_blank" rel="noopener" class="rr-att rr-att-video" title="' + esc(a.name || 'recording') + '">🎥</a>'
+: '<a href="#" data-path="' + esc(path) + '" target="_blank" rel="noopener" class="rr-att"><img data-path="' + esc(path) + '" alt="' + esc(a.name || 'screenshot') + '"></a>';
 }).join('') + '</div>' : '';
 var ctx = r.context ? '<div class="rr-context">' + esc(r.context) + '</div>' : '';
 return '<div class="report-row" data-id="' + r.id + '">' +
@@ -2261,6 +2312,27 @@ attHtml + ctx +
 '<button type="button" class="btn rr-resolve" data-id="' + r.id + '">Resolve</button></div>' +
 '</div>';
 }).join('');
+signBugAttachments();
+}
+/* An attachment row stores the object path from v108 on; older rows only have the old public URL,
+   whose tail after "bug-reports/" is that same path. */
+function bugAttachmentPath(a) {
+if (a.path) return a.path;
+var m = String(a.url || '').match(/\/bug-reports\/(.+)$/);
+return m ? decodeURIComponent(m[1]) : '';
+}
+async function signBugAttachments() {
+if (!bugReportsList) return;
+var els = Array.prototype.slice.call(bugReportsList.querySelectorAll('[data-path]'));
+var paths = []; els.forEach(function (el) { var p = el.dataset.path; if (p && paths.indexOf(p) < 0) paths.push(p); });
+if (!paths.length) return;
+var r = await sb.storage.from('bug-reports').createSignedUrls(paths, 3600);
+if (r.error || !r.data) return;
+var byPath = {}; r.data.forEach(function (x) { if (x.signedUrl && x.path) byPath[x.path] = x.signedUrl; });
+els.forEach(function (el) {
+var u = byPath[el.dataset.path]; if (!u) return;
+if (el.tagName === 'IMG') el.src = u; else el.href = u;
+});
 }
 async function loadBugReports() {
 if (!isAdmin || !bugReportsList) return;
@@ -2284,14 +2356,12 @@ var rBtn = e.target.closest('.rr-resolve');
 if (rBtn) resolveBugReport(rBtn.dataset.id, 'resolved');
 });
 }
-if (bugReportsBtn) bugReportsBtn.onclick = function () { bugReportsOverlay.classList.remove('hidden'); loadBugReports(); };
-if (bugReportsClose) bugReportsClose.onclick = function () { bugReportsOverlay.classList.add('hidden'); };
 function subscribeBugReports() {
 if (bugReportsChannel || !isAdmin) return;
 bugReportsChannel = sb.channel('bug-reports-queue');
 bugReportsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bug_reports' }, function () {
 refreshBugReportsBadge();
-if (bugReportsOverlay && !bugReportsOverlay.classList.contains('hidden')) loadBugReports();
+if (adminOpen()) loadBugReports();
 });
 bugReportsChannel.subscribe();
 }
@@ -2337,13 +2407,8 @@ default: return;
 resolveReport(reportId, 'actioned');
 }
 function refreshReportsBadge() {
-if (!isAdmin || !reportsBadge || !sb) return;
-sb.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'open').then(function (r) {
-if (r.error) return;
-var n = r.count || 0;
-reportsBadge.textContent = String(n > 99 ? '99+' : n);
-reportsBadge.classList.toggle('hidden', n === 0);
-});
+if (!isAdmin || !sb) return;
+countOpen('reports').then(function (n) { if (n !== null) { openCounts.users = n; paintAdminCounts(); } });
 }
 function renderReports(rows) {
 if (!reportsList) return;
@@ -2392,14 +2457,13 @@ applyDiscipline(sel ? sel.value : 'warn', aBtn.dataset.uid, aBtn.dataset.name ||
 }
 });
 }
-if (reportsBtn) reportsBtn.onclick = function () { reportsOverlay.classList.remove('hidden'); loadReports(); };
-if (reportsClose) reportsClose.onclick = function () { reportsOverlay.classList.add('hidden'); };
+if (reportsBtn) reportsBtn.onclick = function () { openAdminPanel(); };
 function subscribeReports() {
 if (reportsChannel || !isAdmin) return;
 reportsChannel = sb.channel('reports-queue');
 reportsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reports' }, function () {
 refreshReportsBadge();
-if (reportsOverlay && !reportsOverlay.classList.contains('hidden')) loadReports();
+if (adminOpen()) loadReports();
 });
 reportsChannel.subscribe();
 }
@@ -2619,7 +2683,6 @@ if (!mu.error) mu.data.forEach(function (x) { mutedUsers[x.user_id] = x; });
 if (reportsBtn) reportsBtn.classList.remove('hidden');
 refreshReportsBadge();
 subscribeReports();
-if (bugReportsBtn) bugReportsBtn.classList.remove('hidden');
 refreshBugReportsBadge();
 subscribeBugReports();
 }
@@ -2684,16 +2747,13 @@ unsubscribeThreads();
 unsubscribeReports();
 if (reportsBtn) reportsBtn.classList.add('hidden');
 if (reportsBadge) reportsBadge.classList.add('hidden');
-if (reportsOverlay) reportsOverlay.classList.add('hidden');
 unsubscribeBugReports();
 unsubscribeFriendRequests();
 closeFriendReqPanel();
 incomingRequests = {}; outgoingPending = {};
 if (bugBtn) bugBtn.classList.add('hidden');
-if (bugReportsBtn) bugReportsBtn.classList.add('hidden');
-if (bugReportsBadge) bugReportsBadge.classList.add('hidden');
 if (bugReportOverlay) bugReportOverlay.classList.add('hidden');
-if (bugReportsOverlay) bugReportsOverlay.classList.add('hidden');
+if (gcRoot) gcRoot.classList.remove('admin-open');
 if (threadsPanel) { threadsPanel.classList.remove('ready'); }
 if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
 if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('leaderboard-open'); gcRoot.classList.remove('signed-on'); }
@@ -3643,6 +3703,7 @@ threadToggleBtn.onclick = function () {
 closeGif();
 if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
 if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
+if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
 /* Grab the scroll position BEFORE toggling the class -- that class puts .win at display:none,
    and reading window.scrollY / log.scrollTop after that returns the already-collapsed value
    (effectively 0, since the scrollable content is gone), not where you actually were. That's
@@ -3673,6 +3734,7 @@ rouletteToggleBtn.onclick = function () {
 closeGif();
 if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
 if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
+if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
 /* Same fix as the threads toggle above: capture the scroll position before the class that
    hides .win is applied, not after -- otherwise it always records 0 and "back to chat" always
    lands at the top. */
@@ -3703,6 +3765,7 @@ leaderboardBtn.onclick = function () {
 closeGif();
 if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
 if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
+if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
 rememberChatScroll();
 gcRoot.classList.add('leaderboard-open');
 loadLeaderboard();
@@ -3772,7 +3835,7 @@ ballotStrip.addEventListener('keydown', function (e) { if ((e.key === 'Enter' ||
 }
 async function loadBallot() {
 if (!sb || !me) return;
-var r = await sb.from('ballot_notes').select('id,created_at,body').order('created_at', { ascending: false }).limit(60);
+var r = await sb.from('ballot_notes').select('id,created_at,body').gt('created_at', new Date(Date.now() - 3600000).toISOString()).order('created_at', { ascending: false }).limit(60); // notes live one hour (hardening_2026_09_17.sql)
 if (r.error) { console.warn('ballot box:', r.error.message); return; }
 var wasEmpty = !ballotNotes.length;
 ballotNotes = r.data || [];
