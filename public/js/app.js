@@ -24,6 +24,7 @@ var bugBtn = $('bugBtn'), bugFile = $('bugFile'), bugReportOverlay = $('bugRepor
     bugAttachBtn = $('bugAttachBtn'), bugAttachList = $('bugAttachList'), bugReportCancel = $('bugReportCancel'), bugReportSubmit = $('bugReportSubmit');
 var bugReportsList = $('bugReportsList');
 var leaderboardBtn = $('leaderboardBtn'), leaderboardPanel = $('leaderboardPanel'), leaderboardList = $('leaderboardList'), leaderboardBack = $('leaderboardBack');
+var tttLeaderboardList = $('tttLeaderboardList'), lbTabXp = $('lbTabXp'), lbTabTtt = $('lbTabTtt');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
 var frqSection = $('frqSection'), frqCount = $('frqCount'), friendReqList = $('friendReqList');
@@ -62,7 +63,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 109;
+var BUILD_NUMBER = 110;
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
 if ($('leaderboardWatermark')) $('leaderboardWatermark').textContent = WATERMARK_TEXT;
@@ -1483,12 +1484,58 @@ var pr = await sb.from('profiles').select('user_id, name, avatar_url').in('user_
 }
 renderLeaderboard(rows, profById);
 }
-if (leaderboardList) {
+/* ---------- the Tic-Tac-Toe ladder (v110) ----------
+   Top players by wins (ties: fewer losses, then more draws) with their current win streak, from
+   ttt_leaderboard() on the server -- game rows are only readable by their two players, so the
+   ladder can't be counted in the browser. The W·L·D line in each whisper stays as it was. */
+function renderTttLeaderboard(rows, profById) {
+if (!tttLeaderboardList) return;
+if (!rows.length) { tttLeaderboardList.innerHTML = '<div class="empty">No games finished yet — tap ⚔ in a whisper to challenge someone.</div>'; return; }
+tttLeaderboardList.innerHTML = rows.map(function (x, i) {
+var prof = profById[x.user_id] || {};
+var live = people[x.user_id];
+var name = (live && live.name) || prof.name || 'Unknown';
+var avaUrl = (live && live.avatarUrl) || prof.avatar_url;
+var ava = avaUrl ? '<img class="ava lb-ava" src="' + esc(avaUrl) + '" alt="" loading="lazy">' : '<span class="ava-fallback lb-ava" aria-hidden="true">' + esc(String(name).trim().charAt(0).toUpperCase() || '?') + '</span>';
+var st = userStats[x.user_id]; var lvl = st ? '<span class="lvl ' + levelTier(st.level).cls + '">' + levelTier(st.level).icon + 'Lv' + st.level + '</span>' : '';
+var rank = i < 3 ? '<span class="lb-medal">' + LB_MEDAL[i] + '</span>' : '<span class="lb-rank">#' + (i + 1) + '</span>';
+var pct = x.played ? Math.round(100 * x.wins / x.played) : 0;
+var streak = x.streak >= 2 ? '<span class="lb-streak" title="' + x.streak + ' wins in a row">🔥' + x.streak + '</span>' : '';
+return '<div class="lb-row' + (i < 3 ? ' lb-top' : '') + '" data-id="' + esc(x.user_id) + '" data-name="' + esc(name) + '" tabindex="0">' + rank + ava +
+'<span class="lb-name' + (isAdminId(x.user_id) ? ' admin' : '') + '">' + esc(name) + '</span>' + lvl + streak +
+'<span class="lb-count" title="' + x.played + ' game' + (x.played === 1 ? '' : 's') + ', ' + pct + '% won">' + x.wins + 'W · ' + x.losses + 'L · ' + x.draws + 'D</span></div>';
+}).join('');
+}
+async function loadTttLeaderboard() {
+if (!tttLeaderboardList) return;
+tttLeaderboardList.innerHTML = '<div class="empty">Loading…</div>';
+var r = await sb.rpc('ttt_leaderboard', { p_limit: 20 });
+if (r.error) { tttLeaderboardList.innerHTML = '<div class="empty">Could not load the ladder: ' + esc(r.error.message) + '</div>'; return; }
+var rows = r.data || [];
+var profById = {};
+if (rows.length) {
+var pr = await sb.from('profiles').select('user_id, name, avatar_url').in('user_id', rows.map(function (x) { return x.user_id; }));
+(pr.data || []).forEach(function (p) { profById[p.user_id] = p; });
+}
+renderTttLeaderboard(rows, profById);
+}
+function showLeaderboardTab(which) {
+var xp = which !== 'ttt';
+if (lbTabXp) { lbTabXp.classList.toggle('active', xp); lbTabXp.setAttribute('aria-selected', xp ? 'true' : 'false'); }
+if (lbTabTtt) { lbTabTtt.classList.toggle('active', !xp); lbTabTtt.setAttribute('aria-selected', xp ? 'false' : 'true'); }
+if (leaderboardList) leaderboardList.classList.toggle('hidden', !xp);
+if (tttLeaderboardList) tttLeaderboardList.classList.toggle('hidden', xp);
+if (xp) loadLeaderboard(); else loadTttLeaderboard();
+}
+if (lbTabXp) lbTabXp.onclick = function () { showLeaderboardTab('xp'); };
+if (lbTabTtt) lbTabTtt.onclick = function () { showLeaderboardTab('ttt'); };
+[leaderboardList, tttLeaderboardList].forEach(function (list) {
+if (!list) return;
 /* Tapping a row opens the same Get Info / Whisper / Block / ... menu as tapping their name
    anywhere else, rather than the leaderboard being a dead-end list. The panel sits at z-index 40,
    well below .nmenu's 60, so no rect-capture workaround is needed here the way the old modal
    overlay (z-index 70) required. */
-leaderboardList.addEventListener('click', function (e) {
+list.addEventListener('click', function (e) {
 var row = e.target.closest('.lb-row[data-id]'); if (!row || row.dataset.id === me.id) return;
 /* Without this, the same click that opens the menu also bubbles up to the document-level
    "click outside closes the menu" listener (see openMenu below), which would strip the 'open'
@@ -1496,12 +1543,12 @@ var row = e.target.closest('.lb-row[data-id]'); if (!row || row.dataset.id === m
 e.stopPropagation();
 openMenu(row.dataset.id, row, row.dataset.name);
 });
-leaderboardList.addEventListener('keydown', function (e) {
+list.addEventListener('keydown', function (e) {
 if (e.key !== 'Enter' && e.key !== ' ') return;
 var row = e.target.closest('.lb-row[data-id]'); if (!row) return;
 e.preventDefault(); row.click();
 });
-}
+});
 
 /* ---------- presence list ---------- */
 function renderPeople() {
@@ -3913,7 +3960,7 @@ if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
 if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
 rememberChatScroll();
 gcRoot.classList.add('leaderboard-open');
-loadLeaderboard();
+showLeaderboardTab(lbTabTtt && lbTabTtt.classList.contains('active') ? 'ttt' : 'xp'); // reopen on whichever ladder was showing
 };
 }
 if (leaderboardBack) leaderboardBack.onclick = closeLeaderboard;
