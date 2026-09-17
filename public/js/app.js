@@ -65,7 +65,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 120;
+var BUILD_NUMBER = 121;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -351,6 +351,35 @@ miniMenu.querySelector('button').focus();
 }
 document.addEventListener('click', function (e) { if (!miniMenu.contains(e.target)) closeMiniMenu(); });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMiniMenu(); });
+/* v121: a read-only bubble in the same .nmenu shell -- a title and a few lines, no choices. Used
+   by the level badge (below) so a tap on a phone gets the same facts a mouse hover already got. */
+function showInfoBubble(anchor, title, lines) {
+if (miniMenu.classList.contains('open') && miniMenu._anchor === anchor) { closeMiniMenu(); return; }
+miniMenu._anchor = anchor;
+miniMenu.innerHTML = '<div class="hd">' + esc(title) + '</div>' + lines.filter(Boolean).map(function (l) { return '<div class="note">' + esc(l) + '</div>'; }).join('');
+miniMenu.classList.add('open');
+var r = anchor.getBoundingClientRect();
+miniMenu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - miniMenu.offsetWidth - 4)) + 'px';
+var top = r.top - miniMenu.offsetHeight - 4; if (top < 4) top = r.bottom + 4;
+miniMenu.style.top = top + 'px';
+}
+/* The level badge explains itself: level = floor(sqrt(xp / 3)) + 1 (reactions_and_levels /
+   tictactoe SQL), so the next level lands at 3 * level^2 XP. Capture phase so the click never
+   reaches the name underneath it (which would open the name menu instead). */
+function xpOf(s) { return s.xp != null ? s.xp : (s.reactions_received || 0) + (s.game_points || 0); }
+function xpToNext(s) { return Math.max(0, 3 * s.level * s.level - xpOf(s)); }
+document.addEventListener('click', function (e) {
+var b = e.target.closest ? e.target.closest('.lvl[data-lvl-for]') : null; if (!b || b.hidden) return;
+var id = b.dataset.lvlFor, s = userStats[id]; if (!s) return;
+e.stopPropagation(); e.preventDefault();
+var who = me && id === me.id ? 'You' : ((people[id] && people[id].name) || 'They');
+showInfoBubble(b, 'Level ' + s.level + ' · ' + xpOf(s) + ' XP', [
+(s.reactions_received || 0) + ' XP from reactions on ' + (who === 'You' ? 'your' : 'their') + ' messages',
+(s.game_points || 0) + ' XP from winning games',
+xpToNext(s) ? xpToNext(s) + ' XP to level ' + (s.level + 1) : 'Level ' + (s.level + 1) + ' is next',
+'XP comes from reactions to what you say and from winning games in whispers (game XP caps at 500 a day).'
+]);
+}, true);
 /* The 🎲 menu -- one place to add a game. */
 function gameMenuItems(id, name) {
 return [
@@ -389,8 +418,19 @@ document.addEventListener('click', function (e) { if (!statusMenu.contains(e.tar
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeStatusMenu(); });
 
 /* ---------- sounds (Web Audio tones — no audio files to host) ---------- */
-var audioCtx = null, soundMuted = false;
-try { soundMuted = localStorage.getItem('gc_sound_muted') === '1'; } catch (e) {}
+var audioCtx = null, soundMuted = false, sfxMuted = false, soundVolume = 0.8, masterGain = null;
+try { soundMuted = localStorage.getItem('gc_sound_muted') === '1'; sfxMuted = localStorage.getItem('gc_sfx_muted') === '1'; var sv = parseFloat(localStorage.getItem('gc_sound_vol')); if (!isNaN(sv)) soundVolume = Math.max(0, Math.min(1, sv)); } catch (e) {}
+/* v121: every sound goes through one master gain so a single volume slider (the 🔊 menu) scales
+   all of it -- dings, game clock, sound-effect commands -- instead of on/off being the only choice. */
+function masterOut(ctx) {
+if (!masterGain || masterGain.context !== ctx) { masterGain = ctx.createGain(); masterGain.gain.value = soundVolume; masterGain.connect(masterOut(ctx)); }
+return masterGain;
+}
+function setSoundVolume(v) {
+soundVolume = Math.max(0, Math.min(1, v));
+if (masterGain) masterGain.gain.value = soundVolume;
+try { localStorage.setItem('gc_sound_vol', String(soundVolume)); } catch (e) {}
+}
 function ensureAudioCtx() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (audioCtx && audioCtx.state === 'suspended') { try { audioCtx.resume(); } catch (e) {} } return audioCtx; }
 function tone(freq, dur, delay, type, vol) {
 var ctx = ensureAudioCtx(); if (!ctx) return;
@@ -400,13 +440,14 @@ osc.type = type || 'sine'; osc.frequency.setValueAtTime(freq, t0);
 gain.gain.setValueAtTime(0, t0);
 gain.gain.linearRampToValueAtTime(vol || 0.15, t0 + 0.01);
 gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-osc.connect(gain); gain.connect(ctx.destination);
+osc.connect(gain); gain.connect(masterOut(ctx));
 osc.start(t0); osc.stop(t0 + dur + 0.02);
 }
 function playSound(kind) {
 if (soundMuted) return;
 if (kind === 'signon') { tone(660, 0.09, 0, 'triangle'); tone(880, 0.12, 0.09, 'triangle'); }
 else if (kind === 'ding') { tone(1050, 0.14, 0, 'sine'); }
+else if (kind === 'turn') { tone(880, 0.08, 0, 'triangle', 0.14); tone(1320, 0.16, 0.09, 'triangle', 0.14); } // v121: "your move" -- a rising two-note chime, distinct from the whisper ding
 else if (kind === 'buzz') { tone(120, 0.5, 0, 'sawtooth', 0.2); tone(90, 0.5, 0.05, 'sawtooth', 0.2); }
 }
 /* ---------- sound-effect commands (/slap, /fart, /gunshot ... v113) ----------
@@ -422,7 +463,7 @@ for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / 
 var src = ctx.createBufferSource(); src.buffer = buf;
 var f = ctx.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q || 1;
 var g = ctx.createGain(); g.gain.setValueAtTime(vol || 0.3, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-src.connect(f); f.connect(g); g.connect(ctx.destination); src.start(t0); src.stop(t0 + dur + 0.02);
+src.connect(f); f.connect(g); g.connect(masterOut(ctx)); src.start(t0); src.stop(t0 + dur + 0.02);
 }
 function sweep(f1, f2, dur, delay, type, vol, wobble) {
 var ctx = ensureAudioCtx(); if (!ctx) return;
@@ -431,7 +472,7 @@ var osc = ctx.createOscillator(), g = ctx.createGain();
 osc.type = type || 'sine'; osc.frequency.setValueAtTime(f1, t0); osc.frequency.exponentialRampToValueAtTime(Math.max(20, f2), t0 + dur);
 if (wobble) { var lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = wobble; lg.gain.value = f1 * 0.08; lfo.connect(lg); lg.connect(osc.frequency); lfo.start(t0); lfo.stop(t0 + dur); }
 g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol || 0.15, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-osc.connect(g); g.connect(ctx.destination); osc.start(t0); osc.stop(t0 + dur + 0.02);
+osc.connect(g); g.connect(masterOut(ctx)); osc.start(t0); osc.stop(t0 + dur + 0.02);
 }
 var SFX = {
 slap:    { line: 'slaps {t}', solo: 'slaps the table', play: function () { noiseBurst(0.09, 1400, 1.2, 0.7); tone(140, 0.12, 0, 'triangle', 0.3); } },
@@ -454,7 +495,7 @@ cheers:  { line: 'raises a glass to {t}', solo: 'raises a glass', play: function
 drumroll:{ line: 'drumrolls for {t}', solo: 'drumrolls', play: function () { for (var i = 0; i < 16; i++) noiseBurst(0.04, 700, 1.2, 0.3, i * 0.055, 'lowpass'); noiseBurst(0.6, 5000, 0.4, 0.3, 0.9, 'highpass'); } }
 };
 var SFX_LIST = Object.keys(SFX);
-function playSfx(kind) { if (soundMuted || !SFX[kind]) return; try { SFX[kind].play(); } catch (e) {} }
+function playSfx(kind) { if (soundMuted || sfxMuted || !SFX[kind]) return; try { SFX[kind].play(); } catch (e) {} }
 function sfxLine(name, kind, target) {
 var sf = SFX[kind]; return '* ' + name + ' ' + (target ? sf.line.replace('{t}', target) : sf.solo);
 }
@@ -486,14 +527,43 @@ function updateSoundBtn() {
 var b = $('soundBtn'); if (!b) return;
 var icon = b.querySelector('.btn-icon');
 if (icon) icon.textContent = soundMuted ? '🔇' : '🔊'; else b.textContent = soundMuted ? '🔇' : '🔊';
-b.setAttribute('aria-pressed', soundMuted ? 'true' : 'false');
+b.setAttribute('aria-pressed', soundMuted ? 'false' : 'true'); // pressed = sound ON (the phone menu draws an ON/OFF switch from this)
+}
+/* v121: the 🔊 button opens a small Sound menu -- all sounds on/off, sound-effect commands on/off
+   (so /fart can be silenced without losing whisper dings), and a volume slider. Built by hand in
+   the miniMenu shell because showMiniMenu only knows buttons. */
+function openSoundMenu(anchor) {
+if (miniMenu.classList.contains('open') && miniMenu._anchor === anchor) { closeMiniMenu(); return; }
+miniMenu._anchor = anchor;
+miniMenu.innerHTML = '<div class="hd">Sound</div>'
++ '<button type="button" role="menuitemcheckbox" data-k="all" aria-checked="' + (!soundMuted) + '">' + (soundMuted ? '🔇 All sounds: off' : '🔊 All sounds: on') + '</button>'
++ '<button type="button" role="menuitemcheckbox" data-k="sfx" aria-checked="' + (!sfxMuted) + '">' + (sfxMuted ? '🎺 Sound effects (/slap, /fart…): off' : '🎺 Sound effects (/slap, /fart…): on') + '</button>'
++ '<div class="note vol-row"><label for="volRange">Volume</label><input type="range" id="volRange" min="0" max="100" step="5" value="' + Math.round(soundVolume * 100) + '" aria-label="Volume"><span id="volPct">' + Math.round(soundVolume * 100) + '%</span></div>';
+miniMenu.querySelectorAll('button').forEach(function (b) {
+b.onclick = function (e) {
+e.stopPropagation();
+if (b.dataset.k === 'all') { soundMuted = !soundMuted; try { localStorage.setItem('gc_sound_muted', soundMuted ? '1' : '0'); } catch (err) {} updateSoundBtn(); if (!soundMuted) playSound('ding'); }
+else { sfxMuted = !sfxMuted; try { localStorage.setItem('gc_sfx_muted', sfxMuted ? '1' : '0'); } catch (err) {} }
+var a = miniMenu._anchor; miniMenu._anchor = null; openSoundMenu(a); // repaint in place
+};
+});
+var range = miniMenu.querySelector('#volRange'), pct = miniMenu.querySelector('#volPct');
+range.oninput = function () { setSoundVolume(range.value / 100); pct.textContent = range.value + '%'; };
+range.onchange = function () { if (!soundMuted) playSound('ding'); };
+miniMenu.classList.add('open');
+var r = anchor.getBoundingClientRect();
+if (!r.width && moreBtn) r = moreBtn.getBoundingClientRect();
+miniMenu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - miniMenu.offsetWidth - 4)) + 'px';
+var top = r.top - miniMenu.offsetHeight - 4; if (top < 4) top = r.bottom + 4;
+miniMenu.style.top = top + 'px';
 }
 if ($('soundBtn')) {
 updateSoundBtn();
-$('soundBtn').onclick = function () {
-soundMuted = !soundMuted;
-try { localStorage.setItem('gc_sound_muted', soundMuted ? '1' : '0'); } catch (e) {}
-updateSoundBtn();
+$('soundBtn').onclick = function (e) {
+e.stopPropagation();
+var anchor = $('soundBtn');
+closeMoreMenu(); // on a phone this button lives inside the ⋯ popover, which should fold away first
+openSoundMenu(anchor);
 };
 }
 /* iOS Safari (and other WebKit browsers) only lets an AudioContext leave its initial "suspended"
@@ -1020,6 +1090,21 @@ return h + ':' + ('0' + m).slice(-2) + ' ' + ap;
    uses the browser's own locale/timezone via toLocaleDateString, the time part is always the same
    12-hour fmt() above so it never flips to 24-hour just because a locale prefers that. */
 function fmtDateTime(t) { return new Date(t).toLocaleDateString() + ' ' + fmt(t); }
+/* v121: a "Today / Yesterday / Mon, Sep 14" divider whenever the calendar day changes between
+   consecutive messages in a log (room or whisper), so nobody has to guess whether "9:12 PM" was
+   tonight or last Tuesday. One key per log; the label is computed when the divider is drawn. */
+var lastDayKey = {};
+function dayKey(t) { var d = new Date(t); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+function dayLabel(t) {
+var d = new Date(t), now = new Date(), k = dayKey(t);
+if (k === dayKey(now)) return 'Today';
+var y = new Date(now); y.setDate(now.getDate() - 1); if (k === dayKey(y)) return 'Yesterday';
+return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + (d.getFullYear() !== now.getFullYear() ? ', ' + d.getFullYear() : '');
+}
+function dayDivider(logEl, key, t) {
+if (!t) return; var k = dayKey(t); if (lastDayKey[key] === k) return; lastDayKey[key] = k;
+var el = document.createElement('div'); el.className = 'day-div'; el.innerHTML = '<span>' + esc(dayLabel(t)) + '</span>'; logEl.appendChild(el);
+}
 function wrapEmoji(h) { return h.replace(/(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)/gu, '<span class="e">$1</span>'); }
 var URL_RE = /(https?:\/\/[^\s<]+)/g;
 function linkify(html) {
@@ -1385,12 +1470,73 @@ var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
 d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0"><span class="nmt">' + esc(m.sender_name) + '</span>' + levelBadgeHtml(m.sender_id) + ':</b> ' + bodyHtml(m.body) + reactionsHtml('message', m.id);
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+dayDivider(log, 'room', m.created_at);
 log.appendChild(d);
 if (atBottom || mine) { log.scrollTop = log.scrollHeight; stickImages(log, d); }
+else if (!replayingHistory) bumpNewPill();
 if (!mine && document.hidden && !replayingHistory) bumpTitle();
 if (mentionsMe && !replayingHistory) { playSound('ding'); notifyDesktop(m.sender_name + ' mentioned you', notifPreview(m.body), 'gc-mention'); }
 }
-function handleMessage(m) { if (blocked[m.sender_id]) return; if (m.recipient_id) renderIM(m); else renderRoom(m); }
+/* v121: scrolled up reading older messages while new ones land? A "3 new messages ↓" pill sits at
+   the bottom edge of the log instead of yanking the view down (or letting them go unnoticed).
+   Tap it, or scroll to the bottom yourself, and it goes away. */
+var newMsgPill = $('newMsgPill'), newBelow = 0;
+function placeNewPill() {
+if (!newMsgPill || newMsgPill.classList.contains('hidden')) return;
+var r = log.getBoundingClientRect();
+newMsgPill.style.display = r.width ? '' : 'none'; // the log is hidden behind a full-screen panel -- keep the count, hide the pill
+newMsgPill.style.top = (r.bottom - 34) + 'px'; newMsgPill.style.left = (r.left + r.width / 2) + 'px';
+}
+function bumpNewPill() {
+if (!newMsgPill) return; newBelow++;
+newMsgPill.textContent = newBelow + ' new message' + (newBelow === 1 ? '' : 's') + ' ↓';
+newMsgPill.classList.remove('hidden'); placeNewPill();
+}
+function clearNewPill() { newBelow = 0; if (newMsgPill) newMsgPill.classList.add('hidden'); }
+if (newMsgPill) {
+newMsgPill.onclick = function () { log.scrollTop = log.scrollHeight; clearNewPill(); };
+log.addEventListener('scroll', function () { if (newBelow && log.scrollHeight - log.scrollTop - log.clientHeight < 40) clearNewPill(); }, { passive: true });
+window.addEventListener('resize', placeNewPill);
+}
+var lastMsgAt = null; // newest created_at seen -- catchUp() fetches anything after it
+function handleMessage(m) { if (m.created_at && (!lastMsgAt || m.created_at > lastMsgAt)) lastMsgAt = m.created_at; if (blocked[m.sender_id]) return; if (m.recipient_id) renderIM(m); else renderRoom(m); }
+/* v121: connection state. The realtime socket reconnects on its own (and the channel re-joins,
+   which fires SUBSCRIBED again -- see channel.subscribe in join()), but nothing that happened
+   while it was down ever arrives: those events are gone. So while the link is down a small
+   "Reconnecting…" bar says so, and when it comes back everything is quietly re-read: messages
+   newer than the last one seen (handleMessage dedupes by id), the four game tables, and my
+   stats. The same catch-up runs when a phone comes back to the foreground after a long sleep,
+   where iOS often freezes the socket without ever reporting it closed. */
+var connBar = $('connBar'), connText = $('connText'), connDown = false, connHideTimer = null, hiddenSince = 0;
+function showConnBar(text, ok) {
+if (!connBar) return; clearTimeout(connHideTimer);
+connText.textContent = text; connBar.classList.toggle('ok', !!ok); connBar.classList.add('show');
+if (ok) connHideTimer = setTimeout(function () { connBar.classList.remove('show'); }, 1800);
+}
+function connLost(why) { if (!me || !channel || connDown) return; connDown = true; showConnBar(why || 'Reconnecting…'); }
+function hideConnBar() { connDown = false; clearTimeout(connHideTimer); if (connBar) connBar.classList.remove('show'); }
+async function catchUp(reason) {
+if (!me || !sb) return;
+try {
+if (lastMsgAt) {
+var r = await sb.from('messages').select('*').eq('room', C.ROOM || 'main').gt('created_at', lastMsgAt).order('created_at', { ascending: true }).limit(200);
+if (!r.error && r.data) r.data.forEach(handleMessage);
+}
+await Promise.all([loadGames(), loadUno(), loadHangman(), loadHoldem()]);
+if (typeof refreshMyStats === 'function') refreshMyStats();
+} catch (e) {}
+}
+function connBack() {
+if (!connDown) return; connDown = false;
+showConnBar('Back online', true);
+catchUp('reconnect');
+}
+window.addEventListener('offline', function () { connLost('Offline — waiting for a connection…'); });
+document.addEventListener('visibilitychange', function () {
+if (document.hidden) { hiddenSince = Date.now(); return; }
+if (me && hiddenSince && Date.now() - hiddenSince > 60000) catchUp('resume');
+hiddenSince = 0;
+});
 
 /* ---------- reactions (main room messages + thread posts -- never whispers, see
    reactions_and_levels_feature.sql's header note on why) ----------
@@ -1552,7 +1698,7 @@ if (wins[id]) updateWinBanner(id);
 /* "Level 3 — 14 XP (12 reactions, 2 from games)" */
 function xpTitle(s) {
 var xp = s.xp != null ? s.xp : (s.reactions_received || 0) + (s.game_points || 0);
-return 'Level ' + s.level + ' — ' + xp + ' XP (' + (s.reactions_received || 0) + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ', ' + (s.game_points || 0) + ' from games)';
+return 'Level ' + s.level + ' — ' + xp + ' XP (' + (s.reactions_received || 0) + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ', ' + (s.game_points || 0) + ' from games)' + (xpToNext(s) ? ' — ' + xpToNext(s) + ' XP to level ' + (s.level + 1) : '') + '. Tap for details.';
 }
 async function loadUserStats() {
 var r = await sb.from('user_stats').select('user_id, reactions_received, game_points, xp, level');
@@ -1637,10 +1783,10 @@ var pr = await sb.from('profiles').select('user_id, name, avatar_url').in('user_
 }
 renderGameLadder(list, rows, profById, empty, count);
 }
-function loadTttLeaderboard() { return loadGameLadder(tttLeaderboardList, 'ttt_leaderboard', 'No games finished yet — tap ⚔ in a whisper to challenge someone.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + x.draws + 'D'; }); }
-function loadUnoLeaderboard() { return loadGameLadder(unoLeaderboardList, 'uno_leaderboard', 'No UNO games finished yet — tap 🎲 in a whisper to challenge someone.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
-function loadHmLeaderboard() { return loadGameLadder(hmLeaderboardList, 'hangman_leaderboard', 'No Hangman games finished yet — tap 🎲 in a whisper to challenge someone.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
-function loadHdLeaderboard() { return loadGameLadder(hdLeaderboardList, 'holdem_leaderboard', 'Nobody has cashed out of a Hold’em table yet — tap 🎲 in a whisper to sit down.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + (x.net >= 0 ? '+' : '') + x.net + ' XP'; }); }
+function loadTttLeaderboard() { return loadGameLadder(tttLeaderboardList, 'ttt_leaderboard', 'No Tic-Tac-Toe games finished yet — open a whisper, tap 🎲 and pick Tic-Tac-Toe. Winner gets 3 XP.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + x.draws + 'D'; }); }
+function loadUnoLeaderboard() { return loadGameLadder(unoLeaderboardList, 'uno_leaderboard', 'No UNO games finished yet — open a whisper, tap 🎲 and pick UNO.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
+function loadHmLeaderboard() { return loadGameLadder(hmLeaderboardList, 'hangman_leaderboard', 'No Hangman games finished yet — open a whisper, tap 🎲 and pick Hangman.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
+function loadHdLeaderboard() { return loadGameLadder(hdLeaderboardList, 'holdem_leaderboard', 'Nobody has cashed out of a Hold’em table yet — open a whisper, tap 🎲, pick Texas Hold’em and choose your stakes.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + (x.net >= 0 ? '+' : '') + x.net + ' XP'; }); }
 var LB_TABS = [['xp', function () { return lbTabXp; }, function () { return leaderboardList; }, function () { loadLeaderboard(); }],
 ['ttt', function () { return lbTabTtt; }, function () { return tttLeaderboardList; }, loadTttLeaderboard],
 ['uno', function () { return lbTabUno; }, function () { return unoLeaderboardList; }, loadUnoLeaderboard],
@@ -1719,7 +1865,7 @@ renderFriends();
 function renderFriends() {
 if (!flist) return;
 var ids = Object.keys(friends);
-if (!ids.length) { flist.innerHTML = '<div class="empty">No friends added yet.</div>'; return; }
+if (!ids.length) { flist.innerHTML = '<div class="empty">No friends yet.<br><small>Tap a name in the Online list (or in the chat) and choose <b>Add friend</b>. Friends can whisper you even when whispers are set to friends-only, and you’ll see when they’re online.</small></div>'; return; }
 var groups = {};
 ids.forEach(function (id) { var g = friends[id].group || 'Friends'; (groups[g] = groups[g] || []).push(id); });
 var groupNames = Object.keys(groups).sort(function (a, b) { if (a === 'Friends') return -1; if (b === 'Friends') return 1; return a.localeCompare(b); });
@@ -1906,7 +2052,8 @@ imgFile.onchange = function () {
 var f = imgFile.files && imgFile.files[0]; imgFile.value = '';
 if (f) sendIMImage(id, f);
 };
-win.ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') minimizeIM(id); };
+win.ta.onkeydown = function (e) { if (cmdKeydown(e)) return; if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendIM(id); } if (e.key === 'Escape') minimizeIM(id); };
+attachCmdMenu(win.ta, 'pm');
 win.log.onclick = function (e) {
 if (gameCardClick(e, id)) return;
 if (unoCardClick(e, id)) return;
@@ -2090,6 +2237,7 @@ dmBarBadge.textContent = total > 9 ? '9+' : String(total); dmBarBadge.classList.
    notification -- comes through here. */
 function openIM(id, name, focus) {
 var w = ensureWin(id, name);
+dismissToasts(id);
 activeDm = id; dockOpen = true; saveDockOpen();
 unread[id] = 0; markDmRead(id); renderPeople();
 updateTab(id);
@@ -2149,6 +2297,7 @@ var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them
 if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
 d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + '<span class="nmt">' + esc(m.sender_name) + '</span>:</b> ' + bodyHtml(m.body);
+dayDivider(w.log, 'im:' + otherId, m.created_at);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
 /* Inbox row: last line as its snippet, and newest activity floats to the top of the list.
    updateTab always runs here (not only when unread changes) so the snippet is current -- but
@@ -2960,6 +3109,7 @@ delete bans[id]; addSys(name + ' may return.');
    mobile watermark's layout (.gc-root.signed-on, see style.css) still thinking it's signed on
    after one path removed it and the other didn't. */
 function leaveRoom(message, rejoinable) {
+hideConnBar(); clearNewPill();
 if (channel) { channel.unsubscribe(); channel = null; }
 unsubscribeThreads();
 unsubscribeReports();
@@ -3178,7 +3328,7 @@ for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / 
 var src = ctx.createBufferSource(); src.buffer = buf;
 var bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = tock ? 1500 : 2600; bp.Q.value = 6;
 var gain = ctx.createGain(); gain.gain.setValueAtTime(tock ? 0.45 : 0.6, t0); gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.06);
-src.connect(bp); bp.connect(gain); gain.connect(ctx.destination); src.start(t0); src.stop(t0 + 0.07);
+src.connect(bp); bp.connect(gain); gain.connect(masterOut(ctx)); src.start(t0); src.stop(t0 + 0.07);
 tone(tock ? 900 : 1300, 0.03, 0, 'square', 0.05); // a little wooden body under the click
 }
 var lastTickSecond = {};
@@ -3259,15 +3409,8 @@ if (!forMe) return;
 if (isNew) w.snippet = name + ' challenges you to Tic-Tac-Toe';
 else if (g.status === 'finished') w.snippet = g.result === 'draw' ? 'Tic-Tac-Toe: a draw' : (g.winner === me.id ? 'Tic-Tac-Toe: you won!' : 'Tic-Tac-Toe: ' + name + ' won');
 else w.snippet = 'Tic-Tac-Toe: your move';
-playSound('ding');
-if (w.minimized || document.activeElement !== w.ta) {
-unread[peer] = (unread[peer] || 0) + 1; renderPeople();
-if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
-if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
-}
-if (w.tab && tray && w.tab.parentNode === tray && tray.firstChild !== w.tab) tray.insertBefore(w.tab, tray.firstChild);
-updateTab(peer);
-if (document.hidden) bumpTitle();
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Tic-Tac-Toe', seconds: turnSecondsLeft(g),
+accept: function () { gameCall('game_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { gameCall('game_respond', { p_game: g.id, p_accept: false }, peer); } });
 }
 async function loadGames() {
 games = {};
@@ -3429,15 +3572,8 @@ if (!forMe) return;
 if (isNew) w.snippet = name + ' challenges you to UNO';
 else if (g.status === 'finished') w.snippet = g.winner === me.id ? 'UNO: you won!' : 'UNO: ' + name + ' won';
 else w.snippet = 'UNO: your turn';
-playSound('ding');
-if (w.minimized || document.activeElement !== w.ta) {
-unread[peer] = (unread[peer] || 0) + 1; renderPeople();
-if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
-if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
-}
-if (w.tab && tray && w.tab.parentNode === tray && tray.firstChild !== w.tab) tray.insertBefore(w.tab, tray.firstChild);
-updateTab(peer);
-if (document.hidden) bumpTitle();
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'UNO', seconds: turnSecondsLeft(g),
+accept: function () { unoCall('uno_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { unoCall('uno_respond', { p_game: g.id, p_accept: false }, peer); } });
 }
 function unoHandArrived(row) {
 if (!row || row.user_id !== me.id) return;
@@ -3571,11 +3707,43 @@ if (!forMe) return;
 if (isNew) w.snippet = name + ' challenges you to Hangman';
 else if (g.status === 'finished') w.snippet = g.winner === me.id ? 'Hangman: you won!' : 'Hangman: ' + name + ' won';
 else w.snippet = 'Hangman: your turn';
-gameNudge(w, peer);
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Hangman', seconds: turnSecondsLeft(g),
+accept: function () { hmCall('hangman_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { hmCall('hangman_respond', { p_game: g.id, p_accept: false }, peer); } });
 }
-/* Shared "something happened in a game for me" nudge: sound, unread badge, flash, title bump. */
-function gameNudge(w, peer) {
-playSound('ding');
+/* ---------- v121: toasts ----------
+   A small card in the corner that follows the person anywhere in the app -- main chat, the
+   threads board, a different whisper. Used for game events (below): a challenge comes with
+   Accept / Decline right on it, "your move" counts the turn clock down, and tapping any of them
+   opens that whisper. At most three on screen; one per person per kind (a newer one replaces). */
+var toastWrap = null;
+function dismissToasts(peer) { if (toastWrap) toastWrap.querySelectorAll('[data-peer="' + peer + '"]').forEach(function (t) { t.remove(); }); }
+function showToast(o) {
+if (!toastWrap) { toastWrap = document.createElement('div'); toastWrap.className = 'toasts'; toastWrap.setAttribute('aria-live', 'polite'); document.body.appendChild(toastWrap); }
+var key = (o.peer || '') + ':' + (o.kind || '');
+var prev = toastWrap.querySelector('[data-key="' + key + '"]'); if (prev) prev.remove();
+var t = document.createElement('div'); t.className = 'toast' + (o.cls ? ' ' + o.cls : ''); t.dataset.key = key; if (o.peer) t.dataset.peer = o.peer;
+t.innerHTML = (o.icon ? '<span class="toast-i">' + o.icon + '</span>' : '') + '<div class="toast-body"><div class="toast-t">' + esc(o.text) + '</div>' + (o.sub ? '<div class="toast-s">' + esc(o.sub) + '</div>' : '') + '<div class="toast-b"></div></div><button type="button" class="toast-x" aria-label="Dismiss">×</button>';
+var bar = t.querySelector('.toast-b');
+(o.actions || []).forEach(function (a) { var b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = a[0]; b.onclick = function (e) { e.stopPropagation(); t.remove(); a[1](); }; bar.appendChild(b); });
+if (!bar.children.length) bar.remove();
+t.querySelector('.toast-x').onclick = function (e) { e.stopPropagation(); t.remove(); };
+t.onclick = function () { t.remove(); if (o.onClick) o.onClick(); };
+toastWrap.appendChild(t);
+while (toastWrap.children.length > 3) toastWrap.firstChild.remove();
+var ttl = o.ttl || 8000, sub = t.querySelector('.toast-s');
+if (o.countdown && sub) {
+var until = Date.now() + o.countdown * 1000;
+var iv = setInterval(function () { if (!t.parentNode) { clearInterval(iv); return; } var left = Math.max(0, Math.ceil((until - Date.now()) / 1000)); sub.textContent = left + 's left — tap to play'; if (!left) { clearInterval(iv); t.remove(); } }, 500);
+}
+setTimeout(function () { if (t.parentNode) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 300); } }, ttl);
+return t;
+}
+/* Shared "something happened in a game for me" nudge: sound, unread badge, flash, title bump, and
+   (v121) a toast when the person is not looking at that whisper right now. info: { kind:
+   'challenge' | 'turn' | 'finished', game: 'UNO', accept: fn, decline: fn, seconds: n }. */
+function gameNudge(w, peer, info) {
+info = info || {};
+playSound(info.kind === 'turn' ? 'turn' : 'ding');
 if (w.minimized || document.activeElement !== w.ta) {
 unread[peer] = (unread[peer] || 0) + 1; renderPeople();
 if (w.tab) { w.tab.classList.remove('flash'); void w.tab.offsetWidth; w.tab.classList.add('flash'); }
@@ -3584,6 +3752,18 @@ if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidt
 if (w.tab && tray && w.tab.parentNode === tray && tray.firstChild !== w.tab) tray.insertBefore(w.tab, tray.firstChild);
 updateTab(peer);
 if (document.hidden) bumpTitle();
+var looking = !w.minimized && dockOpen && activeDm === peer && !document.hidden;
+dismissToasts(peer);
+if (looking || !info.kind) return;
+var name = w.name, icons = { 'Tic-Tac-Toe': '⚔', 'UNO': '🃏', 'Hangman': '🪢', 'Hold’em': '♠' };
+showToast({
+peer: peer, kind: info.kind, icon: icons[info.game] || '🎲', text: w.snippet,
+sub: info.kind === 'challenge' ? 'Tap to open the whisper' : (info.kind === 'turn' ? (info.seconds || TURN_SECONDS) + 's left — tap to play' : 'Tap to see the result'),
+actions: info.kind === 'challenge' && info.accept ? [['Accept', info.accept], ['Decline', info.decline]] : [],
+countdown: info.kind === 'turn' ? Math.ceil(info.seconds || TURN_SECONDS) : 0,
+ttl: info.kind === 'turn' ? Math.max(3000, Math.ceil(info.seconds || TURN_SECONDS) * 1000) : (info.kind === 'challenge' ? 60000 : 9000),
+onClick: function () { openIM(peer, name, true); }
+});
 }
 async function loadHangman() {
 hmGames = {};
@@ -3737,7 +3917,8 @@ if (!forMe) return;
 if (isNew) w.snippet = name + ' wants to play Hold’em for ' + g.buy_in + ' XP';
 else if (g.status === 'finished') w.snippet = 'Hold’em: ' + (gameMyPoints(g) >= 0 ? '+' : '') + gameMyPoints(g) + ' XP';
 else w.snippet = 'Hold’em: your move';
-gameNudge(w, peer);
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (g.status === 'finished' ? 'finished' : 'turn'), game: 'Hold’em', seconds: turnSecondsLeft(g),
+accept: function () { hdCall('holdem_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { hdCall('holdem_respond', { p_game: g.id, p_accept: false }, peer); } });
 }
 function hdHandArrived(row) {
 if (!row || row.user_id !== me.id) return;
@@ -3907,6 +4088,7 @@ msg.value = ''; sendTyping(null, false); closeMention(); await post(t); msg.focu
 }
 $('send').onclick = send;
 msg.onkeydown = function (e) {
+if (cmdKeydown(e)) return;
 if (mentionKeydown(e)) return;
 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 };
@@ -3994,6 +4176,90 @@ attachMentions(msg);
 msg.addEventListener('focus', function () { mentionTa = null; }); // the default; keeps `msg` first
 msg.addEventListener('input', function () { sendTyping(null, !!msg.value); });
 document.addEventListener('click', function (e) { if (!mentionMenu.contains(e.target) && e.target !== (mentionTa || msg)) closeMention(); });
+
+/* ---------- v121: "/" command palette ----------
+   Type "/" as the first character of the main composer or a whisper composer and every command
+   that field understands drops down: sound effects, whisper/friends/name commands, admin tools
+   for admins. Keep typing to filter; ArrowUp/Down, Enter/Tab or a tap fills the command in. Same
+   listbox shell as the @mention menu above, one shared element. cmdTa is the field it serves. */
+var cmdMenu = document.createElement('div'); cmdMenu.className = 'mention-menu cmd-menu'; cmdMenu.setAttribute('role', 'listbox'); document.body.appendChild(cmdMenu);
+var cmdItems = [], cmdIndex = 0, cmdTa = null, cmdScope = 'room';
+var ROOM_CMDS = [
+['w', 'name message', 'Whisper someone privately'],
+['help', '', 'Everything the room can do'],
+['sounds', '', 'List every sound command'],
+['gif', 'search words', 'Open the GIF picker'],
+['nick', 'new name', 'Rename your character'],
+['setbio', 'text', 'Set the short bio on your name menu'],
+['addfriend', 'name', 'Send a friend request'],
+['removefriend', 'name', 'Remove a friend'],
+['movegroup', 'name group', 'Move a friend into a group'],
+['friends', '', 'List your friends'],
+['block', 'name', 'Block someone'],
+['unblock', 'name', 'Unblock someone'],
+['blocks', '', 'List who you have blocked'],
+['report', 'name reason', 'Report someone to the admins'],
+['whoami', '', 'Your name and id']
+];
+var ADMIN_CMDS = [
+['kick', 'name [reason]', 'Admin: remove someone from the room'],
+['unban', 'name', 'Admin: lift a ban'],
+['bans', '', 'Admin: list bans'],
+['mute', 'name', 'Admin: mute someone'],
+['unmute', 'name', 'Admin: unmute someone'],
+['muted', '', 'Admin: list who is muted'],
+['reports', '', 'Admin: open reports'],
+['bugreports', '', 'Admin: open bug reports']
+];
+function cmdCatalogue(scope) {
+var sfx = SFX_LIST.map(function (k) { return [k, scope === 'room' ? '[name]' : '', '🔊 ' + SFX[k].solo]; });
+if (scope === 'pm') return sfx.concat([['sounds', '', 'List every sound command']]);
+return ROOM_CMDS.concat(sfx, isAdmin ? ADMIN_CMDS : []);
+}
+function closeCmd() { cmdMenu.classList.remove('open'); cmdItems = []; }
+function cmdKeydown(e) {
+if (!cmdMenu.classList.contains('open')) return false;
+if (e.key === 'ArrowDown') { e.preventDefault(); cmdIndex = (cmdIndex + 1) % cmdItems.length; renderCmdMenu(); return true; }
+if (e.key === 'ArrowUp') { e.preventDefault(); cmdIndex = (cmdIndex - 1 + cmdItems.length) % cmdItems.length; renderCmdMenu(); return true; }
+if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectCmd(cmdItems[cmdIndex]); return true; }
+if (e.key === 'Escape') { e.preventDefault(); closeCmd(); return true; }
+return false;
+}
+function renderCmdMenu() {
+cmdMenu.innerHTML = cmdItems.map(function (it, i) {
+return '<button type="button" role="option" aria-selected="' + (i === cmdIndex) + '" class="' + (i === cmdIndex ? 'active' : '') + '" data-i="' + i + '"><span class="cmd-c">/' + esc(it[0]) + (it[1] ? ' <i>' + esc(it[1]) + '</i>' : '') + '</span><span class="cmd-d">' + esc(it[2]) + '</span></button>';
+}).join('');
+cmdMenu.querySelectorAll('button').forEach(function (b) { b.onmousedown = function (e) { e.preventDefault(); selectCmd(cmdItems[+b.dataset.i]); }; });
+var act = cmdMenu.querySelector('button.active'); if (act && act.scrollIntoView) act.scrollIntoView({ block: 'nearest' });
+}
+function updateCmdMenu(ta, scope) {
+if (!ta) { closeCmd(); return; }
+var upto = ta.value.slice(0, ta.selectionStart), m = upto.match(/^\/(\w*)$/);
+if (!m || ta.selectionStart !== ta.selectionEnd) { closeCmd(); return; }
+var q = m[1].toLowerCase();
+var items = cmdCatalogue(scope).filter(function (it) { return it[0].indexOf(q) !== -1; })
+.sort(function (a, b) { var ap = a[0].indexOf(q) === 0, bp = b[0].indexOf(q) === 0; if (ap !== bp) return ap ? -1 : 1; return 0; });
+if (!items.length) { closeCmd(); return; }
+cmdTa = ta; cmdScope = scope; cmdItems = items; cmdIndex = 0;
+renderCmdMenu();
+cmdMenu.classList.add('open');
+positionPicker(cmdMenu, ta);
+}
+function selectCmd(it) {
+var ta = cmdTa; if (!ta) return;
+var rest = ta.value.slice(ta.selectionStart);
+ta.value = '/' + it[0] + (it[1] || rest.trim() ? ' ' : '') + rest.replace(/^\s+/, '');
+closeCmd(); ta.focus(); ta.selectionStart = ta.selectionEnd = it[0].length + 2;
+ta.dispatchEvent(new Event('input'));
+}
+function attachCmdMenu(ta, scope) {
+if (!ta) return;
+ta.addEventListener('input', function () { updateCmdMenu(ta, scope); });
+ta.addEventListener('click', function () { updateCmdMenu(ta, scope); });
+ta.addEventListener('blur', function () { setTimeout(function () { if (cmdTa === ta && document.activeElement !== ta) closeCmd(); }, 150); });
+}
+attachCmdMenu(msg, 'room');
+document.addEventListener('click', function (e) { if (!cmdMenu.contains(e.target) && e.target !== cmdTa) closeCmd(); });
 
 /* ---------- emoji picker ----------
    Shared by the main chat compose box and every whisper window's compose bar (one picker element,
@@ -4795,6 +5061,88 @@ showLeaderboardTab(activeLeaderboardTab()); // reopen on whichever ladder was sh
 }
 if (leaderboardBack) leaderboardBack.onclick = closeLeaderboard;
 
+/* ---------- v121: first-run orientation ----------
+   Three tips, once per device, a moment after the first sign-on: where the name menu is, what
+   "/" does in the composer, and where XP comes from. Each is a small bubble beside the thing it
+   describes with that thing outlined; Skip or Got it ends it and it never shows again. */
+var TOUR = [
+{ sel: '#users', text: 'Tap any name — in this list or in the chat — to whisper them, add them as a friend, or challenge them to a game.' },
+{ sel: '#msg', text: 'Type / in the box for sounds and commands: /slap, /kiss, /fart, /help and more. Type @ to mention someone.' },
+{ sel: '#leaderboardBtn', text: 'You earn XP when people react to what you say and when you win games in whispers. Tap a level badge for the details; the Popularity Contest shows every ladder.' }
+];
+var tourEl = null, tourStep = 0;
+function startTour() {
+try { if (localStorage.getItem('gc_tour_seen') === '1') return; } catch (e) {}
+tourStep = 0; showTourStep();
+}
+function endTour() {
+if (tourEl) tourEl.remove(); tourEl = null;
+document.querySelectorAll('.tour-hi').forEach(function (el) { el.classList.remove('tour-hi'); });
+try { localStorage.setItem('gc_tour_seen', '1'); } catch (e) {}
+}
+function showTourStep() {
+document.querySelectorAll('.tour-hi').forEach(function (el) { el.classList.remove('tour-hi'); });
+var step = TOUR[tourStep]; if (!step || !me) { endTour(); return; }
+var a = document.querySelector(step.sel);
+if (!a || !a.getBoundingClientRect().width) { tourStep++; showTourStep(); return; }
+if (!tourEl) { tourEl = document.createElement('div'); tourEl.className = 'tour'; tourEl.setAttribute('role', 'dialog'); document.body.appendChild(tourEl); }
+tourEl.innerHTML = '<div class="tour-n">Tip ' + (tourStep + 1) + ' of ' + TOUR.length + '</div><div class="tour-t">' + esc(step.text) + '</div>'
++ '<div class="tour-b"><button type="button" class="btn tour-skip">Skip</button><button type="button" class="btn tour-next">' + (tourStep === TOUR.length - 1 ? 'Got it' : 'Next') + '</button></div>';
+a.classList.add('tour-hi');
+var r = a.getBoundingClientRect(), w = Math.min(280, window.innerWidth - 16);
+tourEl.style.width = w + 'px';
+tourEl.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8)) + 'px';
+var h = tourEl.offsetHeight, top = r.top - h - 10;
+if (top < 8) top = Math.min(r.bottom + 10, window.innerHeight - h - 8);
+tourEl.style.top = top + 'px';
+tourEl.querySelector('.tour-skip').onclick = endTour;
+tourEl.querySelector('.tour-next').onclick = function () { tourStep++; showTourStep(); };
+}
+
+/* ---------- v121: the phone's back button closes panels instead of leaving the site ----------
+   Every full-screen takeover (threads board, roulette page, Popularity Contest, admin reports,
+   and the expanded Messages tray on a phone) pushes one history entry when it opens. Pressing
+   the system back button then pops that entry and closes the panel, instead of navigating away
+   from the room (or out of the installed app). Closing a panel by its own button drops the
+   entry again so back never has a stale one to eat. Watching gcRoot's class list means no
+   open/close site above needs to know about any of this. */
+var panelStack = [], ignorePop = false;
+var PANEL_CLOSERS = {
+'leaderboard-open': function () { closeLeaderboard(); },
+'admin-open': function () { closeAdminPanel(); },
+'mobile-threads-open': function () { if (threadToggleBtn) threadToggleBtn.click(); },
+'mobile-roulette-open': function () { closeMobileRoulette(); returnToChat(); },
+'dm-open': function () { dockOpen = false; saveDockOpen(); syncDock(); }
+};
+function panelOpened(name) {
+if (panelStack.some(function (p) { return p.name === name; })) return;
+panelStack.push({ name: name });
+try { history.pushState({ gcPanel: name }, ''); } catch (e) {}
+}
+function panelClosed(name) {
+var i = -1; panelStack.forEach(function (p, k) { if (p.name === name) i = k; }); if (i < 0) return;
+panelStack.splice(i, 1);
+if (history.state && history.state.gcPanel === name) { ignorePop = true; try { history.back(); } catch (e) { ignorePop = false; } }
+}
+window.addEventListener('popstate', function () {
+if (ignorePop) { ignorePop = false; return; }
+var top = panelStack.pop(); if (!top) return;
+var fn = PANEL_CLOSERS[top.name]; if (fn) fn();
+});
+if (gcRoot && window.MutationObserver) {
+var lastPanelState = {};
+new MutationObserver(function () {
+setTimeout(placeNewPill, 0);
+Object.keys(PANEL_CLOSERS).forEach(function (name) {
+var on = gcRoot.classList.contains(name);
+if (name === 'dm-open' && on && !window.matchMedia('(max-width:500px)').matches) on = false; // desktop tray is a corner panel, not a takeover
+if (on === !!lastPanelState[name]) return;
+lastPanelState[name] = on;
+if (on) panelOpened(name); else panelClosed(name);
+});
+}).observe(gcRoot, { attributes: true, attributeFilter: ['class'] });
+}
+
 /* ---------- the Ballot Box (anonymous notes) ----------
    The panel in the right-hand gutter of the wide desktop layout (#ballotPanel; see .ballot-panel
    in style.css for where and when it shows). Anyone signed in can drop a 140-character note in
@@ -5282,7 +5630,31 @@ if (tag) tag.textContent = 'Stay awhile, and chat.';
 }
 } catch (e) { /* first visit, or storage blocked -- fall through to the normal sign-on */ }
 }
-restoreIdentity();
+restoreIdentity().then(function () { if (!me) peekRoom(); });
+/* v121: the sign-on screen shows who is already inside. A second, listen-only subscription to
+   the room's presence channel (nothing is tracked, so the peeker never shows up in anyone's
+   list) -- torn down in join() right before the real channel is created, since supabase-js
+   hands back the existing channel object for a topic that is already open. */
+var peekChannel = null;
+function peekRoom() {
+try {
+if (me || peekChannel || !C.SUPABASE_URL || C.SUPABASE_URL.indexOf('YOUR-') >= 0 || !window.supabase) return;
+var el = $('roomPeek'); if (!el) return;
+sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+peekChannel = sb.channel('room:' + (C.ROOM || 'main'), { config: { presence: { key: 'peek-' + Math.random().toString(36).slice(2) } } });
+peekChannel.on('presence', { event: 'sync' }, function () {
+if (!peekChannel) return;
+var st = peekChannel.presenceState(), names = [];
+Object.keys(st).forEach(function (k) { if (st[k][0] && st[k][0].name) names.push(st[k][0].name); });
+var n = names.length;
+el.innerHTML = !n ? 'The room is quiet right now — be the first one in.'
+: (n === 1 ? '<b>' + esc(names[0]) + '</b> is in the room right now.'
+: '<b>' + n + ' people</b> are in the room right now: ' + names.slice(0, 4).map(esc).join(', ') + (n > 4 ? ' and ' + (n - 4) + ' more' : '') + '.');
+el.classList.remove('hidden');
+}).subscribe();
+} catch (e) { peekChannel = null; }
+}
+async function stopPeek() { if (!peekChannel) return; var ch = peekChannel; peekChannel = null; try { await sb.removeChannel(ch); } catch (e) {} }
 
 if ($('snReset')) {
 $('snReset').onclick = async function () {
@@ -5458,6 +5830,7 @@ updateWhisperBtn();
 // re-click the bell.
 if (typeof notifEnabled !== 'undefined' && notifEnabled && 'Notification' in window && Notification.permission === 'granted' && typeof subscribeToPush === 'function') subscribeToPush();
 
+await stopPeek();
 channel = sb.channel('room:' + (C.ROOM || 'main'), { config: { presence: { key: me.id } } });
 channel.on('presence', { event: 'sync' }, function () {
 var stt = channel.presenceState(); people = {};
@@ -5587,8 +5960,9 @@ await new Promise(function (res, rej) {
 channel.subscribe(function (status, err) {
 if (status === 'SUBSCRIBED') {
 if (firstSub) { firstSub = false; res(); }
-else updateMyPresence(); // reconnected after a dropped connection (common on mobile) — re-announce
-} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') rej(err || new Error('Could not reach the room.'));
+else { updateMyPresence(); connBack(); } // reconnected after a dropped connection (common on mobile) — re-announce, then catch up
+} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { if (firstSub) rej(err || new Error('Could not reach the room.')); else connLost(); }
+else if (status === 'CLOSED' && !firstSub) connLost();
 });
 });
 await new Promise(function (r) { setTimeout(r, 400); }); // let presence sync so we can check the name
@@ -5635,6 +6009,7 @@ isAnonAccount = user.is_anonymous !== false && !user.email;
 if ($('saveBtn')) $('saveBtn').classList.toggle('hidden', !isAnonAccount);
 setSignedOnStatus();
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
+setTimeout(startTour, 1500);
 /* One-time note about the friends-only whisper rule (friends_only_whispers.sql), since it changes
    what a name menu's Whisper does for everyone who was here before it. */
 var whisperTipSeen = false; try { whisperTipSeen = localStorage.getItem('gc_whisper_tip') === '1'; } catch (e) {}
@@ -5656,7 +6031,7 @@ resetIdle();
 startRecentPeopleHeartbeat();
 autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
 } catch (e) {
-fail(e.message || String(e)); setStatus('Not signed on'); $('join').disabled = false; me = null;
+fail(e.message || String(e)); setStatus('Not signed on'); $('join').disabled = false; me = null; hideConnBar();
 if (window.turnstile) { try { turnstile.reset(); } catch (resetErr) {} }
 turnstileToken = null;
 }
