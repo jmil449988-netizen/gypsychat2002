@@ -75,7 +75,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 137;
+var BUILD_NUMBER = 138;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -3195,6 +3195,7 @@ if (threadsPanel) { threadsPanel.classList.remove('ready'); }
 if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
 if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('leaderboard-open'); gcRoot.classList.remove('signed-on'); }
 openThreadId = null;
+placeThreadBtn(); // signed off: the threads takeover is gone, so the button belongs to .title again
 /* Reaction/level caches are keyed off ids that only mean something while this particular room
    channel is live -- a stale "mine" flag surviving a kick/reconnect into a fresh join would show
    someone's OWN reaction state on whatever new message happens to reuse a cached target id. */
@@ -4976,6 +4977,7 @@ if (!threadsCache[id]) return;
 closeGif();
 openThreadId = id; threadPostsSeen = {};
 tpList.classList.add('hidden'); tpDetail.classList.remove('hidden');
+placeThreadBtn(); // the catalog's header just went away; move the button into this thread's
 var t = threadsCache[id];
 var tpDetailHd = tpDetail.querySelector('.tp-hd span');
 if (tpDetailHd) {
@@ -4999,6 +5001,7 @@ function closeThread() {
 openThreadId = null;
 closeGif();
 tpDetail.classList.add('hidden'); tpList.classList.remove('hidden');
+placeThreadBtn(); // ...and back into the catalog's header on the way out
 if (gcRoot) gcRoot.classList.remove('thread-open');
 }
 async function threadGate() {
@@ -5180,6 +5183,50 @@ place();
 });
 }
 
+/* ---------- where the Threads button lives (v138) ----------
+   On a phone the Threads toggle is what it has always been: a floating bubble parented to
+   .gc-root, draggable and sweepable, sitting on top of everything. On desktop it is not a
+   floating anything any more -- it belongs to the title bar, beside the words, with no box of
+   its own (see the v104 block at the bottom of style.css for the styling half of this).
+
+   "The title bar" is three different elements depending on what is on screen, and only ever one
+   of them at a time: the chat window's own .title; the threads catalog's .tp-hd; and an open
+   thread's .tp-hd. So rather than drawing a button in each header and keeping three copies of
+   the open/closed state in sync, the one real button is physically moved into whichever header
+   is currently showing. Everything already bound to it -- the click handler below, the drag
+   handlers in makeFabDraggable(), the aria-label and glyph the toggle keeps current -- rides
+   along with the node, because it is the same node.
+
+   Called from every place that can change which header is up: the toggle itself, openThread(),
+   closeThread(), a window resize (which can cross the 500px line in either direction), sign-on
+   and sign-off. Calling it when nothing has changed is free -- the parentNode check below makes
+   it a no-op rather than a reparent, so it never churns the DOM or interrupts a focus ring. */
+var threadBtnHome = threadToggleBtn ? threadToggleBtn.parentNode : null;
+function placeThreadBtn() {
+if (!threadToggleBtn) return;
+var host;
+if (window.innerWidth <= 500) host = threadBtnHome; // phone: back to being a free-floating bubble
+else if (gcRoot && gcRoot.classList.contains('mobile-threads-open')) {
+var pane = (tpDetail && !tpDetail.classList.contains('hidden')) ? tpDetail : tpList;
+host = (pane && pane.querySelector('.tp-hd')) || threadBtnHome;
+} else host = document.querySelector('.win > .title');
+if (!host) host = threadBtnHome;
+if (!host) return;
+if (threadToggleBtn.parentNode !== host) host.appendChild(threadToggleBtn);
+var inHeader = host !== threadBtnHome;
+threadToggleBtn.classList.toggle('in-header', inHeader);
+if (!inHeader) return;
+/* A left/top pair left behind by a drag made while the window was phone-width would otherwise
+   still be sitting inline on the element, and an inline style beats the stylesheet -- including
+   the position:static that makes it sit in the header's flex row at all. Same reason .fab-docked
+   has to come off: swept-to-the-edge is a bubble state with no meaning inside a title bar. */
+threadToggleBtn.style.left = ''; threadToggleBtn.style.top = '';
+threadToggleBtn.style.right = ''; threadToggleBtn.style.bottom = '';
+threadToggleBtn.style.transform = '';
+threadToggleBtn.classList.remove('fab-docked', 'fab-dragging');
+}
+window.addEventListener('resize', placeThreadBtn);
+
 if (threadToggleBtn) {
 threadToggleBtn.onclick = function () {
 closeGif();
@@ -5199,6 +5246,7 @@ threadToggleBtn.textContent = open ? '💬' : '🧵';
 threadToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Open threads board');
 if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidden'); }
 else returnToChat();
+placeThreadBtn(); // the button has to follow the header that is now on screen
 };
 }
 
@@ -6387,7 +6435,11 @@ threadsPanel.classList.add('ready');
 loadThreads();
 subscribeThreads();
 if (threadToggleBtn) threadToggleBtn.classList.add('ready');
-if (window.matchMedia('(min-width:1340px)').matches) addSys('Tip: there\'s a Threads board to the right — general chat, no topics, post anything.');
+placeThreadBtn(); // desktop: into the title bar beside the name, rather than floating beside the window
+/* The desktop half of this tip used to say the board was "to the right", from back when it was
+   a side panel in the gutter, and the phone half said "in the corner" -- neither is true on a
+   desktop any more now that the board is a full-screen takeover opened from the title bar. */
+if (window.matchMedia('(min-width:501px)').matches) addSys('Tip: the 🧵 button up in the title bar opens the Threads board — general chat, no topics, post anything.');
 else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.');
 }
 pinLogBottom();
