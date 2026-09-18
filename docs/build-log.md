@@ -574,3 +574,82 @@ app.js across simulated page loads, 21 checks:
 **Live:** app.js and sw.js on the site match the repo byte for byte (SHA-256), and the desktop's
 service worker is on gc2000-v197. Readings shown before this build were never recorded, so they
 cannot come back. Recording starts with the first reading each device shows on build 166.
+
+# Build 167: Battleship (18 Sept 2026)
+
+Current state: **app.js 167, style.css 116, cache `gc2000-v198`.**
+`supabase/battleship_feature.sql` applied (practice run first: `battleship_dryrun.sql`).
+
+## The rules the user chose
+
+- Classic 10×10 sea, five ships each: Carrier 5, Battleship 4, Cruiser 3, Submarine 3, Destroyer 2.
+- Placement: the server deals each fleet a random layout at accept (no two ships touching). In the
+  whisper you can **Shuffle**, **tap a ship to turn it**, **drag it to move it**, then **Ready**. You
+  get 60 s. A browser sends its own arranged fleet at 2 s left. After 62 s the server sails anyone not
+  Ready with the fleet they were dealt. By hand, ships may touch but not overlap.
+- **A hit shoots again**; a miss hands the turn over. The challenged player fires first. 30 s a
+  shot; running out fires one at random.
+- **10 XP a win, 3 XP a loss**, under the shared 500-a-day cap. A resignation pays the winner 10 only
+  once 20 shots have been fired between the two players, and never pays the resigner. Without that
+  rule, starting a game and resigning at once would mint 10 XP a round. Resign takes two taps.
+
+## How it is built
+
+- `battleship_games`: the public row. Both seas are 100 characters as the attacker sees them: `.`
+  untouched, `o` miss, `x` hit, and a sunk ship's cells turn into its letter. It is in the realtime
+  publication. It was applied BEFORE the client that listens to it shipped, because of the
+  build 154 lesson.
+- `battleship_fleets`: each layout. The policy lets you read your own fleet at any time and the
+  other one only once the game is finished (the reveal at the end draws their surviving ships
+  faintly).
+- Every change is a security-definer function: `battleship_respond / ready / fire / timeout /
+  resign / cancel / leaderboard`. The helpers they share (`bs_apply`, `bs_award`, `bs_maybe_start`,
+  `bs_random_layout`) are **not** executable by browsers, so nobody can fire a shot in someone
+  else's name. The timeout locks the row first, so two browsers can't both act on one expired
+  clock. `game_points_today` now counts Battleship.
+- Client: the 🎲 menu, a card in the whisper, a 🚢 Battleship tab in the Popularity Contest,
+  toasts, a push for the challenge, and synth sounds (splash / boom / sinking) until recordings
+  exist. Cell state classes are all `bs-` prefixed: the first draft used `.sh`, which is already
+  the share-card class, and `.sunk`, which is already a global class. Both broke the layout.
+  Also fixed: tapping a row on the Prasta ladder did nothing.
+
+## Tests
+
+- Local Postgres 16 with a scaffold: the dry run plus 500 dealt fleets (all legal, none touching,
+  all different), a late resignation (10 + 0), and the cap (495 earned today → paid 5).
+- Production practice run, rolled back, 16 checks as AA and Steve. They cover the insert policy,
+  secrecy (Steve reads only his own fleet mid-game), `bs_apply` refused to browsers, four kinds of
+  illegal fleet refused, Ready twice refused, turn order, firing twice at one square refused, hits
+  keeping the turn, a full sinking (status finished, 17 sunk cells), the reveal, XP +10 / +3, an
+  early resignation paying 0 + 0, both clocks, and the leaderboard.
+- jsdom harness, 56 checks on the real module:
+  - layouts, and turning/moving ships (including the blocked-rotation fallback)
+  - drag previews in green and red, the snap back, and a re-render mid-drag being deferred
+  - Ready sending the arranged fleet
+  - sounds and nudges per event, the silent realtime echo, win/loss text with XP, the reveal
+  - the two-tap resign, and both clocks' auto-Ready and timeout timing
+- Rendered with the real CSS in Chromium at the dock width (300 px) and a phone width (390 px).
+- Live: app.js, sw.js and style.css match the repo byte for byte (SHA-256).
+
+## Release plan note
+
+`battleship_games` and `battleship_fleets` join the release reset list.
+
+## Found on the way: browsers can call the other games' internal helpers (NOT fixed yet)
+
+Fourteen security-definer helpers of the older games can be executed by any signed-in browser
+(`authenticated` has EXECUTE):
+
+`game_apply, game_award, hd_credit, hd_deal, hd_finish, hd_settle, hd_showdown, hd_touch, hd_xp,
+hm_apply, hm_award, pr_showdown, uno_award, uno_sync`
+
+The worst of them:
+- `hd_credit(p, delta)` adds any amount of XP to anyone, or takes it away.
+- The `*_award` functions pay a finished game again every time they are called.
+- `game_apply` / `hm_apply` make moves in the other player's name.
+- `hd_settle` settles a Hold'em table for whoever the caller names.
+
+Nothing in app.js calls any of them. No non-definer function, policy, view or trigger references
+them, and pg_cron isn't installed, so revoking EXECUTE from `public, anon, authenticated` (keeping
+`service_role`) should not break anything. `holdem_act` and `uno_pass` are called by the client and
+must stay executable.
