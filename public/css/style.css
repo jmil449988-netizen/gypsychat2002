@@ -849,11 +849,17 @@ box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 16px rgba(201,162,74,.7);outline:n
 .rp-back{display:none;margin-top:22px;height:30px;padding:0 16px}
 @media (max-width:1339px){
   .roulette-toggle-fab.ready{display:flex}
-  .gc-root.mobile-roulette-open .win{display:none}
-  .gc-root.mobile-roulette-open .roulette-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
-  height:100%;right:auto;border-width:0;z-index:40;transition:none}
-  .gc-root.mobile-roulette-open .rp-back{display:inline-flex;align-items:center;justify-content:center}
 }
+/* v106: the roulette takeover used to exist only below 1340px, because below 1340px the floating
+   bubble was the only way in and above it the gutter teaser was the whole feature. Now that the
+   button lives in the title bar at every desktop width, a wide desktop needs somewhere for it to
+   go -- so the takeover rules come out of that media query and apply everywhere, exactly as the
+   threads board's already do. The gutter teaser is unaffected and still sits there when the page
+   is closed; opening it just covers the teaser along with everything else. */
+.gc-root.mobile-roulette-open .win{display:none}
+.gc-root.mobile-roulette-open .roulette-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;
+height:100%;right:auto;top:0;bottom:0;border-width:0;z-index:40;transition:none}
+.gc-root.mobile-roulette-open .rp-back{display:inline-flex;align-items:center;justify-content:center}
 @media (max-width:500px){.roulette-toggle-fab{bottom:154px;right:8px}}
 
 /* The status bar doubles as the rename control once you're in the room -- it reads "Change name"
@@ -1720,30 +1726,35 @@ font:700 9px Georgia,serif;color:#fff;background:var(--blood);border:1px solid #
 @media (min-width:501px){
   /* Beats the position:fixed !important block further up the file on specificity (two classes to
      its one), which is why every property it overrides has to carry !important too. */
-  .thread-toggle-fab.in-header{position:static !important;top:auto !important;right:auto !important;
+  .thread-toggle-fab.in-header,.roulette-toggle-fab.in-header{position:static !important;top:auto !important;right:auto !important;
   left:auto !important;bottom:auto !important;transform:none !important;
   width:26px;height:auto;flex:none;justify-content:center;padding:0;
   border:none;border-radius:0;background:none;box-shadow:none;
   font-size:18px;line-height:1;color:var(--gold-hi);opacity:.92;
   filter:drop-shadow(0 0 6px rgba(201,162,74,.5));transition:transform .15s ease,filter .15s ease,opacity .15s ease}
-  .thread-toggle-fab.in-header.ready{display:inline-flex}
-  .thread-toggle-fab.in-header:hover,.thread-toggle-fab.in-header:focus-visible{
+  .thread-toggle-fab.in-header.ready,.roulette-toggle-fab.in-header.ready{display:inline-flex}
+  .thread-toggle-fab.in-header:hover,.thread-toggle-fab.in-header:focus-visible,
+  .roulette-toggle-fab.in-header:hover,.roulette-toggle-fab.in-header:focus-visible{
   border:none;box-shadow:none;outline:none;opacity:1;
   transform:translateY(-1px) scale(1.14) !important;filter:drop-shadow(0 0 11px rgba(201,162,74,.95))}
   /* .open (threads showing, so the glyph is 💬 "back to chat") lost its meaning once the border it
      used to recolour is gone -- brightness is what marks it as the active state now. */
-  .thread-toggle-fab.in-header.open{opacity:1;filter:drop-shadow(0 0 10px rgba(201,162,74,.9))}
-  /* The title is flanked by a lantern on each side; hanging one more glyph off the right would
-     have pulled the whole centred row off-balance. An empty flex item the same width as the
-     button, on the left, puts the words back exactly in the middle. Scoped to .signed-on because
-     the button is hidden on the sign-on screen, where a spacer would only bias the title left. */
-  .gc-root.signed-on .win > .title::before{content:"";flex:none;width:26px}
+  .thread-toggle-fab.in-header.open,.roulette-toggle-fab.in-header.open{opacity:1;filter:drop-shadow(0 0 10px rgba(201,162,74,.9))}
+  /* The title is flanked by a lantern on each side, so a glyph hung off one end pulls the whole
+     centred row off-balance and the name stops being in the middle of its own bar. A blank flex
+     item of the button's own width on the opposite side puts it back. Which side needs the blank
+     depends on which buttons are in the bar, and markHeaderBtns() in app.js says so directly:
+     .hb-left means Roulette is in (before the first lantern), .hb-right means Threads is in
+     (after the last one). One of them alone gets a spacer opposite it; both together already
+     balance each other and get none, which is the ordinary signed-in case. */
+  .win > .title.hb-right:not(.hb-left)::before{content:"";flex:none;width:26px}
+  .win > .title.hb-left:not(.hb-right)::after{content:"";flex:none;width:26px}
   .gc-root.signed-on .tp-list > .tp-hd::before{content:"";flex:none;width:22px}
   /* An open thread's header already carries the ← back arrow on the left, so the toggle on the
      right balances it on its own and wants no spacer. */
   .tp-hd .thread-toggle-fab.in-header{font-size:15px;width:22px}
 }
-@media (prefers-reduced-motion:reduce){.thread-toggle-fab.in-header{transition:none}}
+@media (prefers-reduced-motion:reduce){.thread-toggle-fab.in-header,.roulette-toggle-fab.in-header{transition:none}}
 
 /* ==================== v105: the roulette watermark stops being an overlay ====================
    .room-watermark (the roulette teaser's "made by" line -- the main room's footer is .room-footer,
@@ -1785,3 +1796,15 @@ font:700 9px Georgia,serif;color:#fff;background:var(--blood);border:1px solid #
      bottom lifts the whole column by half of it. */
   .gc-root.mobile-roulette-open .roulette-panel{padding-bottom:40px}
 }
+
+/* iPhone: stop the reaction picker's emoji from being treated as selectable text.
+   The picker is opened by a press-and-hold, and press-and-hold is also exactly the gesture iOS
+   Safari uses to start a text selection and raise its callout bar. So the same finger that opened
+   the picker would carry straight on into selecting the emoji underneath it: the character came up
+   highlighted in blue, the selection handles appeared, and the tap that should have posted the
+   reaction went to dismissing all that instead. touch-callout and user-select refuse the selection,
+   tap-highlight-color removes the grey flash iOS paints over the button on touch, and
+   touch-action:manipulation drops the 300 ms double-tap-to-zoom wait so a tap registers at once.
+   The buttons carry real text (the emoji), so this has to be set on them, not just on the panel. */
+.rpicker,.rpicker button{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+-webkit-tap-highlight-color:transparent;touch-action:manipulation}
