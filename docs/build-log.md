@@ -838,3 +838,25 @@ Current state: **app.js 170, style.css 119, cache `gc2000-v201`.** Database: `su
 **Not tested yet:** real phones and real realtime with people at a table. That is the user's Hold'em test.
 
 **Release plan note:** `holdem_tables`, `holdem_table_hands` and `holdem_table_decks` join the release reset list.
+
+# Build 171: new icons for the three page buttons (18 Sept 2026)
+
+Current state: **app.js 171, style.css 120, cache `gc2000-v202`.** No database change.
+
+**Asked for:** the Game Room button as a poker table, Threads as a purple @, and Roulette as a spinning red
+Romani wagon wheel.
+
+**Done:** all three are now small inline SVG drawings instead of emoji and text glyphs, so they look the same on
+every phone and desktop. The markup is in `index.html` for the first paint and in `ICON_TABLE`, `ICON_AT` and
+`ICON_WHEEL` in app.js for when the code redraws a button.
+- **Game Room:** a poker table seen from above, with a wooden rail, green felt, a gold betting line and two cards.
+  The same icon is in the Game Room page's header and on its toasts (invites, "you're still at a table").
+- **Threads:** a purple @ with a purple glow. While the board is open the button still shows 💬, meaning "back to chat".
+- **Roulette:** a red wheel with sixteen spokes, like the wheel on the Romani flag. It turns once every 9 seconds
+  and stands still for anyone whose device asks for reduced motion.
+- In the title bar each icon glows in its own colour instead of the old gold. The one-time tips now say "the purple
+  @" and "the little poker table" (and that the Game Room has Hold'em).
+
+**Checked:** rendered with the real CSS in Chromium in the desktop title bar (the name stays centred), as phone
+bubbles, and on the sign-on screen. The whole app loads with no errors. The Game Room tests still pass
+(Hold'em 253 checks, UNO 53). Live files match the repo byte for byte.
