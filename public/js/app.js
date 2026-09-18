@@ -75,7 +75,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 140;
+var BUILD_NUMBER = 141;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -509,12 +509,12 @@ osc.connect(g); g.connect(masterOut(ctx)); osc.start(t0); osc.stop(t0 + dur + 0.
    also means a new recording can be added just by dropping the file in and listing it here. */
 var SOUND_FILES = { slap: 1, kiss: 1, laugh: 1, cry: 1, gunshot: 1, clap: 1, boo: 1, airhorn: 1, badum: 1, crickets: 1, knock: 1, howl: 1, sneeze: 1, burp: 1, cheers: 1, spit: 1, fart: 1, drumroll: 1,
 'friend-logon': 1, 'login': 1, 'friend-request': 1, 'game-invite': 1, 'pm': 1, ding: 1, buzz: 1, turn: 1, tick: 1, tock: 1,
-coin: 1, win: 1, lose: 1, 'hm-right': 1, 'hm-wrong': 1, levelup: 1, intro: 1, logout: 1, signoff: 1, unroll: 1, wheel: 1, card: 1, chips: 1, trapdoor: 1, fortune: 1, send: 1, recv: 1 };
+coin: 1, win: 1, lose: 1, 'hm-right': 1, 'hm-wrong': 1, levelup: 1, intro: 1, logout: 1, signoff: 1, unroll: 1, wheel: 1, card: 1, chips: 1, trapdoor: 1, fortune: 1, send: 1, recv: 1, bell: 1 };
 /* v129: table sounds (a card, chips) can fire twice for one move when a multi-statement rpc relays
    an intermediate row -- one per game per sound within 400 ms is plenty */
 var gameSfxAt = {};
 function gameSfx(gid, name) { var k = gid + ':' + name, now = Date.now(); if (gameSfxAt[k] && now - gameSfxAt[k] < 400) return; gameSfxAt[k] = now; playSound(name); }
-var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5, unroll: 0.6, signoff: 0.8, coin: 0.9 }; // the punchy ones sat a few dB under the rest after limiting
+var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5, unroll: 0.6, signoff: 0.8, coin: 0.9, bell: 1.25 }; // the punchy ones sat a few dB under the rest after limiting
 var soundBuf = {}, soundFail = {};
 function loadSoundFile(name) {
 if (soundBuf[name]) return soundBuf[name];
@@ -1692,16 +1692,28 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clos
 var LONG_PRESS_MS = 450, LONG_PRESS_SLOP = 10;
 function attachLongPress(container, itemSelector, skipSelector) {
 if (!container) return;
-var timer = null, startX = 0, startY = 0, pressEl = null;
+var timer = null, startX = 0, startY = 0, pressEl = null, fired = false;
 function targetFor(e) {
 var skip = skipSelector && e.target.closest(skipSelector); if (skip) return null;
 return e.target.closest(itemSelector);
 }
 function fire(el) {
 var rc = el.querySelector('.reactions'); if (!rc) return;
+fired = true;
 suppressClickUntil = Date.now() + 500;
 if (navigator.vibrate) navigator.vibrate(10);
 openReactPicker(rc.dataset.rtype, Number(rc.dataset.rid), rc);
+}
+/* v141: the picker used to vanish again if you held on past about a second. suppressClickUntil
+   was armed when the picker OPENED, 450 ms into the press, and only covered the next 500 ms --
+   but the click that has to be suppressed is not dispatched until you LET GO, which on a longer
+   hold is well after that window has closed. So the stray click reached the outside-click
+   listener and shut the picker the instant the finger came up. Re-arming the guard at release
+   fixes it for a hold of any length, because the window now starts at the moment the only click
+   it needs to swallow is actually generated. */
+function endPress() {
+if (fired) { suppressClickUntil = Date.now() + 400; fired = false; }
+cancel();
 }
 function begin(x, y, el) {
 cancel();
@@ -1715,12 +1727,12 @@ if (pressEl) { pressEl.classList.remove('pressing'); pressEl = null; }
 function moved(x, y) { return Math.abs(x - startX) > LONG_PRESS_SLOP || Math.abs(y - startY) > LONG_PRESS_SLOP; }
 container.addEventListener('touchstart', function (e) { var el = targetFor(e); if (!el) return; var t = e.touches[0]; begin(t.clientX, t.clientY, el); }, { passive: true });
 container.addEventListener('touchmove', function (e) { if (timer && moved(e.touches[0].clientX, e.touches[0].clientY)) cancel(); }, { passive: true });
-container.addEventListener('touchend', cancel);
-container.addEventListener('touchcancel', cancel);
+container.addEventListener('touchend', endPress);
+container.addEventListener('touchcancel', endPress);
 container.addEventListener('mousedown', function (e) { if (e.button !== 0) return; var el = targetFor(e); if (!el) return; begin(e.clientX, e.clientY, el); });
 container.addEventListener('mousemove', function (e) { if (timer && moved(e.clientX, e.clientY)) cancel(); });
-container.addEventListener('mouseup', cancel);
-container.addEventListener('mouseleave', cancel);
+container.addEventListener('mouseup', endPress);
+container.addEventListener('mouseleave', endPress);
 container.addEventListener('contextmenu', function (e) { var el = targetFor(e); if (!el) return; e.preventDefault(); cancel(); fire(el); });
 }
 var LONG_PRESS_SKIP = '.react-pill, .rpt-msg, .tp-del, a, button';
@@ -5183,6 +5195,42 @@ place();
 });
 }
 
+/* ---------- the hours (v141) ----------
+   A bell every three hours, on the hour, in each reader's own local time. The eight slots are not
+   an arbitrary "every 3h" -- they are the cycle of the daily office as the Orthodox Church keeps
+   it, and each one is named for the hour it is: the Midnight Office, Matins before dawn, then the
+   First, Third, Sixth and Ninth Hours through the day, Vespers at its close and Compline before
+   sleep. Naming them is the whole point; "18:00" would be a clock, and this is meant to be a bell.
+
+   Local time rather than one shared moment, deliberately. A bell marks where YOU are in the day.
+   Everyone hearing Vespers together at 6pm Eastern would mean a Californian hearing it at three in
+   the afternoon, which is not Vespers, it is just a noise.
+
+   Nothing is written to the database. The line is drawn client-side, so it costs no row, no
+   realtime traffic and none of the room's 100-message budget -- a bell you missed because you were
+   not here is a bell you missed, which is exactly how bells work.
+
+   This is where the scripture line will attach once its verse list is settled; the bell rings on
+   its own until then. */
+var HOURS_OF_THE_DAY = { 0: 'The Midnight Office', 3: 'Matins', 6: 'The First Hour', 9: 'The Third Hour',
+12: 'The Sixth Hour', 15: 'The Ninth Hour', 18: 'Vespers', 21: 'Compline' };
+var lastBellKey = null;
+function bellTick() {
+if (!me) return; // the sign-on screen is not the room; no bells for someone still at the door
+var d = new Date(), h = d.getHours(), name = HOURS_OF_THE_DAY[h];
+if (!name) return;
+/* Only in the first couple of minutes past the hour. A laptop that was shut at 11:30 and opened
+   at 14:10 should not fire the noon bell on the way back up -- it would be announcing an hour
+   that has been and gone, and on a machine that sleeps a lot it would do it every single time. */
+if (d.getMinutes() > 2) return;
+var key = d.toDateString() + ' ' + h;
+if (lastBellKey === key) return; // the 30 s tick visits the same minute more than once
+lastBellKey = key;
+if (!document.hidden) playSound('bell'); // a hidden tab's audio context is suspended anyway
+addSys('\u{1F514} ' + name + '.');
+}
+setInterval(bellTick, 30000);
+
 /* ---------- where the Threads button lives (v138) ----------
    On a phone the Threads toggle is what it has always been: a floating bubble parented to
    .gc-root, draggable and sweepable, sitting on top of everything. On desktop it is not a
@@ -5202,7 +5250,47 @@ place();
    and sign-off. Calling it when nothing has changed is free -- the parentNode check below makes
    it a no-op rather than a reparent, so it never churns the DOM or interrupts a focus ring. */
 var threadBtnHome = threadToggleBtn ? threadToggleBtn.parentNode : null;
+var rouletteBtnHome = null; // set below, once rouletteToggleBtn has been looked up
+/* v141: Roulette gets the same treatment as Threads, on the other side of the title. It goes in
+   BEFORE the left-hand lantern, so the bar reads roulette / lantern / GYPSY CHAT 2000 / lantern /
+   threads, with the two takeover pages hanging off the two ends of the name.
+
+   Which spacer the title needs depends on which buttons are actually in it, and that is not
+   constant: Roulette needs no account, so it is there on the sign-on screen, while Threads only
+   appears once you are in the room. One button alone has to be balanced by a blank of its own
+   width on the far side; two buttons balance each other and a spacer would then push the name
+   off-centre again. Rather than write that as a chain of CSS guesses, the two classes below say
+   plainly which buttons are present and let the stylesheet match on it. */
+function markHeaderBtns() {
+var title = document.querySelector('.win > .title');
+if (!title) return;
+title.classList.toggle('hb-left', !!(rouletteToggleBtn && rouletteToggleBtn.parentNode === title));
+title.classList.toggle('hb-right', !!(threadToggleBtn && threadToggleBtn.parentNode === title));
+}
+function placeRouletteBtn() {
+if (!rouletteToggleBtn) return;
+var title = document.querySelector('.win > .title');
+var host = (window.innerWidth <= 500 || !title) ? rouletteBtnHome : title;
+if (!host) return;
+/* Before the first lantern rather than appended, which is the whole point of "left side". The
+   roulette page hides .win outright, so unlike Threads there is no second header to move to --
+   the page carries its own "Back to chat" button instead. */
+if (rouletteToggleBtn.parentNode !== host) {
+if (host === title) host.insertBefore(rouletteToggleBtn, host.firstElementChild);
+else host.appendChild(rouletteToggleBtn);
+}
+var inHeader = host !== rouletteBtnHome;
+rouletteToggleBtn.classList.toggle('in-header', inHeader);
+if (inHeader) {
+rouletteToggleBtn.style.left = ''; rouletteToggleBtn.style.top = '';
+rouletteToggleBtn.style.right = ''; rouletteToggleBtn.style.bottom = '';
+rouletteToggleBtn.style.transform = '';
+rouletteToggleBtn.classList.remove('fab-docked', 'fab-dragging');
+}
+markHeaderBtns();
+}
 function placeThreadBtn() {
+placeRouletteBtn();
 if (!threadToggleBtn) return;
 var host;
 if (window.innerWidth <= 500) host = threadBtnHome; // phone: back to being a free-floating bubble
@@ -5215,6 +5303,7 @@ if (!host) return;
 if (threadToggleBtn.parentNode !== host) host.appendChild(threadToggleBtn);
 var inHeader = host !== threadBtnHome;
 threadToggleBtn.classList.toggle('in-header', inHeader);
+markHeaderBtns();
 if (!inHeader) return;
 /* A left/top pair left behind by a drag made while the window was phone-width would otherwise
    still be sitting inline on the element, and an inline style beats the stylesheet -- including
@@ -5334,6 +5423,8 @@ swipeStart = null;
 });
 }
 var rouletteToggleBtn = $('rouletteToggleBtn');
+rouletteBtnHome = rouletteToggleBtn ? rouletteToggleBtn.parentNode : null;
+placeRouletteBtn();
 function closeMobileRoulette() {
 gcRoot.classList.remove('mobile-roulette-open');
 if (rouletteToggleBtn) {
@@ -5642,7 +5733,7 @@ if (ballotRemove) ballotRemove.onclick = async function () { if (await removeBal
    on a phone) and the prompt dialog. */
 var ballotMobile = $('ballotMobile'), ballotMobileText = $('ballotMobileText'), ballotMobileParch = $('ballotMobileParch');
 var ballotMobileRoller = $('ballotMobileRoller'), ballotMobileRemove = $('ballotMobileRemove'), ballotBtn = $('ballotBtn');
-var mobileBallotTimer = null, mobileBallotHide = null, mobileBallotHeld = false, mobileBallotShowing = null, lastUnrollAt = 0;
+var mobileBallotTimer = null, mobileBallotHide = null, mobileBallotHeld = false, mobileBallotShowing = null;
 var MOBILE_BALLOT_EVERY = 15000, MOBILE_BALLOT_FIRST = 5000, MOBILE_BALLOT_HOLD = 6000, MOBILE_BALLOT_GLIDE_PX_PER_S = 45;
 function mobileBallotActive() { return !!ballotMobile; } // v123: the unrolling scroll is the one note display on every width now (the parchment header strip is retired)
 function rollUpMobileBallot() {
@@ -5653,7 +5744,12 @@ mobileBallotHeld = false;
 if (ballotMobileText) { ballotMobileText.style.animation = ''; ballotMobileText.style.animationPlayState = ''; }
 }
 /* Unroll, show `note` (or the "empty" line), and schedule the roll-up -- unless held. */
-function showMobileNote(note) {
+/* byTap: the scroll unrolls on its own every 15 s as well as when somebody taps the rolled-up
+   end, and only the tap should make a sound. The timed unroll was announcing itself over and
+   over to a reader who never asked for it -- a notification for something that is not news.
+   v141: the 60 s throttle that used to take the edge off that is gone with it; a tap is a
+   deliberate act and should sound every single time, however often it comes. */
+function showMobileNote(note, byTap) {
 if (!ballotMobile || !ballotMobileText) return;
 mobileBallotShowing = note || null;
 ballotMobileText.innerHTML = note ? ballotHtml(note.body) : esc(BALLOT_EMPTY);
@@ -5661,7 +5757,7 @@ ballotMobileText.style.animation = 'none'; ballotMobileText.style.animationPlayS
 if (ballotMobileRemove) ballotMobileRemove.classList.toggle('hidden', !(isAdmin && note));
 clearTimeout(mobileBallotHide);
 ballotMobile.classList.add('open');
-if (me && note && !document.hidden && Date.now() - lastUnrollAt > 60000) { lastUnrollAt = Date.now(); playSound('unroll'); } // v128
+if (byTap && note && !document.hidden) playSound('unroll'); // v141: tap only -- see byTap above
 /* once unrolled (transition in style.css, ~.5s), decide whether the text needs to glide */
 mobileBallotHide = setTimeout(function () {
 var room = ballotMobileParch ? ballotMobileParch.clientWidth - 24 : 0;
@@ -5703,7 +5799,7 @@ if (ballotMobileText) ballotMobileText.style.animationPlayState = 'paused';
 });
 if (ballotMobileRoller) ballotMobileRoller.onclick = function () {
 if (ballotMobile.classList.contains('open')) { rollUpMobileBallot(); return; }
-showMobileNote(mobileBallotShowing || nextBallotNote());
+showMobileNote(mobileBallotShowing || nextBallotNote(), true); // a tap: this one sounds
 };
 if (ballotMobileRemove) ballotMobileRemove.onclick = async function (e) {
 e.stopPropagation();
