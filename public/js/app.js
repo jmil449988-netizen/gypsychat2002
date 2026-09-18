@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 146;
+var BUILD_NUMBER = 147;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -1758,17 +1758,22 @@ function jumpToMessage(rid, from) {
 var scope = (from && from.closest && from.closest('.log, .ilog')) || null;
 var el = (scope && scope.querySelector('.m[data-mid="' + rid + '"]')) || document.querySelector('.m[data-mid="' + rid + '"]');
 if (!el) { addSys('That message is further back than this window goes.'); return; }
-/* scrollTop is set directly rather than through el.scrollIntoView(). scrollIntoView does nothing
-   at all here -- the log is a nested scroll container, and the browser walks off to some ancestor
-   instead of scrolling the box the message is actually in. Measured: the target sat 632px above
-   the log's top edge and scrollTop did not move by a single pixel. Doing the arithmetic ourselves
-   is both shorter to reason about and immune to whatever that heuristic is doing. */
+/* Plain scrollTop, deliberately -- both of the obvious ways to do this turned out to be no-ops on
+   this element, and each was measured rather than guessed:
+     el.scrollIntoView({block:'center'})      -- target 632px above the log's top edge, scrollTop
+                                                 unmoved. The log is a nested scroll container and
+                                                 the browser goes looking at some ancestor instead.
+     box.scrollTo({top, behavior:'smooth'})   -- correct target computed (1912 from 2790), scrollTop
+                                                 still unmoved a second and a half later. Setting
+                                                 box.scrollTop = 1912 on the very next line worked.
+   So the arithmetic was never the problem; the animated setter is. Assigning scrollTop is the one
+   form that actually moves this box. The jump is instant now, which for a "take me to it" action is
+   arguably right anyway -- the flash below is what shows you where you landed. */
 var box = scope || el.parentNode;
 if (box && box.scrollHeight > box.clientHeight) {
 var br = box.getBoundingClientRect(), er = el.getBoundingClientRect();
 var top = box.scrollTop + (er.top - br.top) - (box.clientHeight - el.offsetHeight) / 2;
-top = Math.max(0, Math.min(top, box.scrollHeight - box.clientHeight));
-try { box.scrollTo({ top: top, behavior: 'smooth' }); } catch (e) { box.scrollTop = top; }
+box.scrollTop = Math.max(0, Math.min(top, box.scrollHeight - box.clientHeight));
 }
 el.classList.remove('rq-flash'); void el.offsetWidth; el.classList.add('rq-flash');
 setTimeout(function () { el.classList.remove('rq-flash'); }, 1600);
