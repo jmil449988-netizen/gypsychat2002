@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 159;
+var BUILD_NUMBER = 160;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -518,7 +518,7 @@ coin: 1, win: 1, lose: 1, 'hm-right': 1, 'hm-wrong': 1, levelup: 1, intro: 1, lo
    an intermediate row -- one per game per sound within 400 ms is plenty */
 var gameSfxAt = {};
 function gameSfx(gid, name) { var k = gid + ':' + name, now = Date.now(); if (gameSfxAt[k] && now - gameSfxAt[k] < 400) return; gameSfxAt[k] = now; playSound(name); }
-var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5, unroll: 0.6, signoff: 1, coin: 0.9, bell: 1.25 }; // the punchy ones sat a few dB under the rest after limiting
+var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5, unroll: 0.6, signoff: 0.8, coin: 0.9, bell: 1.25 }; // the punchy ones sat a few dB under the rest after limiting
 var soundBuf = {}, soundFail = {};
 function loadSoundFile(name) {
 if (soundBuf[name]) return soundBuf[name];
@@ -2322,7 +2322,7 @@ var mine = myGroups[cid].members.filter(function (m) { return m.user_id === me.i
 if (!mine.length) delete myGroups[cid];
 });
 Object.keys(myGroups).forEach(function (cid) { ensureWin(groupKey(cid), groupTitleFor(cid), true); });
-Object.keys(myGroups).forEach(function (cid) { updateTab(groupKey(cid)); });
+Object.keys(myGroups).forEach(function (cid) { updateTab(groupKey(cid)); updateWinBanner(groupKey(cid)); });
 }
 /* ---- creating one ---------------------------------------------------------------------- */
 /* pickPeople is pickPerson's multiple-choice sibling: same list, same rows, but tapping a row
@@ -2533,6 +2533,12 @@ var row = p.new || p.old; if (!row) return;
 var mine = row.user_id === me.id;
 var known = !!myGroups[row.conversation_id];
 if (!mine && !known) return;             // a group I am not in and have never heard of
+/* v160: most UPDATEs on this table are a read marker moving (gc_mark_group_read runs whenever
+   anyone reads the group). Who is in the group has not changed, so there is nothing to reload. */
+if (p.eventType === 'UPDATE' && known) {
+var wasIn = liveMembers(myGroups[row.conversation_id]).some(function (m) { return m.user_id === row.user_id; });
+if (wasIn === !row.left_at) return;
+}
 var before = known;
 await loadMyGroups();
 var nowIn = !!myGroups[row.conversation_id];
@@ -2782,6 +2788,16 @@ var statusMsgCache = {};
 function updateWinBanner(id) {
 var w = wins[id]; if (!w) return;
 var sub = w.el.querySelector('.im-sub'); if (!sub) return;
+/* v160: a group is not a person, so it has no status of its own -- it said "Offline" and asked
+   the profiles table about a user called "g<id>". It shows how many are in it and how many of
+   the others are here now instead. */
+if (isGroupKey(id)) {
+var live = liveMembers(myGroups[groupIdOf(id)]);
+var here = live.filter(function (m) { return m.user_id !== me.id && people[m.user_id]; }).length;
+sub.innerHTML = '<span class="presence-dot presence-dot-' + (here ? 'online' : 'offline') + '"></span><span class="im-st">' +
+live.length + ' in the group' + (here ? ' \u00b7 ' + here + ' here now' : '') + '</span>';
+return;
+}
 var p = people[id], rec = recentPeopleEntries()[id];
 var status = p ? (p.status || 'online') : (rec ? 'recent' : 'offline');
 var word = { online: 'Online', idle: 'Idle', away: 'Away', busy: 'Busy', recent: 'Just left', offline: 'Offline' }[status] || status;
