@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 162;
+var BUILD_NUMBER = 163;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -714,7 +714,14 @@ try {
 var reg = await navigator.serviceWorker.ready;
 var sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(C.VAPID_PUBLIC_KEY) });
 var j = sub.toJSON();
-await sb.from('push_subscriptions').upsert({ user_id: me.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: 'endpoint' });
+/* v163: through gc_save_push_subscription, which hands the device to whoever is signed in on it.
+   The plain upsert this replaced could not: RLS only lets a browser touch rows that are already
+   its own, so a device that had ever been registered under another account (a log out, a new
+   anonymous login, a second character on the same phone) failed here every time -- and the
+   error was never looked at. The old account kept getting this device's notifications and the
+   one actually using it got none. See supabase/push_devices_fix.sql. */
+var r = await sb.rpc('gc_save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
+if (r.error) console.warn('push: this device could not be saved:', r.error.message);
 } catch (e) { /* a failed subscribe just means no closed-browser delivery this session -- the in-tab path still works */ }
 }
 /* The reverse: turning the bell off means "stop reaching me", including on other devices this
@@ -6138,10 +6145,30 @@ threadsCache[tid].reply_count = (threadsCache[tid].reply_count || 0) + 1;
 upsertThread(threadsCache[tid]);
 }
 }
+/* v163: a new thread on a board you follow, while Gypsy Chat is open. Its push is dropped on purpose
+   by the service worker whenever a Gypsy Chat window has focus (sw.js) -- right for a whisper, which
+   the page shows anyway, but for a board nothing on the page said a word unless you happened to be
+   reading that very board. So you heard about a followed board only when the app was closed, and
+   testing it with the app open looked exactly like it was broken. Your own threads never notify
+   you, here or by push. */
+function boardPostArrived(t) {
+if (!t || !me || t.op_id === me.id || !mySubs[t.board] || blocked[t.op_id]) return;
+/* Only while this window has focus -- exactly the case in which the service worker drops the push
+   -- so the toast and the phone-style notification never both fire for the same thread. */
+if (!document.hasFocus()) return;
+if (gcRoot && gcRoot.classList.contains('mobile-threads-open') && (t.board || 'gen') === curBoard) return; // it just appeared in front of you
+var blurb = t.body ? String(t.body).slice(0, 90) + (String(t.body).length > 90 ? '\u2026' : '') : (t.image_url ? 'Posted a picture' : 'Started a thread');
+playSound('ding');
+showToast({
+peer: 'board:' + t.board, kind: 'board', icon: '\uD83D\uDCDC', ttl: 15000,
+text: (t.op_name || 'Someone') + ' posted on ' + boardById(t.board).name, sub: blurb,
+onClick: function () { if (!threadsCache[t.id]) shareThreadCache[t.id] = t; openThreadFromShare(t.id); }
+});
+}
 function subscribeThreads() {
 if (threadsChannel || !threadsPanel) return;
 threadsChannel = sb.channel('threads-board');
-threadsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'threads' }, function (p) { upsertThread(p.new); });
+threadsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'threads' }, function (p) { upsertThread(p.new); boardPostArrived(p.new); });
 threadsChannel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'threads' }, function (p) { upsertThread(p.new); });
 threadsChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'thread_posts' }, function (p) {
 if (openThreadId === p.new.thread_id) appendThreadPost(p.new, false);
@@ -7276,6 +7303,16 @@ async function doLogout() {
 closeLogout();
 var wasAnon = isAnonAccount, name = me && me.name;
 playSound('logout');
+/* v163: a device you have logged out of stops getting your notifications -- whisper previews
+   included -- instead of carrying on until somebody else happens to sign in on it. Only the row
+   goes; the browser keeps its subscription, and the next sign-in on this device saves it again
+   under whoever that is (gc_save_push_subscription). Done before signOut, while the row is still
+   ours to delete. */
+try {
+var preg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.getRegistration() : null;
+var psub = preg && preg.pushManager ? await preg.pushManager.getSubscription() : null;
+if (psub && sb) await sb.from('push_subscriptions').delete().eq('endpoint', psub.endpoint);
+} catch (e) {}
 leaveRoom('', true);
 try { if (sb) await sb.auth.signOut(); } catch (e) { /* the local session is cleared either way */ }
 unlockName();
@@ -7810,7 +7847,8 @@ navigator.serviceWorker.addEventListener('message', function (e) {
 var d = e.data || {};
 if (d.type !== 'PUSH_SUBSCRIPTION_CHANGED' || !d.subscription || !sb || !me) return;
 var j = d.subscription;
-sb.from('push_subscriptions').upsert({ user_id: me.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: 'endpoint' })
+// v163: same save as subscribeToPush, for the same reason (see gc_save_push_subscription)
+sb.rpc('gc_save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth })
 .then(function (r) { if (r.error) console.warn('push subscription refresh not saved:', r.error.message); });
 });
 }
