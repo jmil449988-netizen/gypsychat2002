@@ -200,7 +200,8 @@ open and visible.
 # Builds 153 → 160 · 18 September 2026
 
 Previous state: build 152, style.css 113, cache `gc2000-v183`.
-Current state: **app.js 160, style.css 115, cache `gc2000-v191`, APP_VERSION Beta v0.8.0.**
+State at the end of this section: app.js 160, style.css 115, cache `gc2000-v191` (161 and 162
+follow below).
 
 153 – 158 were written up only in their commit messages, so this part is a summary of those:
 153 kept the Messages pill from vanishing on a phone and got the hourly readings to phones;
@@ -269,12 +270,103 @@ The user picked it over a same-pitch time-stretch. It is back at its original vo
 matched to the original's peak momentary loudness, and `SOUND_GAIN.signoff` is back to 0.8,
 undoing 152's +6 dB. Checked on the deployed file, decoded in the browser: 1.50 s, peak −4.4 dBFS.
 
-## Not done, found on the way
+## Found on the way, fixed in 161
 
-- A group line is capped at 140 characters, the main room's limit: `post()` and the
-  `messages_body_check` constraint both key on `recipient_id is null`. The group composer takes
-  500, so anything past 140 is cut off without a word.
-- An @mention in a group line sends that person a "mentioned you" push with the text in it, even
-  when they are not in the group.
-- One member of the test group shows as "someone": their `member_name` is empty, probably one of
-  the accounts with no `profiles` row.
+- A group line was capped at 140 characters, the main room's limit.
+- An @mention in a group line pushed the text to the person named, even when they were not in the
+  group.
+- One member of the test group showed as "someone".
+
+
+---
+
+# Builds 161 → 162 · 18 September 2026
+
+Current state: **app.js 162, style.css 115, cache `gc2000-v193`, APP_VERSION Beta v0.8.0.**
+
+The three things found in 160, fixed, plus a fourth that was worse than any of them.
+
+## Group lines were being treated as room lines (161)
+
+Two older pieces of server code decided "room line or not" with `recipient_id is null`, which is
+also true of every group line:
+
+- **`messages_body_check`** capped group lines at the room's 140 characters, and `post()` cut them
+  to 140 in the browser to fit. Group lines now get 500 like a whisper, in both places.
+- **`trim_room_messages`**, the ring buffer that keeps the main room to its newest 100 lines,
+  counted group lines as room lines and **deleted them** with the room's oldest. Every group's
+  history was being thrown away a hundred room messages later, and group lines were taking room
+  lines' places in the hundred. When this was fixed the room held 98 room lines plus the test
+  group's 2. It now trims room lines only; group lines are kept, like whispers.
+
+`group_fixes_2026_09_18.sql`. Worth remembering for any future kind of message: search the SQL and
+the client for `recipient_id is null` and `!recipient_id` and decide each one.
+
+## Mentions stay inside the group (161)
+
+A group line's @names are matched against the group's own members, `groupMentionedIds()`, not the
+room's recent-people pool. So a member who is offline, the one a push is actually for, is found.
+Nobody outside the group is ever pushed. The notification reads "X mentioned you in “Name”", or
+"in a group" when it has no name.
+
+## "someone", and accounts with no character name (161, 162)
+
+The test group's "someone" was the user's own old "Steve miller" login. When the same invite key
+claims a name from a new device, `claim_name()` sets the old login's `profiles.name` to null. The old
+login keeps its uid, its friendships, its group seats and its XP, but no longer has a name. It can
+read a group and can never post in one.
+
+- `gc_create_group` / `gc_add_to_group` refuse an account whose profile has no name (or that has no
+  profile row), and anyone like that already sitting in a group was taken out. That was just the
+  old Steve login, from the test group.
+- Group titles, the 👥 list and rename lines use the name a member goes by **now** (read from
+  `profiles` in `loadMyGroups`). `member_name` is only the name they had the day they were added.
+- The people picker drops nameless accounts and shows each person's current name. **162** exists
+  because 161's picker check only dropped accounts with no profile row at all, so the emptied-name
+  kind was still offered. The same mistake nearly shipped on the server too: the local test
+  scaffold had `profiles.name not null`, so the first version of the migration was applied before
+  the live row turned up. It was corrected, practice-run again and re-applied. The scaffold now
+  matches live. 162 also stops "Add to this group" offering people already in it.
+
+## Back-tested live, 18 Sept 2026 (build 162)
+
+The "other person" side was driven from the SQL Editor as the user's own test account (Steve miller,
+current login). The user's main account watched in the open tab. Every step appeared without a
+reload:
+
+- Steve starts a group with AA → "You were added to a group: Regression test" plus its inbox row.
+  This is the membership feed, working for the first time since 154.
+- Steve's group line → in AA's group window.
+- Steve renames → "Steve miller renamed the group “Regression test 2”."
+- AA renames from the 👥 menu (prefilled, selected, 40-char box, Save).
+- AA's 300-character group line → stored and shown in full.
+- AA's "@Steve miller …" → exactly one push request, to Steve, titled "mentioned you in “Regression
+  test 3”". AA's "@S.S SIGINT …" (not a member) → none. Push requests were caught and held in the
+  page for this test, so no real notification went out.
+- Steve's whisper → inbox row with an unread badge. AA opening it moves AA's read marker.
+- Steve marking AA's whisper read → "Seen 7:35 AM" under it.
+- Steve's Tic-Tac-Toe challenge → card with Accept/Decline. Steve withdrawing it → "Challenge
+  withdrawn."
+- Steve leaves → "1 in the group". AA leaves (confirm asked, answered for the test) → row gone,
+  group closed.
+- The test group shows 2 members, no "someone". The picker offers neither the old Steve login nor
+  people already in the group, and shows "Pastor Douglas" where the friends list still says
+  "Gypsyinxlaptop".
+- Threads board, Popularity Contest and Ballot Box open and close. No console errors on load or
+  anywhere in the run.
+
+Left behind by the test, all between the user's own two accounts: two whispers, a withdrawn
+Tic-Tac-Toe challenge, and a closed group nobody can open.
+
+## Still open
+
+- **Switching devices strands everything but the name.** The old login keeps the friendships, group
+  seats, whispers and XP. The XP board has an "Unknown" at #3 with 18 XP, very likely one of these.
+  The real fix is for `claim_name()` to move those to the new login when the same key reclaims a
+  name. It is load-bearing sign-in code, so it wants its own practice-run and tests.
+- The friends list keeps the name a friend had when you friended them ("Gypsyinxlaptop" is "Pastor
+  Douglas" now). The picker is fixed; the Friends panel is not.
+- The reactions insert policy still calls a group line a "main-room message" (`recipient_id is
+  null`). There is no button for it, but a hand-made request could react to a group line.
+- Nobody else in a group is told when someone leaves or is added. A group line only pushes when
+  someone is @mentioned. A group you were just added to lands at the bottom of the inbox.
