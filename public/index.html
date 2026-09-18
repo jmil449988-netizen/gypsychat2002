@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=117">
+<link rel="stylesheet" href="./css/style.css?v=118">
 </head>
 <body>
 <div class="gc-root">
@@ -348,8 +348,17 @@
 <div class="tp-watermark" id="adminWatermark" aria-hidden="true"></div>
 </div>
 
+<!-- The Game Room (v169): tables for up to four players and four watchers, with a chat each. The
+     same .gc-root.<state>-open full-page takeover as the Popularity Contest. #grBody is painted by
+     renderGameRoom() in app.js: the list of tables, or the table you sit at. -->
+<div class="gameroom-panel" id="gameRoomPanel" role="complementary" aria-label="Game Room">
+<div class="tp-hd"><button class="tp-back" type="button" id="gameRoomBack" aria-label="Back to chat">←</button><span>🎴 Game Room</span></div>
+<div class="gr-body" id="grBody"></div>
+</div>
+
 <button class="thread-toggle-fab" id="threadToggleBtn" type="button" aria-label="Open threads board">🧵</button>
 <button class="roulette-toggle-fab" id="rouletteToggleBtn" type="button" aria-label="Gypsy Roulette — coming soon">✦</button>
+<button class="gameroom-toggle-fab" id="gameRoomBtn" type="button" aria-label="Game Room" title="Game Room">🎴</button>
 </div>
 
 <div class="modal-overlay hidden" id="warnOverlay">
@@ -474,6 +483,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=168"></script>
+<script src="./js/app.js?v=169"></script>
 </body>
 </html>
