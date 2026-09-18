@@ -523,3 +523,16 @@ arrive, so every check from the page side looked healthy while Windows showed no
 notification did appear, so it is not certain which of the later posts this switch hid and which
 the same-tag rule hid. The renotify fix stands on its own: the Chromium code quoted above suppresses
 the banner for a same-tag notification whenever renotify is off.
+
+# Build 165: the bell names the Windows switch (18 Sept 2026)
+
+On Windows, when notifications are on, the 🔔 button's tooltip (More options → Notifications) now
+ends: "Nothing popping up? In Windows Settings → System → Notifications, make sure Google Chrome is
+on under “Notifications from apps and other senders”." Microsoft Edge and Firefox are named as
+Windows lists them. Other browsers (Brave, Opera, Vivaldi) get "your browser", because what Windows
+calls each of them wasn't checked. Macs, phones, and the off and blocked states keep their old
+tooltips. New helpers: `isWindowsDevice()` and `windowsBrowserName()`. Cache gc2000-v196,
+app.js v165.
+
+Checked on the user's desktop with the live code: the tooltip names Google Chrome. The service
+worker updated to v196 and the push registration was kept.
