@@ -1744,3 +1744,44 @@ font:700 9px Georgia,serif;color:#fff;background:var(--blood);border:1px solid #
   .tp-hd .thread-toggle-fab.in-header{font-size:15px;width:22px}
 }
 @media (prefers-reduced-motion:reduce){.thread-toggle-fab.in-header{transition:none}}
+
+/* ==================== v105: the roulette watermark stops being an overlay ====================
+   .room-watermark (the roulette teaser's "made by" line -- the main room's footer is .room-footer,
+   a different thing) was an absolute overlay pinned to the panel's bottom-right corner. In the
+   1340px-and-wider gutter presentation that is still exactly right: the panel is a tall, narrow
+   column with empty space below the wheel, nothing else is down there, and the Messages dock sits
+   on the far side of the screen. So that case is left alone.
+
+   The full-screen takeover below 1340px is where it broke, and it broke the same way twice. The
+   panel goes inset:0, so "the panel's bottom-right corner" becomes the VIEWPORT's bottom-right
+   corner -- which is precisely where the collapsed Messages pill lives. On a desktop window the
+   pill covered the line outright; on a phone the two sat on top of each other. Corner-pinning any
+   two things to the same corner from two different stacking contexts was never going to hold.
+
+   So in the takeover it stops floating and becomes what it looks like it should have been all
+   along: the last item in the panel's own centred column, directly under "Back to chat". The
+   panel is already a centred flex column, so position:static is the whole fix -- the line lands
+   under the button, moves with it, and cannot collide with anything pinned to a screen corner. */
+@media (max-width:1339px){
+  .gc-root.mobile-roulette-open .room-watermark{position:static;right:auto;bottom:auto;
+  flex:none;margin-top:12px;text-align:center}
+}
+
+/* The other half of the same collision, on phones. The collapsed Messages pill sits at
+   bottom:142px there, and the comment where that number is set says why: it is clearing the
+   composer and the folded roster bar underneath it. Neither of those exists on the roulette page
+   -- it is a full-screen takeover with nothing at its bottom edge at all -- so on that page the
+   pill was floating 142px up for no reason, straight across the centred column it now shares with
+   the watermark. Dropping it to the bottom corner on this one page clears the line and puts the
+   pill somewhere that actually makes sense there. Deliberately not applied to the other takeovers:
+   the threads board has a reply box along its bottom edge that the pill would land on top of.
+   :not(.moved) leaves a pill the reader has dragged somewhere exactly where they put it. */
+@media (max-width:500px){
+  .gc-root.mobile-roulette-open .dm-dock.collapsed:not(.moved){bottom:6px}
+  /* A little air under the centred column as well. On a 640px-tall phone with the longest
+     fortune showing, the watermark's last line and the pill's top edge ended up one pixel
+     apart -- technically clear, but one pixel is not a margin, it is a coincidence waiting to
+     break the next time a fortune gets a word longer. The panel is centred, so padding at the
+     bottom lifts the whole column by half of it. */
+  .gc-root.mobile-roulette-open .roulette-panel{padding-bottom:40px}
+}
