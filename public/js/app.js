@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 156;
+var BUILD_NUMBER = 157;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -7504,6 +7504,11 @@ if (h.error) throw h.error;
    was revealed sitting at the very top, on the oldest message in the backlog. */
 $('login').classList.add('hidden'); log.classList.remove('hidden'); $('users').classList.remove('hidden'); $('compose').classList.remove('hidden');
 if ($('roomWatermark')) $('roomWatermark').classList.remove('hidden');
+/* v156: the groups have to be known BEFORE the replay, not after. renderIM drops a group line
+   whose conversation it has never heard of -- the guard that stops a half-loaded client inventing
+   windows -- so loading them afterwards meant every group's history was silently thrown away and
+   only messages that arrived later in the session ever appeared. */
+await loadMyGroups();
 replayingHistory = true;
 h.data.reverse().forEach(handleMessage);
 replayingHistory = false;
@@ -7512,7 +7517,6 @@ replayingHistory = false;
 renderPeople();
 Object.keys(wins).forEach(updateTab); // inbox rows: snippets and unread badges from the replay, in one pass
 if (dmDock) dmDock.classList.remove('hidden');
-await loadMyGroups(); // v154: before syncDock, so group rows are in the inbox on the first paint
 syncDock();
 bellTick(); // v153: catch up on this hour's reading now, rather than up to 30 s later or never
 startBallot(); // the ballot box in the right-hand gutter (wide layout only -- see style.css)
