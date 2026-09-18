@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 163;
+var BUILD_NUMBER = 164;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -829,7 +829,12 @@ if (notifEnabled) subscribeToPush(); else unsubscribeFromPush();
 /* Shows a real OS notification, only when on, granted, and the person genuinely isn't looking at
    this tab right now -- never while they're sitting right here (that's what the in-page ding/badge
    is for). tag lets a burst of whispers from the same person, or repeated mentions, update one
-   notification in place instead of piling up a stack of them. */
+   notification in place instead of piling up a stack of them.
+   v164: deliberately no renotify here, unlike sw.js. This page's notification and the service
+   worker's push for the same whisper are separate notifications to Chrome (a page one and a
+   service-worker one never replace each other, even with the same tag), so a renotify here would
+   make every whisper pop twice while the tab sits in the background. The push already pops for
+   each new one. */
 function notifyDesktop(title, body, tag, onClick) {
 if (!notifEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
 if (!(document.hidden || !document.hasFocus())) return;
