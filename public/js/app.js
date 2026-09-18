@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 151;
+var BUILD_NUMBER = 152;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -515,7 +515,7 @@ coin: 1, win: 1, lose: 1, 'hm-right': 1, 'hm-wrong': 1, levelup: 1, intro: 1, lo
    an intermediate row -- one per game per sound within 400 ms is plenty */
 var gameSfxAt = {};
 function gameSfx(gid, name) { var k = gid + ':' + name, now = Date.now(); if (gameSfxAt[k] && now - gameSfxAt[k] < 400) return; gameSfxAt[k] = now; playSound(name); }
-var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5, unroll: 0.6, signoff: 0.8, coin: 0.9, bell: 1.25 }; // the punchy ones sat a few dB under the rest after limiting
+var SOUND_GAIN = { 'friend-logon': 1.4, knock: 1.3, badum: 1.2, kiss: 1.2, gunshot: 1.1, laugh: 1.1, login: 1.3, 'game-invite': 1.2, tick: 0.6, tock: 0.5, unroll: 0.6, signoff: 1, coin: 0.9, bell: 1.25 }; // the punchy ones sat a few dB under the rest after limiting
 var soundBuf = {}, soundFail = {};
 function loadSoundFile(name) {
 if (soundBuf[name]) return soundBuf[name];
