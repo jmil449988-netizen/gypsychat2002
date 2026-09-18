@@ -11,6 +11,7 @@ var tray = $('imTray');
 var gcRoot = document.querySelector('.gc-root');
 var threadsPanel = $('threadsPanel'), tpList = $('tpList'), tpDetail = $('tpDetail'), tpItems = $('tpItems'), tpPages = $('tpPages');
 var tpNewBtn = $('tpNewBtn'), tpNewPost = $('tpNewPost'), tpNewBody = $('tpNewBody'), tpNewCancel = $('tpNewCancel'), tpNewSubmit = $('tpNewSubmit');
+var tpBoards = $('tpBoards'), tpTags = $('tpTags'), tpSub = $('tpSub'), tpBoardName = $('tpBoardName'), tpNewBoard = $('tpNewBoard'), tpNewTag = $('tpNewTag');
 var tpBack = $('tpBack'), tpPosts = $('tpPosts'), tpReplyBody = $('tpReplyBody'), tpReplySend = $('tpReplySend');
 var threadToggleBtn = $('threadToggleBtn'), dmToggleBtn = $('dmToggleBtn');
 var tpNewImgBtn = $('tpNewImgBtn'), tpNewImgFile = $('tpNewImgFile'), tpNewGifBtn = $('tpNewGifBtn');
@@ -75,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 142;
+var BUILD_NUMBER = 143;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -739,6 +740,32 @@ return fetch(C.SUPABASE_URL + '/functions/v1/send-push', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt },
 body: JSON.stringify({ targetUserId: targetUserId, title: title, body: body, tag: tag })
+});
+}).catch(function () {});
+}
+/* The board version of the same thing (v143). Unlike triggerPush, which names one recipient, this
+   names a BOARD and lets the edge function work out who is subscribed to it -- because a browser
+   must never be able to read who follows what, and because the sender should not be firing one
+   request per subscriber. The fan-out happens server-side against thread_sub_targets(), which is
+   SECURITY DEFINER and executable only by the service role. Fire-and-forget for the same reason
+   as triggerPush: a push that fails must never take the post down with it. */
+/* NOTE: the send-push function does not understand `board` yet -- it only routes by targetUserId.
+   Until it does, this call is a no-op on the server and nothing is delivered; the subscription is
+   still recorded, the button still reflects it, and delivery starts working the moment the
+   function learns this shape. Shipping it this way round on purpose: the subscription data is the
+   part that has to be right, and a push nobody receives is a smaller problem than a half-patched
+   push function that nobody can read. */
+function triggerBoardPush(board, thread) {
+if (!board || !thread || !sb || !C.SUPABASE_URL) return;
+var blurb = thread.body ? String(thread.body).slice(0, 90) : (thread.image_url ? 'Posted a picture' : 'Started a thread');
+if (thread.body && String(thread.body).length > 90) blurb += '…';
+sb.auth.getSession().then(function (s) {
+var jwt = s && s.data && s.data.session && s.data.session.access_token;
+if (!jwt) return;
+return fetch(C.SUPABASE_URL + '/functions/v1/send-push', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt },
+body: JSON.stringify({ board: board, exclude: me.id, title: me.name + ' posted on ' + boardById(board).name, body: blurb, tag: 'gc-board-' + board })
 });
 }).catch(function () {});
 }
@@ -4817,17 +4844,147 @@ var f = $('avaFile').files && $('avaFile').files[0]; $('avaFile').value = '';
 if (f) uploadAvatar(f);
 };
 }
+/* ---------- boards and tags (v143) ----------
+   One table, here, for both the buttons and the posting form's dropdowns -- and it has to agree
+   with the check constraints in supabase/thread_boards_feature.sql, because the database is what
+   actually refuses a bad value. If you add a board, it goes in three places: this table, that
+   constraint, and the matching one on thread_subs. There is no lookup table on purpose; the list
+   is short, it is decided by people rather than by data, and a join on every catalog query would
+   buy nothing.
+
+   The `note` is written on the board itself for the two boundaries that would otherwise be
+   guessed at differently by different people: Texas belongs to Tex-Mex, and everything the map
+   misses belongs to Elsewhere. A board that has to be explained in a FAQ is a board nobody uses
+   correctly. */
+var BOARDS = [
+{ id: 'gen',       label: '/gen/',      name: 'General',           note: 'Anything that is not about a place' },
+{ id: 'northeast', label: 'Northeast',  name: 'Northeast',         note: '' },
+{ id: 'southeast', label: 'Southeast',  name: 'Southeast',         note: '' },
+{ id: 'midwest',   label: 'Midwest',    name: 'Midwest',           note: '' },
+{ id: 'texmex',    label: 'Tex-Mex',    name: 'Tex-Mex',           note: 'Texas and the border' },
+{ id: 'southwest', label: 'Southwest',  name: 'Southwest',         note: 'Arizona and New Mexico' },
+{ id: 'pnw',       label: 'Pacific NW', name: 'Pacific Northwest', note: '' },
+{ id: 'canada',    label: 'Canadians',  name: 'Canadians 🙄',      note: '' },
+{ id: 'europe',    label: 'Europe',     name: 'Europe',            note: '' },
+{ id: 'elsewhere', label: 'Elsewhere',  name: 'Elsewhere',         note: 'California, the Mountain West, and anywhere the map misses' }
+];
+var TAGS = [
+{ id: 'work',   label: 'Work' },
+{ id: 'trade',  label: 'Buy/Sell/Trade' },
+{ id: 'events', label: 'Events' },
+{ id: 'family', label: 'Family' },
+{ id: 'travel', label: 'Travel' },
+{ id: 'hand',   label: 'Need a Hand' },
+{ id: 'music',  label: 'Music' },
+{ id: 'food',   label: 'Food' },
+{ id: 'talk',   label: 'Just Talking' }
+];
+function boardById(id) { for (var i = 0; i < BOARDS.length; i++) if (BOARDS[i].id === id) return BOARDS[i]; return BOARDS[0]; }
+function tagLabel(id) { for (var i = 0; i < TAGS.length; i++) if (TAGS[i].id === id) return TAGS[i].label; return ''; }
+/* The board you are looking at is remembered per browser: a person who only ever reads one region
+   should not have to pick it again every time they open the board. The tag filter is deliberately
+   NOT remembered -- it is a thing you do to find something, not a standing preference, and a
+   filter silently still applied a week later looks like an empty board. */
+var curBoard = 'gen', curTag = null, mySubs = {};
+try { var b = localStorage.getItem('gc_board'); if (b && boardById(b).id === b) curBoard = b; } catch (e) {}
+
+function renderBoards() {
+if (!tpBoards) return;
+tpBoards.innerHTML = BOARDS.map(function (b) {
+return '<button type="button" role="tab" class="tp-board' + (b.id === curBoard ? ' active' : '') +
+'" data-board="' + b.id + '" aria-selected="' + (b.id === curBoard ? 'true' : 'false') + '"' +
+(b.note ? ' title="' + esc(b.note) + '"' : '') + '>' + esc(b.label) + '</button>';
+}).join('');
+var cur = boardById(curBoard);
+if (tpBoardName) tpBoardName.textContent = cur.id === 'gen' ? '/gen/ — General' : cur.name + (cur.note ? ' — ' + cur.note : '');
+renderSubBtn();
+}
+function renderTags() {
+if (!tpTags) return;
+tpTags.innerHTML = '<button type="button" class="tp-tag' + (curTag ? '' : ' active') + '" data-tag="">All</button>' +
+TAGS.map(function (t) {
+return '<button type="button" class="tp-tag' + (t.id === curTag ? ' active' : '') + '" data-tag="' + t.id + '">' + esc(t.label) + '</button>';
+}).join('');
+}
+function renderSubBtn() {
+if (!tpSub) return;
+var on = !!mySubs[curBoard];
+tpSub.classList.toggle('on', on);
+tpSub.setAttribute('aria-pressed', on ? 'true' : 'false');
+tpSub.textContent = on ? '🔔 Notifying' : '🔕 Notify me';
+tpSub.title = on ? 'You get a notification when someone starts a thread on ' + boardById(curBoard).name + ' — click to stop'
+: 'Get a notification when someone starts a thread on ' + boardById(curBoard).name;
+}
+async function loadMySubs() {
+if (!sb || !me) return;
+var r = await sb.from('thread_subs').select('board').eq('user_id', me.id);
+mySubs = {};
+if (!r.error && r.data) r.data.forEach(function (row) { mySubs[row.board] = 1; });
+renderSubBtn();
+}
+async function toggleSub() {
+if (!sb || !me || !tpSub) return;
+var board = curBoard, on = !!mySubs[board];
+/* Flip the button first and put it back if the write fails: the round trip is long enough that a
+   button which does nothing for half a second reads as broken, and there is nothing destructive
+   about being briefly wrong here. */
+mySubs[board] = on ? 0 : 1; renderSubBtn();
+var r = on ? await sb.from('thread_subs').delete().eq('user_id', me.id).eq('board', board)
+: await sb.from('thread_subs').upsert({ user_id: me.id, board: board }, { onConflict: 'user_id,board' });
+if (r.error) { mySubs[board] = on ? 1 : 0; renderSubBtn(); addSys('Could not change that: ' + r.error.message); return; }
+/* Subscribing and having notifications switched on are two different things, and a subscription
+   that cannot reach you is worse than none -- it looks like it is working. We cannot raise the
+   permission prompt from here: Notification.requestPermission() only shows if it runs inside the
+   click with no await before it, and this handler has already been to the database and back. So
+   say so plainly and point at the bell, which is the control that can ask. */
+if (!on) {
+var canNotify = ('Notification' in window) && Notification.permission === 'granted' && notifEnabled;
+if (!canNotify) addSys('Following ' + boardById(board).name + '. Notifications are off, so this will only show up when you open the board — tap the 🔔 button to turn them on.');
+else addSys('Following ' + boardById(board).name + '. You will hear about new threads there.');
+} else addSys('No longer following ' + boardById(board).name + '.');
+}
+function fillNewSelects() {
+if (tpNewBoard) tpNewBoard.innerHTML = BOARDS.map(function (b) {
+return '<option value="' + b.id + '"' + (b.id === curBoard ? ' selected' : '') + '>' + esc(b.label) + '</option>';
+}).join('');
+if (tpNewTag) tpNewTag.innerHTML = '<option value="">(no tag)</option>' + TAGS.map(function (t) {
+return '<option value="' + t.id + '">' + esc(t.label) + '</option>';
+}).join('');
+}
+/* Painted at load, not only at sign-on. Nothing about the list of boards, the tag chips or the
+   posting form's dropdowns depends on who you are -- they are static tables -- so making them wait
+   for a join only created a window in which the board could be opened and found blank. The one
+   piece that does need an account, loadMySubs(), still runs at sign-on. */
+renderBoards(); renderTags(); fillNewSelects();
+
+async function switchBoard(id) {
+if (id === curBoard) return;
+curBoard = boardById(id).id;
+try { localStorage.setItem('gc_board', curBoard); } catch (e) {}
+curTag = null; threadsPage = 0;
+renderBoards(); renderTags();
+if (tpItems) tpItems.innerHTML = '<div class="tp-empty">Loading…</div>';
+await loadThreads();
+}
+
 function renderThreadList() {
 if (!tpItems) return;
-if (!threadsOrder.length) {
-tpItems.innerHTML = '<div class="tp-empty">No threads yet. Start one!</div>';
+/* The tag filter is applied here rather than in the query: loadThreads() has already fetched this
+   board's threads, so filtering in memory makes the chips instant and costs no round trip. The
+   board filter IS in the query, because a board can have far more than the hundred rows we hold. */
+var shown = curTag ? threadsOrder.filter(function (id) { var t = threadsCache[id]; return t && t.tag === curTag; }) : threadsOrder;
+if (!shown.length) {
+var bname = boardById(curBoard).name;
+tpItems.innerHTML = '<div class="tp-empty">' + (curTag
+? 'Nothing tagged ' + esc(tagLabel(curTag)) + ' on ' + esc(bname) + ' yet.'
+: 'No threads on ' + esc(bname) + ' yet. Start one!') + '</div>';
 if (tpPages) tpPages.innerHTML = '';
 return;
 }
-var pageCount = Math.max(1, Math.ceil(threadsOrder.length / THREADS_PAGE_SIZE));
+var pageCount = Math.max(1, Math.ceil(shown.length / THREADS_PAGE_SIZE));
 if (threadsPage >= pageCount) threadsPage = pageCount - 1; // clamp e.g. after a deletion shrinks the list
 if (threadsPage < 0) threadsPage = 0;
-var pageIds = threadsOrder.slice(threadsPage * THREADS_PAGE_SIZE, threadsPage * THREADS_PAGE_SIZE + THREADS_PAGE_SIZE);
+var pageIds = shown.slice(threadsPage * THREADS_PAGE_SIZE, threadsPage * THREADS_PAGE_SIZE + THREADS_PAGE_SIZE);
 tpItems.innerHTML = pageIds.map(function (id) {
 var t = threadsCache[id]; if (!t) return '';
 var n = t.reply_count || 0;
@@ -4836,8 +4993,13 @@ var preview = t.body ? '<div class="tp-preview">' + esc(String(t.body).slice(0, 
    list layout -- see the .tp-thumb size rule in the CSS for why it's a fixed small square now
    instead of a full-width banner. */
 var thumb = t.image_url ? '<img class="tp-thumb" src="' + esc(t.image_url) + '" alt="" loading="lazy">' : '';
+/* The chip rides in the meta line rather than floating in the tile's corner. Pinned top-right it
+   sat on top of the poster's name and truncated it, and a tile whose first job is to tell you who
+   posted should not have that covered by a label. In the meta line it cannot collide with
+   anything, and it reads in the same glance as the reply count. */
+var chip = t.tag ? '<span class="tp-chip">' + esc(tagLabel(t.tag)) + '</span> ' : '';
 return '<button type="button" class="tp-item" data-id="' + id + '">' + thumb + '<div class="tp-op' + (isAdminId(t.op_id) ? ' admin' : '') + '"><span class="nmt">' + esc(t.op_name) + '</span></div>' + preview +
-'<div class="tp-meta">' + n + ' repl' + (n === 1 ? 'y' : 'ies') + ' · ' + timeAgo(t.bumped_at) + '</div></button>';
+'<div class="tp-meta">' + chip + n + ' repl' + (n === 1 ? 'y' : 'ies') + ' · ' + timeAgo(t.bumped_at) + '</div></button>';
 }).join('');
 renderThreadPages(pageCount);
 }
@@ -4852,6 +5014,10 @@ tpPages.innerHTML = html;
 }
 function upsertThread(t) {
 if (!t || !t.id) return;
+/* Realtime is subscribed to the whole threads table, not to one board, so a thread started on
+   Southeast arrives here while you are reading Northeast. Dropping it keeps the catalog honest;
+   without this the board you are looking at quietly fills with other people's regions. */
+if ((t.board || 'gen') !== curBoard) return;
 threadsCache[t.id] = t;
 if (threadsOrder.indexOf(t.id) === -1) threadsOrder.push(t.id);
 threadsOrder.sort(function (a, b) { return new Date(threadsCache[b].bumped_at) - new Date(threadsCache[a].bumped_at); });
@@ -4859,7 +5025,7 @@ renderThreadList();
 }
 async function loadThreads() {
 if (!threadsPanel) return;
-var r = await sb.from('threads').select('*').order('bumped_at', { ascending: false }).limit(100);
+var r = await sb.from('threads').select('*').eq('board', curBoard).order('bumped_at', { ascending: false }).limit(100);
 if (r.error) return; // quiet failure — the board is a bonus feature, never block the main room over it
 threadsCache = {}; threadsOrder = [];
 r.data.forEach(function (t) { threadsCache[t.id] = t; threadsOrder.push(t.id); });
@@ -5038,13 +5204,18 @@ var body = sanitizeInput(tpNewBody.value).trim().slice(0, 1000);
 var imageUrl = tpNewImageUrl;
 if (!body && !imageUrl) return;
 if (!(await threadGate())) return;
-var row = { op_id: me.id, op_name: me.name, body: body || null };
+var board = (tpNewBoard && tpNewBoard.value) || curBoard;
+var tag = (tpNewTag && tpNewTag.value) || null;
+var row = { op_id: me.id, op_name: me.name, body: body || null, board: board, tag: tag };
 if (imageUrl) row.image_url = imageUrl;
 var r = await sb.from('threads').insert(row).select().single();
 if (r.error) { addSys('Your thread was lost: ' + r.error.message); return; }
 tpNewBody.value = ''; clearPendingImage('new'); tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden');
 threadsPage = 0;
-upsertThread(r.data);
+/* Posting to a board you are not currently reading moves you there, rather than dropping the
+   thread somewhere you cannot see and leaving you looking at an unchanged catalog. */
+if (board !== curBoard) { await switchBoard(board); } else { upsertThread(r.data); }
+triggerBoardPush(board, r.data);
 openThread(r.data.id);
 }
 async function submitReply() {
@@ -5081,8 +5252,17 @@ threadsChannel.subscribe();
 function unsubscribeThreads() {
 if (threadsChannel) { threadsChannel.unsubscribe(); threadsChannel = null; }
 }
+if (tpBoards) tpBoards.onclick = function (e) {
+var b = e.target.closest('.tp-board'); if (!b) return; switchBoard(b.dataset.board);
+};
+if (tpTags) tpTags.onclick = function (e) {
+var b = e.target.closest('.tp-tag'); if (!b) return;
+curTag = b.dataset.tag || null; threadsPage = 0;
+renderTags(); renderThreadList();
+};
+if (tpSub) tpSub.onclick = toggleSub;
 if (tpNewBtn) {
-tpNewBtn.onclick = function () { tpNewPost.classList.remove('hidden'); tpNewBtn.classList.add('hidden'); tpNewBody.focus(); };
+tpNewBtn.onclick = function () { fillNewSelects(); tpNewPost.classList.remove('hidden'); tpNewBtn.classList.add('hidden'); tpNewBody.focus(); };
 tpNewCancel.onclick = function () { tpNewPost.classList.add('hidden'); tpNewBtn.classList.remove('hidden'); tpNewBody.value = ''; clearPendingImage('new'); };
 tpNewSubmit.onclick = submitNewThread;
 tpNewBody.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitNewThread(); } };
@@ -6541,6 +6721,7 @@ if (!whisperTipSeen) { addSys('New: whispers are friends-only. Anyone can still 
 if (isAnonAccount) addSys('Heads up: ' + me.name + ' and your friends list are saved in this browser only. Tap the 🔑 below to add an email and keep them on any device.');
 if (threadsPanel) {
 threadsPanel.classList.add('ready');
+renderBoards(); renderTags(); fillNewSelects(); loadMySubs();
 loadThreads();
 subscribeThreads();
 if (threadToggleBtn) threadToggleBtn.classList.add('ready');
