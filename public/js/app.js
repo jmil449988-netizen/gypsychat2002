@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 158;
+var BUILD_NUMBER = 159;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -1634,7 +1634,7 @@ if (lastMsgAt) {
 var r = await sb.from('messages').select('*').eq('room', C.ROOM || 'main').gt('created_at', lastMsgAt).order('created_at', { ascending: true }).limit(200);
 if (!r.error && r.data) r.data.forEach(handleMessage);
 }
-await Promise.all([loadGames(), loadUno(), loadHangman(), loadHoldem()]);
+await Promise.all([loadGames(), loadUno(), loadHangman(), loadHoldem(), refreshGroupNames()]);
 if (typeof refreshMyStats === 'function') refreshMyStats();
 } catch (e) {}
 }
@@ -2391,7 +2391,7 @@ if (r.error) { addSys(groupErrorText(r.error)); return; }
 var cid = r.data;
 await loadMyGroups();
 openIM(groupKey(cid), groupTitleFor(cid), true);
-imSys(groupKey(cid), 'You started this group. Anyone in it can add someone else, up to ' + GROUP_MAX + '.');
+imSys(groupKey(cid), 'You started this group. Anyone in it can add someone else (up to ' + GROUP_MAX + ') or give it a name: tap \uD83D\uDC65.');
 }
 /* The database speaks in its own words when it refuses; these are the ones worth translating. */
 function groupErrorText(err) {
@@ -2424,6 +2424,7 @@ return [nm + (m.user_id === me.id ? ' (you)' : ''), function () {
 if (m.user_id !== me.id && anchor) openMenu(m.user_id, anchor, nm);
 }];
 });
+items.push([g.title ? '\u270E Rename this group' : '\u270E Name this group', function () { nameGroup(cid); }]); // v159
 if (live.length < GROUP_MAX) items.push(['\uff0b Add someone', function () { addToGroup(cid); }]);
 items.push(['Leave this group', function () { leaveGroup(cid); }, 'danger']);
 showListMenu(anchor, live.length + ' of ' + GROUP_MAX + ' in this group', items);
@@ -2460,6 +2461,67 @@ if (activeDm === key) showInbox();
 delete unread[key];
 syncDock();
 addSys('You left the group.');
+}
+/* ---- naming it (v159) -------------------------------------------------------------------
+   Anyone in the group can name it, rename it, or clear the name (blank = called after the people
+   in it again). The write goes through gc_rename_group -- conversations has no UPDATE policy --
+   which checks membership and mutes, tidies the text the same way tidyGroupTitle does, and
+   records who did it, so every other member's window can say so when the change arrives over
+   realtime (watchGroupNames, below). */
+var GROUP_TITLE_MAX = 40; // conversations.title's own check constraint
+function tidyGroupTitle(s) { return sanitizeInput(s).replace(/\s+/g, ' ').trim(); }
+function groupMemberName(g, uid) {
+var m = ((g && g.members) || []).filter(function (x) { return x.user_id === uid; })[0];
+return (people[uid] && people[uid].name) || (m && m.member_name) || 'Someone';
+}
+/* The one place a group's current name is pushed onto its window and its inbox row. */
+function applyGroupTitle(cid) { var key = groupKey(cid); if (wins[key]) renameWin(key, groupTitleFor(cid)); }
+function groupRenameLine(who, had, now) {
+if (!now) return who + ' took the group’s name off. It goes by who is in it again.';
+return who + (had ? ' renamed the group “' : ' named the group “') + now + '”.';
+}
+async function nameGroup(cid) {
+var g = myGroups[cid]; if (!g) return;
+var raw = await showPromptModal(g.title ? 'Rename this group' : 'Name this group', {
+value: g.title || '', placeholder: 'e.g. Road trip crew', maxLength: GROUP_TITLE_MAX, okLabel: 'Save',
+hint: 'Everyone in the group sees the new name. Leave it blank to go back to calling it by who is in it.'
+});
+if (raw === null) return;                  // cancelled
+g = myGroups[cid]; if (!g) return;         // left, or the group closed, while the box was up
+var t = tidyGroupTitle(raw);
+var had = g.title || null;                 // read now: someone else may have renamed it meanwhile
+if ((t || null) === had) return;           // nothing changed, nothing to announce
+var r = await sb.rpc('gc_rename_group', { p_conversation: cid, p_title: t });
+if (r.error) { imSys(groupKey(cid), groupErrorText(r.error)); return; }
+if (myGroups[cid]) myGroups[cid].title = r.data || null;
+applyGroupTitle(cid);
+imSys(groupKey(cid), groupRenameLine('You', had, r.data || null));
+}
+/* A rename reaches everyone else as an UPDATE on conversations (group_names_feature.sql put the
+   table in the realtime feed, and the "see my groups" policy means only members hear it). The
+   renamer's own window said so when the call came back, so this line is for everybody else;
+   the renamer's other tabs just take the new name quietly. */
+function watchGroupNames(channel) {
+channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, function (p) {
+var row = p.new; if (!row || row.closed_at) return;
+var g = myGroups[row.id]; if (!g) return;
+var had = g.title || null, now = row.title || null;
+if (had === now) return;
+g.title = now;
+applyGroupTitle(row.id);
+if (row.title_by && row.title_by !== me.id) imSys(groupKey(row.id), groupRenameLine(groupMemberName(g, row.title_by), had, now));
+});
+}
+/* An UPDATE that happened while the connection was down never arrives, so catchUp() re-reads the
+   names. It only touches windows that exist -- it must not bring back a group row you swiped away. */
+async function refreshGroupNames() {
+var ids = Object.keys(myGroups); if (!sb || !ids.length) return;
+var r = await sb.from('conversations').select('id, title').in('id', ids);
+if (r.error || !r.data) return;
+r.data.forEach(function (c) {
+var g = myGroups[c.id]; if (!g || (g.title || null) === (c.title || null)) return;
+g.title = c.title || null; applyGroupTitle(c.id);
+});
 }
 /* ---- being added to one while you are sitting there ------------------------------------- */
 /* Without this, someone adding you to a group does nothing visible until you reload: the group's
@@ -2586,7 +2648,14 @@ var nmEl = el.querySelector('.nm');
    30-minute recentPeople pool and was never a friend -- without it openMenu has no name to fall
    back on for them and silently declines to open at all (see its `if (!name) return`). The window
    itself always still knows their last-known name (wins[id].name), whisper history or not. */
-nmEl.onclick = function (e) { e.stopPropagation(); openMenu(id, nmEl, wins[id] && wins[id].name); };
+nmEl.onclick = function (e) {
+e.stopPropagation();
+/* v159: a group's name is not a person. It opens the same sheet as the 👥 button (members, name,
+   add, leave) -- before this it opened a person menu for the window key "g<id>", whose Get Info,
+   Block and Add Friend all failed because that is nobody's id. */
+if (isGroup) { openGroupMembers(groupIdOf(id), nmEl); return; }
+openMenu(id, nmEl, wins[id] && wins[id].name);
+};
 nmEl.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nmEl.click(); } };
 $('ims').appendChild(el); wins[id] = win;
 makeTab(id); updateTab(id); updateWinAvatar(id); updateWinPresenceDot(id);
@@ -2603,7 +2672,7 @@ var b = document.createElement('div'); b.className = 'im-tab'; b.tabIndex = 0; b
 b.innerHTML = '<span class="tava" aria-hidden="true"></span><span class="tmeta"><span class="nm"></span><span class="snippet"></span></span><span class="badge hidden">0</span>' +
 '<button type="button" class="tab-close" title="Remove this conversation" aria-label="Remove conversation with ' + esc(w.name) + '">✕</button>';
 b.querySelector('.nm').textContent = w.name;
-b.setAttribute('aria-label', 'Open whisper with ' + w.name);
+b.setAttribute('aria-label', (isGroupKey(id) ? 'Open group ' : 'Open whisper with ') + w.name);
 b.addEventListener('click', function (e) {
 if (e.target.closest('.tab-close')) return; // handled by its own onclick below
 if (b._swiped) { b._swiped = false; return; } // just finished a real drag -- don't also open it
@@ -2676,12 +2745,15 @@ el.addEventListener('pointercancel', end);
 function renameWin(id, name) {
 var w = wins[id]; if (!w || !name || w.name === name) return;
 w.name = name;
-w.el.setAttribute('aria-label', 'Whisper with ' + name);
+/* v159: a group window keeps its group wording -- its 👥 button is not a buzz and its composer
+   says "Message the group", whatever the group is called now. */
+var grp = isGroupKey(id);
+w.el.setAttribute('aria-label', (grp ? 'Group: ' : 'Whisper with ') + name);
 var nmEl2 = w.el.querySelector('.nm'); nmEl2.textContent = name; nmEl2.setAttribute('aria-label', name + ' options');
-var buzzBtn = w.el.querySelector('.buzz'); if (buzzBtn) buzzBtn.setAttribute('aria-label', 'Buzz ' + name);
-w.ta.placeholder = 'Whisper to ' + name + '...';
+var buzzBtn = w.el.querySelector('.buzz'); if (buzzBtn && !grp) buzzBtn.setAttribute('aria-label', 'Buzz ' + name);
+if (!grp) w.ta.placeholder = 'Whisper to ' + name + '...';
 if (w.tab) {
-w.tab.querySelector('.nm').textContent = name; w.tab.setAttribute('aria-label', 'Open whisper with ' + name);
+w.tab.querySelector('.nm').textContent = name; w.tab.setAttribute('aria-label', (grp ? 'Open group ' : 'Open whisper with ') + name);
 var closeBtn = w.tab.querySelector('.tab-close'); if (closeBtn) closeBtn.setAttribute('aria-label', 'Remove conversation with ' + name);
 }
 }
@@ -7330,6 +7402,7 @@ if (typeof notifEnabled !== 'undefined' && notifEnabled && 'Notification' in win
 await stopPeek();
 channel = sb.channel('room:' + (C.ROOM || 'main'), { config: { presence: { key: me.id } } });
 watchGroupMembership(channel); // v154
+watchGroupNames(channel); // v159
 channel.on('presence', { event: 'sync' }, function () {
 var stt = channel.presenceState(); people = {};
 Object.keys(stt).forEach(function (k) { if (stt[k][0]) people[k] = stt[k][0]; });
