@@ -775,3 +775,66 @@ Step 2 (4-player Hold'em) is built on these tables.
 
 **Release plan note:** `game_tables`, `table_seats`, `table_messages`, `table_invites`, `uno_tables`,
 `uno_table_hands`, `uno_table_decks` and `table_results` join the release reset list.
+
+# Build 170: Hold'em for 2-4 players at the Game Room tables (Step 2 of the 4-player games) (18 Sept 2026)
+
+Current state: **app.js 170, style.css 119, cache `gc2000-v201`.** Database: `supabase/holdem_tables_feature.sql`
+(tested by `supabase/holdem_tables_dryrun.sql`; `game_tables_dryrun.sql` updated to run on top of it).
+
+**Asked for:** "go ahead and do holdem now", on the tables built in Step 1. Decided with the user earlier:
+- No-limit Texas Hold'em for **2-4 players**, with the 4 spectator seats. Spectators watch and chat only.
+- **Chips are XP and only change hands** ("remove the cap"): no daily cap, nothing created or destroyed.
+- **Two missed turns in a row** and you're out: your stack goes back to your XP and you leave the table.
+- The same two stakes as the heads-up game, picked by whoever opens the table: **Low** (blinds 1/2, sit down with
+  5-10 XP) and **High** (blinds 2/5, sit down with 10-50 XP).
+
+**How it works**
+- Opening: the Hold'em button asks for the stakes, then the buy-in. Sitting down (from the list, the announcement,
+  an invite, or from watching) asks for a buy-in too. The buy-in leaves your XP at once (an escrow) and your whole
+  stack comes back when you give up the seat: leaving, "Cash out & watch", two missed turns, a quiet device, or
+  the table closing. Every cash-out is written to `table_results` with its net result.
+- A free player seat can be taken at any time, even mid-hand: you're dealt in at the next hand.
+- The host deals the first hand. After that the browsers ask for the next hand by themselves, 5 seconds after a
+  fold win and 8 after a showdown (the server deals no sooner than 4). With fewer than two players holding chips
+  the table waits, and starts again by itself when someone sits back down.
+- Rules: the button moves one funded seat a hand; the next two post the blinds (heads-up, the button posts the
+  small blind). Fold, check/call, bet/raise-to with a minimum raise (all-in for less is allowed). An uncalled bet
+  goes back. Side pots for players all-in for different amounts, each won by the best hand among those who
+  covered it; ties split, odd chips from the button. When at most one player can still bet, the board runs out.
+- A player on no chips after a hand moves to the watchers (or off the table if those four seats are full).
+- The turn clock is the same 30 seconds: the first miss checks if it can, otherwise folds, with a warning;
+  the second takes the player off the table.
+- On screen: each seat shows the stack, the bet, D/SB/BB, face-down cards (your own face up), folded / all-in /
+  won / plays next hand. The felt shows the board, the pot and street, whose move it is, the clock and the last
+  action; between hands the result and a countdown. Under it, your two cards and the buttons: Fold (only when
+  there is something to call), Check or Call, and Min / Pot / All-in with a box for any amount. Every hand's
+  result goes into the table chat once.
+- Leaving while still in a hand asks twice ("Fold and leave?"). What you already bet stays in the pot.
+- Two small fixes found on the way: Escape in a dialog on top of the Game Room (like the buy-in box) no longer
+  closes the Game Room too, and a small menu with no room above its button now opens below it.
+
+**Tested**
+- Local Postgres, rolled back: 47 checks (escrow and ranges, a three-way all-in run out, side pots with four
+  stacks, a split pot with an odd chip, heads-up blind order, sitting down mid-hand, busting, the clock and the
+  idle rule, leaving mid-hand, closing, high stakes, waiting and restarting). The UNO table tests (62) still pass
+  on top.
+- Concurrency: 8 simulated players with 200 XP each playing random moves in 8 parallel sessions, with a ninth
+  aging clocks and seats underneath, three times over: 163 hands, no deadlocks, no negative stack, no hand stuck,
+  and every XP accounted for (1,600 before, 1,600 after).
+- Integration: five simulated browsers running the real Game Room code against the real migrations, clicking
+  the real buttons (stakes menu, buy-ins, Fold / Call / presets / typed raises with Enter, Cash out & watch,
+  Leave): after every single action it checks that XP is conserved, that every screen agrees with the database
+  (the lit seat, the buttons only for the player on turn, the stacks, the board), and that nobody sees anyone
+  else's cards. Random play, so it was run with six seeds: 213-276 checks per run, all passed. The UNO
+  integration test (53) still passes.
+- Rendered with the real CSS in Chromium at 1366x768 and 390x844 (lobby, waiting, my move, watching, showdown).
+- The whole app loads in jsdom with no errors.
+- Production, inside rolled-back transactions: the 47 Hold'em checks, 0 failed, and the 62 UNO table checks on
+  top of the new SQL, 0 failed. Then applied. Checked after applying: 3 new tables with RLS, 2 policies, both
+  listened-to tables in the publication, browsers can call the 8 verbs and none of the 16 new helpers (nor
+  `table_shut`, `table_drop`, `tables_sweep`), anon nothing.
+- Live: app.js, style.css, sw.js and index.html match the repo byte for byte (SHA-256).
+
+**Not tested yet:** real phones and real realtime with people at a table. That is the user's Hold'em test.
+
+**Release plan note:** `holdem_tables`, `holdem_table_hands` and `holdem_table_decks` join the release reset list.
