@@ -653,3 +653,29 @@ Nothing in app.js calls any of them. No non-definer function, policy, view or tr
 them, and pg_cron isn't installed, so revoking EXECUTE from `public, anon, authenticated` (keeping
 `service_role`) should not break anything. `holdem_act` and `uno_pass` are called by the client and
 must stay executable.
+
+# Build 168: bigger conversation windows on desktop (18 Sept 2026)
+
+Current state: **app.js 168, style.css 117, cache `gc2000-v199`.**
+
+**Reported:** Battleship doesn't fit inside the whisper window in the browser. The user asked for it
+"taller and a bit wider", for group chats too.
+
+**Why:** the Messages dock was at most 340×480 on desktop, which left the log about 321 px tall.
+Measured with the real CSS, a Battleship card needed 397–515 px depending on the width, so it
+overflowed by 76–194 px.
+
+**Fix (desktop only; phones already give the dock the whole screen):** an open conversation,
+whisper or group, is now up to **400 px wide** (never under 280; from 260–340) and up to **760 px
+tall** (from 480), limited by the window's height. The width still follows the gap beside the room
+window, so it only reaches 400 where there's room. The inbox list keeps the old size. On a short
+screen the Battleship sea shrinks a little inside the dock (`max-width … calc(100vh - 440px)`,
+never under 200 px), so the whole card still fits. The roulette bubble steps left of the wider
+panel (new `dm-thread` class on the root).
+
+Measured after the change, the placing and in-play cards fit without scrolling at 1920×950,
+1536×730, 1440×790, 1366×650 and 1280×650.
+
+**Trade-off:** on screens wide enough for the Ballot Box gutter (1340 px+), a conversation that is
+open now covers the lower part of the Ballot Box panel. It comes back as soon as the dock returns
+to the list or is collapsed.
