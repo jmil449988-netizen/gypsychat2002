@@ -1879,3 +1879,45 @@ border-radius:3px;padding:3px 6px;cursor:pointer;max-width:46%}
   .tp-tagrow{padding:5px 8px;gap:6px}
   .tp-sel{font-size:16px}  /* iOS zooms any field under 16px on focus; see the phone overhaul notes */
 }
+
+/* ==================== v109: replies ====================
+   The quoted stub above a reply. Indented and hung off a left rule so the eye reads it as
+   belonging to the message below it rather than as a message of its own -- the same shape Discord
+   and Instagram settled on, for the same reason: a quote that looks like a post doubles the
+   apparent traffic in the room. Small, dim, one line, clipped: it is a pointer, not a copy, and
+   anyone who wants the whole thing taps it and is taken there. */
+.rq{display:block;width:100%;text-align:left;font:italic 11px "IM Fell English",Georgia,serif;
+color:var(--ash);background:none;border:none;border-left:2px solid var(--gold-lo);
+padding:0 0 0 7px;margin:2px 0 1px 14px;cursor:pointer;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.75}
+.rq:hover,.rq:focus-visible{color:var(--gold-hi);border-left-color:var(--gold);opacity:1;outline:none}
+.rq b{font-style:normal;color:var(--gold);font-weight:700}
+.rq-gone{opacity:.6}
+/* The message you were taken to, marked just long enough to find it. A colour wash rather than a
+   scroll-and-hope: on a busy log, landing near the right place is not the same as being shown
+   which line it was. */
+@keyframes rq-flash{0%{background:rgba(201,162,74,.34)}100%{background:transparent}}
+.rq-flash{animation:rq-flash 1.6s ease-out 1}
+@media (prefers-reduced-motion:reduce){.rq-flash{animation:none;outline:2px solid var(--gold);outline-offset:1px}}
+
+/* The bar above the composer saying what you are about to answer. */
+.reply-bar{display:flex;align-items:center;gap:7px;padding:4px 10px;flex:none;
+background:linear-gradient(180deg,#241d16,#191410);border-top:1px solid var(--gold-lo);
+font-size:11px;color:var(--ash);min-width:0}
+.reply-bar.hidden{display:none}
+.rb-icon{color:var(--gold);flex:none}
+.rb-txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rb-txt b{color:var(--gold);font-weight:700}
+.rb-x{flex:none;font:700 12px Georgia,serif;color:var(--ash);background:none;border:none;
+cursor:pointer;padding:0 3px;line-height:1}
+.rb-x:hover,.rb-x:focus-visible{color:var(--blood);outline:none}
+
+/* Reply inside the long-press picker. The picker is a 4-wide grid of emoji; this spans the whole
+   width above them and is deliberately not round or emoji-shaped, so it does not read as a tenth
+   reaction sitting among the nine. */
+.rpicker .rp-reply{grid-column:1 / -1;width:auto;height:26px;font:700 10px Cinzel,Georgia,serif;
+letter-spacing:1px;color:var(--gold);background:linear-gradient(180deg,#2e261d,#1a1511);
+border:1px solid var(--gold-lo);border-radius:3px;margin-bottom:2px}
+.rpicker .rp-reply:hover,.rpicker .rp-reply:focus-visible{color:var(--gold-hi);border-color:var(--gold);
+box-shadow:0 0 8px rgba(201,162,74,.5);outline:none}
+@media (max-width:500px){.rq{font-size:12px;margin-left:10px}.reply-bar{font-size:12px}}
