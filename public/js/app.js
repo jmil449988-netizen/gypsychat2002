@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 152;
+var BUILD_NUMBER = 153;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -922,7 +922,10 @@ function applyDmVisibility() {
 var anyOpen = Object.keys(wins).some(function (id) { return !wins[id].minimized; });
 /* a waiting friend request keeps the dock on screen too -- it's the only place requests show now */
 var pending = typeof pendingRequestCount === 'function' && pendingRequestCount() > 0;
-if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff && !anyOpen && !pending);
+/* v153: the hide-messages toggle lives in the status bar, which phones do not show, so a phone
+   carrying this flag would have no way on earth to turn messages back on. Ignore it at pill
+   widths rather than leaving people stranded. */
+if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff && !pillActive() && !anyOpen && !pending);
 }
 function updateDmToggleBtn() {
 applyDmVisibility();
@@ -2174,20 +2177,47 @@ dmBar.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.pre
 var pillMoved = false, pillPos = null;
 var PILL_TAB = 16, PILL_DOCK_FRACTION = 0.55;
 function pillActive() { return window.innerWidth <= 500; }
-function pillSize() { var r = dmDock ? dmDock.getBoundingClientRect() : null; return { w: (r && r.width) || 120, h: (r && r.height) || 36 }; }
+/* v153: pillSize() measures the PILL, never the expanded panel. syncDock() ends by calling
+   applyPill() on every sync -- including the syncs that happen while a whisper is open, which is
+   most of them -- and the old version measured whatever the dock was at that moment. Open a
+   whisper on a phone and that is a 402x840 box, so clampPill's "keep it on screen" arithmetic
+   (innerWidth - w - 4, innerHeight - h - 4) collapsed to roughly (8, 52) and rewrote the pill's
+   position to the top-left corner. On an iPhone that corner is under Safari's address bar -- the
+   same strip build 116 had to clear for the panel headers -- so the pill was neither visible nor
+   tappable, and it happened every single time a whisper was opened and minimised again. */
+var lastPillSize = { w: 127, h: 36 };
+function pillSize() {
+if (dmDock && dmDock.classList.contains('collapsed')) {
+var r = dmDock.getBoundingClientRect();
+if (r.width > 1 && r.height > 1) lastPillSize = { w: r.width, h: r.height };
+}
+return lastPillSize;
+}
+/* Taps in iOS Safari's top strip don't reach the page, so the pill is never allowed to settle
+   there however the numbers come out. */
+function pillTopMin() { return document.documentElement.classList.contains('ios') ? 56 : 4; }
+/* visualViewport is what is actually on screen once iOS's bars are counted; innerHeight includes
+   the part hidden behind them, which is how a pill can be placed somewhere you cannot see. */
+function pillViewport() {
+var vv = window.visualViewport;
+return { w: (vv && vv.width) || window.innerWidth, h: (vv && vv.height) || window.innerHeight };
+}
 function clampPill(x, y) {
-var sz = pillSize();
-return { x: Math.max(4, Math.min(window.innerWidth - sz.w - 4, x)), y: Math.max(4, Math.min(window.innerHeight - sz.h - 4, y)) };
+var sz = pillSize(), vp = pillViewport(), top = pillTopMin();
+return { x: Math.max(4, Math.min(vp.w - sz.w - 4, x)), y: Math.max(top, Math.min(vp.h - sz.h - 4, y)) };
 }
 /* pillPos: { x, y } for a free-floating pill, plus docked:'left'|'right' when it's been swept
    to an edge -- then only PILL_TAB px of it peek in (like the threads/roulette bubbles) and x/y
    remember where it floated before, for when it's tapped back out. */
 function applyPill() {
 if (!dmDock) return;
+/* v153: there is no pill on screen while the panel is open, so there is nothing to place -- and
+   running the geometry here against the open panel is exactly what used to lose it. */
+if (dockOpen && pillActive()) return;
 if (!pillPos || !pillActive()) { dmDock.classList.remove('moved', 'pill-docked'); return; }
 var sz = pillSize(), c = clampPill(pillPos.x, pillPos.y), x = c.x;
 if (pillPos.docked === 'left') x = -(sz.w - PILL_TAB);
-else if (pillPos.docked === 'right') x = window.innerWidth - PILL_TAB;
+else if (pillPos.docked === 'right') x = pillViewport().w - PILL_TAB;
 dmDock.style.setProperty('--pill-x', x + 'px'); dmDock.style.setProperty('--pill-y', c.y + 'px');
 dmDock.classList.add('moved');
 dmDock.classList.toggle('pill-docked', !!pillPos.docked);
@@ -5901,23 +5931,44 @@ esc(hour.name) + '<span class="sc-theme"> \u00B7 ' + esc(hour.theme) + '</span><
 dayDivider(log, 'room', Date.now());
 log.appendChild(d); log.scrollTop = log.scrollHeight;
 }
-var lastBellKey = null;
+/* v153: which canonical hour we are IN, not which one has just struck. The hours are periods and
+   not instants -- the Ninth Hour runs from three o'clock until Vespers -- so arriving at 15:40
+   should still bring the Ninth Hour's reading rather than nothing at all.
+   This is also the whole reason phones never showed one. The old rule was "the first two minutes
+   past the hour", checked by a 30 s interval; iOS suspends a backgrounded tab's timers entirely,
+   so on a phone that window was essentially never open while anyone was looking, and a desktop
+   left running would show a reading the same phone never did. */
+function canonicalHourNow(d) {
+for (var h = d.getHours(); h >= 0; h--) if (HOURS_OF_THE_DAY[h]) return h;
+return null;
+}
+/* One key, not a list: the only question ever asked is whether the hour we are in now has been
+   read yet, and the key carries its date, so it cleans up after itself. */
+var shownHour = null;
+try { shownHour = localStorage.getItem('gc_hour_shown') || null; } catch (e) {}
 function bellTick() {
 if (!me) return; // the sign-on screen is not the room; no bells for someone still at the door
-var d = new Date(), h = d.getHours(), hour = HOURS_OF_THE_DAY[h];
+var d = new Date(), h = canonicalHourNow(d), hour = h === null ? null : HOURS_OF_THE_DAY[h];
 if (!hour) return;
-/* Only in the first couple of minutes past the hour. A laptop that was shut at 11:30 and opened
-   at 14:10 should not fire the noon bell on the way back up -- it would be announcing an hour
-   that has been and gone, and on a machine that sleeps a lot it would do it every single time. */
-if (d.getMinutes() > 2) return;
 var key = d.toDateString() + ' ' + h;
-if (lastBellKey === key) return; // the 30 s tick visits the same minute more than once
-lastBellKey = key;
-if (!document.hidden) playSound('bell'); // a hidden tab's audio context is suspended anyway
+if (shownHour === key) return;
+shownHour = key;
+try { localStorage.setItem('gc_hour_shown', key); } catch (e) {}
+/* The bell announces an hour striking. A reading being caught up on -- a phone unlocked at 15:40,
+   a tab opened after lunch -- arrives quietly, because ringing for an hour that struck forty
+   minutes ago would be announcing something that has already happened. */
+if (d.getHours() === h && d.getMinutes() <= 2 && !document.hidden) playSound('bell');
 var entry = readingFor(h);
 if (entry) addScripture(hour, entry); else addSys('\u{1F514} ' + hour.name + '.');
 }
 setInterval(bellTick, 30000);
+/* A locked phone stops the interval above dead, so every way the app can come back to life
+   checks as well. This is what keeps a phone and a desktop showing the same reading. */
+['visibilitychange', 'focus', 'pageshow'].forEach(function (ev) {
+(ev === 'visibilitychange' ? document : window).addEventListener(ev, function () {
+if (!document.hidden) bellTick();
+});
+});
 
 /* ---------- where the Threads button lives (v138) ----------
    On a phone the Threads toggle is what it has always been: a floating bubble parented to
@@ -7198,6 +7249,7 @@ renderPeople();
 Object.keys(wins).forEach(updateTab); // inbox rows: snippets and unread badges from the replay, in one pass
 if (dmDock) dmDock.classList.remove('hidden');
 syncDock();
+bellTick(); // v153: catch up on this hour's reading now, rather than up to 30 s later or never
 startBallot(); // the ballot box in the right-hand gutter (wide layout only -- see style.css)
 /* Reactions aren't part of the message row itself, so they need their own pass once the room
    messages they belong to actually exist in the DOM to be painted onto -- whispers are excluded,
