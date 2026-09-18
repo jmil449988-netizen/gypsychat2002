@@ -29,6 +29,7 @@ var tttLeaderboardList = $('tttLeaderboardList'), lbTabXp = $('lbTabXp'), lbTabT
 var unoLeaderboardList = $('unoLeaderboardList'), lbTabUno = $('lbTabUno');
 var hmLeaderboardList = $('hmLeaderboardList'), lbTabHm = $('lbTabHm'), hdLeaderboardList = $('hdLeaderboardList'), lbTabHd = $('lbTabHd');
 var prLeaderboardList = $('prLeaderboardList'), lbTabPr = $('lbTabPr');
+var bsLeaderboardList = $('bsLeaderboardList'), lbTabBs = $('lbTabBs');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
 var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
 var frqSection = $('frqSection'), frqCount = $('frqCount'), friendReqList = $('friendReqList');
@@ -76,7 +77,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 166;
+var BUILD_NUMBER = 167;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -401,7 +402,8 @@ return [
 ['🃏 UNO', function () { challengeUno(id, name); }],
 ['🪢 Hangman', function () { challengeHangman(id, name); }],
 ['♠ Texas Hold’em', function () { setTimeout(function () { holdemStakesMenu(id, name); }, 0); }],
-['🂡 Prasta', function () { challengePrasta(id, name); }]
+['🂡 Prasta', function () { challengePrasta(id, name); }],
+['🚢 Battleship', function () { challengeBattleship(id, name); }]
 ];
 }
 
@@ -480,6 +482,11 @@ if (kind === 'signon') { tone(660, 0.09, 0, 'triangle'); tone(880, 0.12, 0.09, '
 else if (kind === 'ding') { tone(1050, 0.14, 0, 'sine'); }
 else if (kind === 'turn') { tone(880, 0.08, 0, 'triangle', 0.14); tone(1320, 0.16, 0.09, 'triangle', 0.14); } // v121: "your move" -- a rising two-note chime, distinct from the whisper ding
 else if (kind === 'buzz') { tone(120, 0.5, 0, 'sawtooth', 0.2); tone(90, 0.5, 0.05, 'sawtooth', 0.2); }
+/* v167 Battleship: a splash for a miss, a boom for a hit, a longer rumble with a sinking groan for a
+   ship going down. Synth until the user supplies recordings (they would go in SOUND_FILES as usual). */
+else if (kind === 'bs-splash') { noiseBurst(0.5, 1100, 0.7, 0.3, 0, 'lowpass'); sweep(900, 220, 0.35, 0, 'sine', 0.05); }
+else if (kind === 'bs-boom') { noiseBurst(0.7, 200, 0.7, 0.55, 0, 'lowpass'); sweep(150, 38, 0.55, 0, 'sine', 0.35); }
+else if (kind === 'bs-sunk') { noiseBurst(1.1, 160, 0.6, 0.6, 0, 'lowpass'); sweep(140, 30, 0.9, 0, 'sine', 0.35); sweep(520, 110, 1.2, 0.2, 'sawtooth', 0.04); }
 }
 /* ---------- sound-effect commands (/slap, /fart, /gunshot ... v113) ----------
    Every sound is synthesized here with Web Audio in an 8-bit-ish style -- no files to host,
@@ -1666,7 +1673,7 @@ if (lastMsgAt) {
 var r = await sb.from('messages').select('*').eq('room', C.ROOM || 'main').gt('created_at', lastMsgAt).order('created_at', { ascending: true }).limit(200);
 if (!r.error && r.data) r.data.forEach(handleMessage);
 }
-await Promise.all([loadGames(), loadUno(), loadHangman(), loadHoldem(), refreshGroupNames()]);
+await Promise.all([loadGames(), loadUno(), loadHangman(), loadHoldem(), loadBattleship(), refreshGroupNames()]);
 if (typeof refreshMyStats === 'function') refreshMyStats();
 } catch (e) {}
 }
@@ -2062,12 +2069,14 @@ function loadUnoLeaderboard() { return loadGameLadder(unoLeaderboardList, 'uno_l
 function loadHmLeaderboard() { return loadGameLadder(hmLeaderboardList, 'hangman_leaderboard', 'No Hangman games finished yet — open a whisper, tap 🎲 and pick Hangman.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
 function loadHdLeaderboard() { return loadGameLadder(hdLeaderboardList, 'holdem_leaderboard', 'Nobody has cashed out of a Hold’em table yet — open a whisper, tap 🎲, pick Texas Hold’em and choose your stakes.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + (x.net >= 0 ? '+' : '') + x.net + ' XP'; }); }
 function loadPrLeaderboard() { return loadGameLadder(prLeaderboardList, 'prasta_leaderboard', 'No hands of Prasta yet — open a whisper, tap 🎲, pick Prasta and name a stake.', function (x) { return x.wins + 'W · ' + x.losses + 'L · ' + (x.net >= 0 ? '+' : '') + x.net + ' XP'; }); }
+function loadBsLeaderboard() { return loadGameLadder(bsLeaderboardList, 'battleship_leaderboard', 'No Battleship games finished yet — open a whisper, tap 🎲 and pick Battleship. A win is worth 10 XP, a loss 3.', function (x) { return x.wins + 'W · ' + x.losses + 'L'; }); }
 var LB_TABS = [['xp', function () { return lbTabXp; }, function () { return leaderboardList; }, function () { loadLeaderboard(); }],
 ['ttt', function () { return lbTabTtt; }, function () { return tttLeaderboardList; }, loadTttLeaderboard],
 ['uno', function () { return lbTabUno; }, function () { return unoLeaderboardList; }, loadUnoLeaderboard],
 ['hm', function () { return lbTabHm; }, function () { return hmLeaderboardList; }, loadHmLeaderboard],
 ['hd', function () { return lbTabHd; }, function () { return hdLeaderboardList; }, loadHdLeaderboard],
-['pr', function () { return lbTabPr; }, function () { return prLeaderboardList; }, loadPrLeaderboard]];
+['pr', function () { return lbTabPr; }, function () { return prLeaderboardList; }, loadPrLeaderboard],
+['bs', function () { return lbTabBs; }, function () { return bsLeaderboardList; }, loadBsLeaderboard]];
 function showLeaderboardTab(which) {
 if (!LB_TABS.some(function (t) { return t[0] === which; })) which = 'xp';
 LB_TABS.forEach(function (t) {
@@ -2079,7 +2088,7 @@ if (on) t[3]();
 }
 function activeLeaderboardTab() { var hit = LB_TABS.filter(function (t) { var tab = t[1](); return tab && tab.classList.contains('active'); })[0]; return hit ? hit[0] : 'xp'; }
 LB_TABS.forEach(function (t) { var tab = t[1](); if (tab) tab.onclick = function () { showLeaderboardTab(t[0]); }; });
-[leaderboardList, tttLeaderboardList, unoLeaderboardList, hmLeaderboardList, hdLeaderboardList].forEach(function (list) {
+[leaderboardList, tttLeaderboardList, unoLeaderboardList, hmLeaderboardList, hdLeaderboardList, prLeaderboardList, bsLeaderboardList].forEach(function (list) { // v167: + Prasta (tapping a Prasta row did nothing) and Battleship
 if (!list) return;
 /* Tapping a row opens the same Get Info / Whisper / Block / ... menu as tapping their name
    anywhere else, rather than the leaderboard being a dead-end list. The panel sits at z-index 40,
@@ -2719,6 +2728,7 @@ if (unoCardClick(e, id)) return;
 if (hmCardClick(e, id)) return;
 if (hdCardClick(e, id)) return;
 if (prCardClick(e, id)) return;
+if (bsCardClick(e, id)) return;
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
 var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { reportMessage(rpt.dataset.mid); return; }
 /* Same Get Info / Whisper / Tag in Chat / Block menu a name click opens everywhere else (main
@@ -4421,6 +4431,7 @@ else { games[r.data.id] = r.data; renderGameCard(r.data, { scroll: false }); }
 });
 }
 });
+bsClockTick(); // v167: Battleship keeps two clocks (placing, then shots) -- see bsClockTick
 }
 setInterval(clockTick, 250);
 async function challengeGame(peerId, name) {
@@ -4812,7 +4823,7 @@ if (document.hidden) bumpTitle();
 var looking = !w.minimized && dockOpen && activeDm === peer && !document.hidden;
 dismissToasts(peer);
 if (looking || !info.kind) return;
-var name = w.name, icons = { 'Tic-Tac-Toe': '⚔', 'UNO': '🃏', 'Hangman': '🪢', 'Hold’em': '♠' };
+var name = w.name, icons = { 'Tic-Tac-Toe': '⚔', 'UNO': '🃏', 'Hangman': '🪢', 'Hold’em': '♠', 'Battleship': '🚢' };
 showToast({
 peer: peer, kind: info.kind, icon: icons[info.game] || '🎲', text: w.snippet,
 sub: info.kind === 'challenge' ? 'Tap to open the whisper' : (info.kind === 'turn' ? (info.seconds || TURN_SECONDS) + 's left — tap to play' : 'Tap to see the result'),
@@ -5206,6 +5217,384 @@ var h = await sb.from('prasta_hands').select('game_id, cards').in('game_id', ope
 if (!h.error && h.data) h.data.forEach(function (x) { prHand[x.game_id] = x.cards || []; });
 }
 r.data.forEach(function (g) { if (gameShowsCard(g)) renderPrCard(g, { scroll: false }); });
+}
+
+/* ---------- Battleship in whispers (v167) ----------
+   supabase/battleship_feature.sql. A classic 10x10 sea, five ships each: Carrier 5 (A),
+   Battleship 4 (B), Cruiser 3 (C), Submarine 3 (S), Destroyer 2 (D). The rules the user picked:
+   each fleet starts in a random layout the server deals at accept, which you can Shuffle, turn (tap
+   a ship) and move (drag it) before pressing Ready -- 60 s, after which you sail with whatever was
+   last sent; a HIT SHOOTS AGAIN and a miss hands the turn over; 10 XP a win, 3 a loss.
+   bsGames is the public row (both seas, as the attacker sees them); bsFleet is MY layout, from
+   battleship_fleets, whose policy only shows your own until the game is over (bsReveal is theirs,
+   fetched then). bsDraft is the layout being arranged in this browser before Ready. */
+var bsGames = {}, bsFleet = {}, bsDraft = {}, bsReveal = {}, bsFiring = {}, bsResignArmed = {}, bsDragging = null, bsRenderQueued = {};
+var BS_SHIPS = [['A', 5, 'Carrier'], ['B', 4, 'Battleship'], ['C', 3, 'Cruiser'], ['S', 3, 'Submarine'], ['D', 2, 'Destroyer']];
+var BS_PLACE_SECONDS = 60;
+function bsAmChallenger(g) { return g.challenger_id === me.id; }
+function bsMySea(g) { return (bsAmChallenger(g) ? g.challenger_sea : g.opponent_sea) || ''; }    // shots fired at my fleet
+function bsTheirSea(g) { return (bsAmChallenger(g) ? g.opponent_sea : g.challenger_sea) || ''; } // my shots at theirs
+function bsImReady(g) { return bsAmChallenger(g) ? g.challenger_ready : g.opponent_ready; }
+function bsTheyReady(g) { return bsAmChallenger(g) ? g.opponent_ready : g.challenger_ready; }
+function bsShots(g) { return (g.challenger_sea || '').replace(/\./g, '').length + (g.opponent_sea || '').replace(/\./g, '').length; }
+function bsShipCells(lay, ch) { var out = []; for (var i = 0; i < 100; i++) if (lay.charAt(i) === ch) out.push(i); return out; }
+function bsCellsFor(r0, c0, len, horiz) {
+var out = [];
+for (var k = 0; k < len; k++) { var r = horiz ? r0 : r0 + k, c = horiz ? c0 + k : c0; if (r < 0 || r > 9 || c < 0 || c > 9) return null; out.push(r * 10 + c); }
+return out;
+}
+/* The same rule the server applies (bs_valid_layout): exactly the five ships, each one straight and unbroken. */
+function bsValid(lay) {
+if (typeof lay !== 'string' || !/^[.ABCSD]{100}$/.test(lay)) return false;
+return BS_SHIPS.every(function (s) {
+var cells = bsShipCells(lay, s[0]); if (cells.length !== s[1]) return false;
+var horiz = cells[1] === cells[0] + 1;
+return cells.every(function (c, k) { return horiz ? (c === cells[0] + k && Math.floor(c / 10) === Math.floor(cells[0] / 10)) : c === cells[0] + k * 10; });
+});
+}
+/* Shuffle: a fresh random fleet in which no two ships touch, not even corner to corner -- the same
+   way the server deals them (bs_random_layout). Dragging by hand may put ships side by side. */
+function bsRandomLayout() {
+for (var attempt = 0; attempt < 50; attempt++) {
+var grid = []; for (var i = 0; i < 100; i++) grid.push('.');
+var placed = BS_SHIPS.every(function (s) {
+for (var tries = 0; tries < 300; tries++) {
+var horiz = Math.random() < 0.5, len = s[1];
+var r = horiz ? Math.floor(Math.random() * 10) : Math.floor(Math.random() * (11 - len));
+var c = horiz ? Math.floor(Math.random() * (11 - len)) : Math.floor(Math.random() * 10);
+var ok = true;
+for (var rr = r - 1; rr <= r + (horiz ? 0 : len - 1) + 1 && ok; rr++) for (var cc = c - 1; cc <= c + (horiz ? len - 1 : 0) + 1; cc++) {
+if (rr >= 0 && rr <= 9 && cc >= 0 && cc <= 9 && grid[rr * 10 + cc] !== '.') { ok = false; break; }
+}
+if (!ok) continue;
+bsCellsFor(r, c, len, horiz).forEach(function (x) { grid[x] = s[0]; });
+return true;
+}
+return false;
+});
+if (placed) return grid.join('');
+}
+return null;
+}
+/* Can ship ch sit on these cells? Only its own old cells and open water are free. */
+function bsFits(lay, ch, cells) {
+return !!cells && cells.every(function (c) { var x = lay.charAt(c); return x === '.' || x === ch; });
+}
+function bsPut(lay, ch, cells) {
+var a = lay.split('').map(function (x) { return x === ch ? '.' : x; });
+cells.forEach(function (c) { a[c] = ch; });
+return a.join('');
+}
+/* Tap a ship: turn it about the square that was tapped. If something is in the way, try turning it
+   about its other squares, nearest first, sliding it back inside the sea where it would hang off
+   the edge. Only if none of those fit does it stay put (and the grid gives a little shake). */
+function bsRotate(id, ch, pivot) {
+var lay = bsDraft[id]; if (!lay) return false;
+var cells = bsShipCells(lay, ch), len = cells.length; if (len < 2) return false;
+var nh = !(cells[1] === cells[0] + 1), tapped = Math.max(0, cells.indexOf(pivot));
+var order = cells.map(function (c, i) { return i; }).sort(function (a, b) { return Math.abs(a - tapped) - Math.abs(b - tapped); });
+for (var p = 0; p < order.length; p++) {
+var pv = cells[order[p]], pr = Math.floor(pv / 10), pc = pv % 10;
+for (var k = 0; k < len; k++) {
+var off = (order[p] + k) % len;
+var r0 = nh ? pr : pr - off, c0 = nh ? pc - off : pc;
+if (nh) c0 = Math.max(0, Math.min(10 - len, c0)); else r0 = Math.max(0, Math.min(10 - len, r0));
+var cand = bsCellsFor(r0, c0, len, nh);
+if (bsFits(lay, ch, cand)) { bsDraft[id] = bsPut(lay, ch, cand); return true; }
+}
+}
+return false;
+}
+function bsRecord(peerId) {
+var w = 0, l = 0;
+Object.keys(bsGames).forEach(function (k) { var g = bsGames[k]; if (g.status !== 'finished' || !g.winner || gamePeer(g) !== peerId) return; if (g.winner === me.id) w++; else l++; });
+return { w: w, l: l };
+}
+/* The ships still afloat / sunk, as a row of little hulls. A sunk ship's letters show in the sea it
+   went down in, so this reads straight off the game row for both sides. */
+function bsFleetStatusHtml(sea) {
+return '<span class="bs-hulls">' + BS_SHIPS.map(function (s) {
+var sunk = sea.indexOf(s[0]) >= 0;
+return '<span class="bs-hull' + (sunk ? ' bs-sunk' : '') + '" title="' + s[2] + (sunk ? ' — sunk' : ' — afloat') + '">' + new Array(s[1] + 1).join('<i></i>') + '</span>';
+}).join('') + '</span>';
+}
+/* One grid. o: { cls, ships (layout to draw or null), sea (shots on it or null), open (clickable
+   cells), last (cell), ghost (layout drawn faintly: the other fleet after the game), aim (cell being fired at) } */
+function bsGridHtml(o) {
+var html = '<div class="bs-grid ' + (o.cls || '') + '" role="grid" aria-label="' + esc(o.label || 'Sea') + '">';
+for (var i = 0; i < 100; i++) {
+var ship = o.ships ? o.ships.charAt(i) : '.', shot = o.sea ? o.sea.charAt(i) : '.', cls = 'bs-cell';
+var drawn = ship !== '.' ? ship : (/[ABCSD]/.test(shot) ? shot : '.'), src = ship !== '.' ? o.ships : (o.sea || '');
+if (drawn === '.' && o.ghost && o.ghost.charAt(i) !== '.') { drawn = o.ghost.charAt(i); src = o.ghost; cls += ' bs-ghost'; }
+if (drawn !== '.') {
+cls += ' bs-sh';
+var c = i % 10;
+if (c > 0 && src.charAt(i - 1) === drawn) cls += ' bs-l';
+if (c < 9 && src.charAt(i + 1) === drawn) cls += ' bs-r';
+if (i >= 10 && src.charAt(i - 10) === drawn) cls += ' bs-u';
+if (i < 90 && src.charAt(i + 10) === drawn) cls += ' bs-d';
+}
+if (shot === 'o') cls += ' bs-miss';
+else if (shot === 'x') cls += ' bs-hit';
+else if (/[ABCSD]/.test(shot)) cls += ' bs-hit bs-sunk';
+else if (o.open) cls += ' bs-open';
+if (i === o.last) cls += ' bs-last';
+if (i === o.aim) cls += ' bs-aim';
+html += '<div class="' + cls + '" data-c="' + i + '"></div>';
+}
+return html + '</div>';
+}
+function renderBsCard(g, opts) {
+opts = opts || {};
+if (bsDragging === g.id) { bsRenderQueued[g.id] = true; return; } // mid-drag: repaint when the ship is let go
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+var card = w.log.querySelector('.bs-card[data-gid="' + g.id + '"]');
+if (!card) {
+if (!gameShowsCard(g) || newestGameId(bsGames, peer) !== g.id) return;
+w.log.querySelectorAll('.bs-card').forEach(function (old) { old.remove(); });
+card = document.createElement('div'); card.className = 'bs-card'; card.dataset.gid = g.id; w.log.appendChild(card);
+}
+var mine = bsAmChallenger(g), rec = bsRecord(peer);
+var html = '<div class="ttt-hd"><span class="ttt-title">🚢 Battleship</span><span class="ttt-rec" title="Your record against ' + esc(name) + ' (last 30 days)">' + rec.w + 'W · ' + rec.l + 'L</span></div>';
+var status = '', actions = '', resign = '<button type="button" class="btn bs-resign' + (bsResignArmed[g.id] ? ' armed' : '') + '">' + (bsResignArmed[g.id] ? 'Sure? Resign' : 'Resign') + '</button>';
+var clock = function (total) { var t = new Date(g.turn_started_at).getTime(), left = isNaN(t) ? total : Math.max(0, total - (Date.now() - serverSkew - t) / 1000);
+return '<div class="turn-clock' + (left <= 15 ? ' low' : '') + '" data-clock="bs' + g.id + '" aria-label="Clock"><span class="tc-bar" style="width:' + Math.round(100 * left / total) + '%"></span><span class="tc-num">' + Math.ceil(left) + '</span></div>'; };
+if (g.status === 'pending') {
+status = mine ? 'Waiting for ' + esc(name) + ' to accept…' : '<b>' + esc(name) + '</b> challenges you to Battleship!';
+actions = mine ? '<button type="button" class="btn bs-cancel">Cancel</button>' : '<button type="button" class="btn bs-accept">Accept</button><button type="button" class="btn bs-decline">Decline</button>';
+} else if (g.status === 'active' && g.phase === 'placing') {
+var ready = bsImReady(g), lay = ready ? (bsFleet[g.id] || bsDraft[g.id]) : (bsDraft[g.id] || bsFleet[g.id]);
+if (lay) {
+html += '<div class="bs-label">' + (ready ? 'Your fleet is in position' : 'Your fleet — tap a ship to turn it, drag to move it') + '</div>';
+html += bsGridHtml({ cls: ready ? 'bs-own' : 'bs-place', ships: lay, label: 'Your fleet' });
+} else html += '<div class="bs-label">Dealing your fleet…</div>';
+if (!ready) html += '<div class="bs-tools"><button type="button" class="btn bs-shuffle">🔀 Shuffle</button><button type="button" class="btn bs-ready"' + (lay ? '' : ' disabled') + '>Ready</button></div>';
+html += clock(BS_PLACE_SECONDS);
+status = ready ? 'Waiting for ' + esc(name) + ' to finish placing…' : '<b>Place your ships</b>' + (bsTheyReady(g) ? ' — ' + esc(name) + ' is ready' : '');
+actions = resign;
+} else if (g.status === 'active' || g.status === 'finished') {
+var over = g.status === 'finished', myTurn = !over && g.turn === me.id;
+var theirs = bsTheirSea(g), ours = bsMySea(g), my = bsFleet[g.id] || null;
+var lastTheirs = g.last_by === me.id ? g.last_cell : -1, lastOurs = g.last_by && g.last_by !== me.id ? g.last_cell : -1;
+html += '<div class="bs-label"><span>' + esc(name) + '’s waters</span>' + bsFleetStatusHtml(theirs) + '</div>';
+html += bsGridHtml({ cls: 'bs-enemy' + (myTurn ? ' bs-myturn' : ''), sea: theirs, open: myTurn && bsFiring[g.id] == null, last: lastTheirs, aim: bsFiring[g.id], ghost: over ? bsReveal[g.id] : null, label: name + '’s waters' });
+html += '<div class="bs-sub">' + bsGridHtml({ cls: 'bs-mini', ships: my, sea: ours, last: lastOurs, label: 'Your fleet' }) +
+'<div class="bs-side"><div class="bs-label"><span>Your fleet</span></div>' + bsFleetStatusHtml(ours) + (g.last_action ? '<div class="uno-last">' + esc(g.last_action) + '</div>' : '') + '</div></div>';
+if (!over) {
+html += clock(TURN_SECONDS);
+status = myTurn ? '<b>Your turn</b> — fire!' : esc(name) + ' is aiming…';
+actions = resign;
+} else {
+var pts = gameMyPoints(g), won = g.winner === me.id;
+if (won) status = '<b>You won!</b> ' + (g.result === 'resign' ? esc(name) + ' resigned.' : 'Their whole fleet is on the bottom.') + (pts ? ' +' + pts + ' XP' : (g.result === 'resign' && bsShots(g) < 20 ? ' <span class="ttt-cap">no XP for a resignation this early</span>' : ' <span class="ttt-cap">daily XP cap reached</span>'));
+else status = '<b>' + esc(name) + ' won.</b> ' + (g.result === 'resign' ? 'You resigned.' : 'Your fleet went down.') + (pts ? ' +' + pts + ' XP' : '');
+actions = '<button type="button" class="btn bs-rematch">Rematch</button>';
+}
+} else {
+status = g.status === 'declined' ? (mine ? esc(name) + ' declined.' : 'You declined.') : g.status === 'cancelled' ? 'Challenge withdrawn.' : 'Challenge expired.';
+actions = '<button type="button" class="btn bs-rematch">Challenge again</button>';
+}
+html += '<div class="ttt-status">' + status + '</div><div class="ttt-actions">' + actions + '</div>';
+card.innerHTML = html;
+if (g.status === 'active' && g.phase === 'placing' && !bsImReady(g)) bsBindPlacement(card, g.id);
+if (opts.scroll !== false) w.log.scrollTop = w.log.scrollHeight;
+}
+/* Drag to move a ship, tap to turn it. Pointer events cover mouse, pen and touch alike; the grid
+   has touch-action:none while placing so a drag doesn't scroll the whisper instead. While a ship is
+   being dragged only the cells' classes change, so the element under the finger survives; a full
+   re-render that arrives mid-drag (the other player pressing Ready, say) waits until it's let go. */
+function bsBindPlacement(card, id) {
+var grid = card.querySelector('.bs-place'); if (!grid) return;
+var drag = null;
+function cellAt(ev) {
+var r = grid.getBoundingClientRect(); if (!r.width || !r.height) return -1;
+var x = ev.clientX - r.left, y = ev.clientY - r.top;
+if (x < 0 || y < 0 || x >= r.width || y >= r.height) return -1;
+return Math.floor(y / (r.height / 10)) * 10 + Math.floor(x / (r.width / 10));
+}
+function paint() {
+var lay = bsDraft[id];
+grid.querySelectorAll('.bs-cell').forEach(function (el) {
+var i = +el.dataset.c;
+el.classList.toggle('bs-from', !!drag && drag.moved && lay.charAt(i) === drag.ch);
+el.classList.toggle('bs-pv', !!drag && drag.moved && !!drag.cand && drag.cand.indexOf(i) >= 0);
+el.classList.toggle('bs-bad', !!drag && drag.moved && !!drag.cand && !drag.ok && drag.cand.indexOf(i) >= 0);
+});
+}
+function finish(nope) {
+bsDragging = null;
+var g = bsGames[id]; if (g) { delete bsRenderQueued[id]; renderBsCard(g, { scroll: false }); }
+var ng = card.querySelector('.bs-place'); if (nope && ng) ng.classList.add('bs-nope'); // no room to turn it there: a little shake
+}
+grid.addEventListener('pointerdown', function (ev) {
+if (ev.button !== undefined && ev.button !== 0) return;
+var lay = bsDraft[id]; if (!lay) return;
+var c = cellAt(ev); if (c < 0) return;
+var ch = lay.charAt(c); if (ch === '.') return;
+ev.preventDefault();
+var cells = bsShipCells(lay, ch);
+drag = { pid: ev.pointerId, ch: ch, len: cells.length, horiz: cells[1] === cells[0] + 1, start: c, grab: cells.indexOf(c), moved: false, cand: null, ok: false, last: c };
+bsDragging = id;
+try { grid.setPointerCapture(ev.pointerId); } catch (e) {}
+});
+grid.addEventListener('pointermove', function (ev) {
+if (!drag || ev.pointerId !== drag.pid) return;
+var c = cellAt(ev); if (c < 0) c = drag.last; drag.last = c;
+if (!drag.moved && c === drag.start) return;
+drag.moved = true;
+var r = Math.floor(c / 10), col = c % 10;
+var r0 = drag.horiz ? r : r - drag.grab, c0 = drag.horiz ? col - drag.grab : col;
+if (drag.horiz) c0 = Math.max(0, Math.min(10 - drag.len, c0)); else r0 = Math.max(0, Math.min(10 - drag.len, r0));
+drag.cand = bsCellsFor(r0, c0, drag.len, drag.horiz);
+drag.ok = bsFits(bsDraft[id], drag.ch, drag.cand);
+paint();
+});
+grid.addEventListener('pointerup', function (ev) {
+if (!drag || ev.pointerId !== drag.pid) return;
+var d = drag, nope = false; drag = null;
+if (!d.moved) nope = !bsRotate(id, d.ch, d.start);
+else if (d.ok && d.cand) bsDraft[id] = bsPut(bsDraft[id], d.ch, d.cand);
+finish(nope);
+});
+grid.addEventListener('pointercancel', function (ev) { if (drag && ev.pointerId === drag.pid) { drag = null; finish(); } });
+}
+async function bsCall(fn, args, peerId) {
+var r = await sb.rpc(fn, args);
+if (r.error) { imSys(peerId, r.error.message.replace(/^.*?:\s*/, '')); return null; }
+if (r.data) { noteServerTime(r.data); bsArrived(r.data, false, true); }
+return r.data;
+}
+var bsFleetLoading = {};
+async function bsFetchFleet(id) {
+if (bsFleetLoading[id]) return; bsFleetLoading[id] = true;
+var r = await sb.from('battleship_fleets').select('layout').eq('game_id', id).eq('user_id', me.id).maybeSingle();
+delete bsFleetLoading[id];
+if (r.error || !r.data) return;
+bsFleet[id] = r.data.layout;
+if (!bsDraft[id]) bsDraft[id] = r.data.layout;
+if (bsGames[id]) renderBsCard(bsGames[id], { scroll: false });
+}
+async function bsFetchReveal(id) {
+var r = await sb.from('battleship_fleets').select('user_id, layout').eq('game_id', id).neq('user_id', me.id).maybeSingle();
+if (r.error || !r.data) return;
+bsReveal[id] = r.data.layout;
+if (bsGames[id]) renderBsCard(bsGames[id], { scroll: false });
+}
+var bsReadying = {};
+async function bsReady(g) {
+if (bsReadying[g.id]) return; bsReadying[g.id] = true;
+var lay = bsDraft[g.id] || bsFleet[g.id] || null;
+if (lay && !bsValid(lay)) lay = null; // the server keeps the fleet it dealt
+/* Mine from this moment: the answer can already be the battle starting (when the other fleet was
+   ready first), and its first render has to show the fleet I arranged, not the one I was dealt. */
+var before = bsFleet[g.id];
+if (lay) bsFleet[g.id] = lay;
+var r = await bsCall('battleship_ready', { p_game: g.id, p_layout: lay }, gamePeer(g));
+delete bsReadying[g.id];
+if (!r) { bsFleet[g.id] = before; bsFetchFleet(g.id); return; } // refused: whatever the server holds is the truth
+if (!lay) bsFetchFleet(g.id);
+}
+async function bsFire(g, cell) {
+if (bsFiring[g.id] != null) return;
+bsFiring[g.id] = cell; renderBsCard(g, { scroll: false });
+await bsCall('battleship_fire', { p_game: g.id, p_cell: cell }, gamePeer(g));
+delete bsFiring[g.id];
+if (bsGames[g.id]) renderBsCard(bsGames[g.id], { scroll: false });
+}
+async function challengeBattleship(peerId, name) {
+if (!me) return;
+if (!(await whisperAllowed(peerId))) { imSys(peerId, 'Add ' + name + ' as a friend to challenge them.'); return; }
+var r = await sb.from('battleship_games').insert({ challenger_id: me.id, challenger_name: me.name, opponent_id: peerId, opponent_name: name }).select().single();
+if (r.error) {
+if (r.error.code === '23505') imSys(peerId, 'You already have a Battleship game open with ' + name + ' — finish it (or resign) first.');
+else if (/row-level security/i.test(r.error.message)) imSys(peerId, name + ' only takes whispers from friends, so no challenge yet.');
+else imSys(peerId, 'Could not send the challenge: ' + r.error.message);
+return;
+}
+bsGames[r.data.id] = r.data; renderBsCard(r.data);
+triggerPush(peerId, me.name + ' challenges you to Battleship', 'Open your whispers to accept.', 'gc-bs-' + r.data.id);
+}
+function bsCardClick(e, peerId) {
+var card = e.target.closest('.bs-card'); if (!card) return false;
+var g = bsGames[card.dataset.gid]; if (!g) return true;
+var id = g.id;
+var cell = e.target.closest('.bs-enemy .bs-cell.bs-open');
+if (cell) { if (g.status === 'active' && g.phase === 'firing' && g.turn === me.id) bsFire(g, +cell.dataset.c); return true; }
+var b = e.target.closest('button'); if (!b || b.disabled) return true;
+var cl = b.classList;
+if (cl.contains('bs-accept')) bsCall('battleship_respond', { p_game: id, p_accept: true }, peerId);
+else if (cl.contains('bs-decline')) bsCall('battleship_respond', { p_game: id, p_accept: false }, peerId);
+else if (cl.contains('bs-cancel')) bsCall('battleship_cancel', { p_game: id }, peerId);
+else if (cl.contains('bs-rematch')) challengeBattleship(peerId, gamePeerName(g));
+else if (cl.contains('bs-shuffle')) { var nl = bsRandomLayout(); if (nl) { bsDraft[id] = nl; renderBsCard(g, { scroll: false }); } }
+else if (cl.contains('bs-ready')) bsReady(g);
+else if (cl.contains('bs-resign')) {
+if (!bsResignArmed[id]) {
+bsResignArmed[id] = true; renderBsCard(g, { scroll: false });
+setTimeout(function () { if (bsResignArmed[id]) { delete bsResignArmed[id]; if (bsGames[id]) renderBsCard(bsGames[id], { scroll: false }); } }, 3000);
+} else { delete bsResignArmed[id]; bsCall('battleship_resign', { p_game: id }, peerId); }
+}
+return true;
+}
+/* A row arrived (realtime, a timeout, or the answer to my own call -- fromMe). Sounds for every new
+   shot, from either side; the nudges (toast, badge) only for things the other side did. */
+function bsArrived(g, isNew, fromMe) {
+var prev = bsGames[g.id]; bsGames[g.id] = g;
+var peer = gamePeer(g), name = gamePeerName(g);
+var w = ensureWin(peer, name);
+if (g.status === 'active' && !bsFleet[g.id]) bsFetchFleet(g.id);
+if (g.status === 'finished' && !bsReveal[g.id]) bsFetchReveal(g.id);
+renderBsCard(g);
+var justFinished = g.status === 'finished' && (!prev || prev.status !== 'finished');
+if (prev && bsShots(g) > bsShots(prev) && g.last_result && !justFinished) playSound(g.last_result === 'miss' ? 'bs-splash' : (g.last_result === 'sunk' ? 'bs-sunk' : 'bs-boom'));
+if (fromMe) { if (justFinished && g.result !== 'resign') playSound(g.winner === me.id ? 'win' : 'lose'); return; }
+var accepted = g.status === 'active' && g.phase === 'placing' && prev && prev.status === 'pending';
+var myTurnNow = g.status === 'active' && g.phase === 'firing' && g.turn === me.id && (!prev || prev.turn !== me.id || prev.phase !== 'firing');
+var forMe = (isNew && g.opponent_id === me.id) || accepted || myTurnNow || justFinished;
+if (!forMe) return;
+if (isNew) w.snippet = name + ' challenges you to Battleship';
+else if (justFinished) w.snippet = g.winner === me.id ? 'Battleship: you won!' : 'Battleship: ' + name + ' won';
+else if (accepted) w.snippet = 'Battleship: place your ships';
+else w.snippet = 'Battleship: your turn';
+gameNudge(w, peer, { kind: isNew ? 'challenge' : (justFinished ? 'finished' : 'turn'), game: 'Battleship', seconds: accepted ? BS_PLACE_SECONDS : turnSecondsLeft(g), result: g.winner === me.id ? 'win' : 'lose',
+accept: function () { bsCall('battleship_respond', { p_game: g.id, p_accept: true }, peer); }, decline: function () { bsCall('battleship_respond', { p_game: g.id, p_accept: false }, peer); } });
+}
+/* The clocks, driven from clockTick(): the 60 s placing clock and the 30 s shot clock. Just before the
+   placing bell this browser sends its own arranged fleet, so what was laid out is what sails; the
+   timeout itself is only asked for a moment AFTER the server's own limit (62 s / 29 s), because a
+   refused early call is never repeated for the same clock. */
+function bsClockTick() {
+Object.keys(bsGames).forEach(function (k) {
+var g = bsGames[k]; if (g.status !== 'active') return;
+var peer = gamePeer(g), w = wins[peer]; if (!w) return;
+var placing = g.phase === 'placing', total = placing ? BS_PLACE_SECONDS : TURN_SECONDS;
+var t = new Date(g.turn_started_at).getTime(); if (isNaN(t)) return;
+var elapsed = (Date.now() - serverSkew - t) / 1000, left = Math.max(0, total - elapsed), sec = Math.ceil(left);
+var el = w.log.querySelector('.turn-clock[data-clock="bs' + g.id + '"]');
+if (el) { el.classList.toggle('low', left <= 15); el.querySelector('.tc-bar').style.width = Math.round(100 * left / total) + '%'; el.querySelector('.tc-num').textContent = sec; }
+var key = 'bs' + g.id + ':' + g.phase + ':' + g.turn_started_at;
+var mineToAct = placing ? !bsImReady(g) : g.turn === me.id;
+if (left > 0 && left <= 15 && lastTickSecond[key] !== sec) { lastTickSecond[key] = sec; if (mineToAct || !w.minimized) tickSound(sec % 2 === 0); }
+if (placing && !bsImReady(g) && left <= 2 && !timeoutsFired[key + ':ready']) { timeoutsFired[key + ':ready'] = true; bsReady(g); }
+if (elapsed >= total + (placing ? 3 : 0) && !timeoutsFired[key]) {
+timeoutsFired[key] = true;
+sb.rpc('battleship_timeout', { p_game: g.id }).then(function (r) { if (!r.error && r.data) { noteServerTime(r.data); bsArrived(r.data, false, false); } });
+}
+});
+}
+async function loadBattleship() {
+bsGames = {};
+var since = new Date(Date.now() - 30 * 86400000).toISOString();
+var r = await sb.from('battleship_games').select('*').or('challenger_id.eq.' + me.id + ',opponent_id.eq.' + me.id).gt('created_at', since).order('created_at', { ascending: true });
+if (r.error) return;
+r.data.forEach(function (g) { bsGames[g.id] = g; noteServerTime(g); });
+var ids = r.data.filter(function (g) { return g.status === 'active' || (g.status === 'finished' && gameShowsCard(g)); }).map(function (g) { return g.id; });
+if (ids.length) {
+var f = await sb.from('battleship_fleets').select('game_id, user_id, layout').in('game_id', ids);
+(f.data || []).forEach(function (x) { if (x.user_id === me.id) { bsFleet[x.game_id] = x.layout; if (!bsDraft[x.game_id]) bsDraft[x.game_id] = x.layout; } else bsReveal[x.game_id] = x.layout; });
+}
+r.data.forEach(function (g) { if (gameShowsCard(g)) renderBsCard(g, { scroll: false }); });
 }
 
 /* ---------- typing indicators (main room + whispers) ----------
@@ -7710,7 +8099,8 @@ return new Date(row.updated_at).getTime() >= new Date(cur.updated_at).getTime();
 }
 [['games', function () { return games; }, gameArrived], ['uno_games', function () { return unoGames; }, unoArrived],
  ['hangman_games', function () { return hmGames; }, hmArrived], ['holdem_games', function () { return hdGames; }, function (g, isNew) { hdArrived(g, isNew); }],
-['prasta_games', function () { return prGames; }, function (g, isNew) { prArrived(g, isNew); }]].forEach(function (t) {
+['prasta_games', function () { return prGames; }, function (g, isNew) { prArrived(g, isNew); }],
+['battleship_games', function () { return bsGames; }, function (g, isNew) { bsArrived(g, isNew, false); }]].forEach(function (t) {
 var table = t[0], store = t[1], arrived = t[2];
 ['challenger_id', 'opponent_id'].forEach(function (col) {
 channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: table, filter: col + '=eq.' + me.id }, function (p) { if (!store()[p.new.id]) arrived(p.new, true); });
@@ -7842,7 +8232,7 @@ else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.')
 pinLogBottom();
 loadGames(); // Tic-Tac-Toe cards into their whisper windows (open games + results from the last hour)
 loadUno();   // same for UNO
-loadHangman(); loadHoldem(); loadPrasta();
+loadHangman(); loadHoldem(); loadPrasta(); loadBattleship();
 resetIdle();
 startRecentPeopleHeartbeat();
 autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
