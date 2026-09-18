@@ -431,8 +431,27 @@ from the dashboard; the repo copy is identical.
 phone. The function log for AA's "test 1" read
 `{"board":"gen","followers":1,"devices":1,"sent":1,"pruned":0,"failed":[]}`.
 
-Not yet seen live: a thread posted from the phone reaching the desktop after the fix. The two posts
-from the phone went out before the priority fix.
+## 5. A dead desktop registration (fixed by turning the bell off and on)
+
+Phone to desktop still failed after the priority fix. The server logged each send as `sent 1`,
+nothing failed, and the stored keys matched the browser's (hashes compared). The user opened
+**chrome://gcm-internals** and recorded while posting from the phone. Chrome was connected (a Chrome
+Sync message arrived four seconds after the post), but no `wp:https://gypsychat2003…` message ever
+came. Google was accepting pushes for that registration and delivering them nowhere. Turning the
+Gypsy Chat bell off and on (unsubscribe, subscribe, new endpoint saved through
+`gc_save_push_subscription`) fixed it at once. The next post arrived as
+`wp:https://gypsychat2003.jmil449988.workers.dev/#…-V2  Data msg received` and the notification
+showed. Why a registration only twelve hours old had gone dead is not known.
+
+**Both directions now verified live:** desktop to phone, and phone to desktop.
+
+**If a tester says notifications never come:** first make sure the receiving device does not have
+Gypsy Chat open in front. Then check the function's Logs tab for their device count; 0 means the bell
+was never turned on on that device. Then have them turn the bell off and on, which replaces a dead
+registration. On desktop Chrome, chrome://gcm-internals → Start Recording shows whether a
+`wp:` message arrives at all. On iPhone, only the Home Screen app can receive notifications.
+A "send me a test notification" button would make this self-service: `send-push` refuses to send
+to yourself, so it needs a small server change.
 
 ## How to test notifications from now on
 
