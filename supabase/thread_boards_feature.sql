@@ -103,7 +103,12 @@ as $$
      and not public.is_banned(s.user_id)
 $$;
 
-revoke all on function public.thread_sub_targets(text, uuid) from public, anon;
+-- `authenticated` has to be named explicitly. Supabase grants EXECUTE on public-schema functions
+-- to anon/authenticated/service_role by default, and revoking from PUBLIC does NOT remove an
+-- explicit grant to a role -- so the first version of this file, which revoked only from public
+-- and anon, left every signed-in browser able to call a SECURITY DEFINER function that returns
+-- who is subscribed to any board. Caught by a rolled-back dry run rather than by reading it.
+revoke all on function public.thread_sub_targets(text, uuid) from public, anon, authenticated;
 grant execute on function public.thread_sub_targets(text, uuid) to service_role;
 
 -- ---------------------------------------------------------------------------
@@ -114,3 +119,8 @@ grant execute on function public.thread_sub_targets(text, uuid) to service_role;
 -- browser may set them on insert but never rewrite them afterwards, which is why update is not
 -- granted here -- an existing thread cannot be dragged onto another board after the fact.
 grant insert (board, tag) on public.threads to authenticated;
+-- Note, having checked the live database rather than assumed: `authenticated` already holds
+-- column-level INSERT on every column of threads from Supabase's defaults, so the line above
+-- changes nothing today. It is kept as a statement of intent in case those defaults are ever
+-- tightened. What actually stops a thread being dragged onto another board after it is posted is
+-- that threads has NO update policy at all -- verified by a dry run that updated zero rows.
