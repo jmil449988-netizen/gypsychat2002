@@ -1998,3 +1998,48 @@ color:#e2c4ff;background:#3a2550;border:1px solid #7a4bb0;border-radius:50%}
 .vn-gone{font-style:italic;font-size:10px;color:var(--ash);opacity:.7}
 .vn audio{display:none} /* playback is driven entirely by the pill's own button */
 @media (max-width:500px){.vn-bar{font-size:12px}.vn-play{width:26px;height:26px}}
+
+/* ==================== v112: shared threads and people ====================
+   A share is a card, not a link: a bare URL in a whisper tells you nothing about what is on the
+   other end, and the whole point of passing something on is that the person can see what it is
+   before deciding to open it. */
+.sh{display:flex;align-items:stretch;gap:8px;width:100%;max-width:300px;text-align:left;cursor:pointer;
+margin:3px 0;padding:6px;background:linear-gradient(180deg,#241a2a,#160f19);
+border:1px solid #7a4bb0;border-radius:8px;color:inherit;font:inherit}
+.sh:hover,.sh:focus-visible{border-color:#b98cff;box-shadow:0 0 9px rgba(150,90,220,.45);outline:none}
+.sh-body{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto}
+.sh-kind{font:700 8px Cinzel,Georgia,serif;letter-spacing:1.5px;text-transform:uppercase;color:#a983d8}
+.sh-op{font:700 12px Cinzel,Georgia,serif;letter-spacing:.5px;color:var(--gold);
+overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sh-op.admin{color:var(--admin)}
+.sh-txt{font:italic 11px "IM Fell English",Georgia,serif;color:var(--bone);opacity:.85;
+display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sh-meta{font:700 9px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--ash)}
+.sh-thumb{width:44px;height:44px;flex:none;object-fit:cover;border:1px solid #3a3026;border-radius:4px}
+.sh-load{font-style:italic;color:var(--ash);opacity:.7;padding:4px}
+/* A share whose target is gone is a plain line, not a button: there is nothing to open. */
+.sh-gone{display:inline-block;cursor:default;font-style:italic;font-size:11px;color:var(--ash);
+opacity:.75;border:none;background:none;padding:2px 0;max-width:none}
+.sh-user .ava-menu{width:40px;height:40px;flex:none}
+
+/* Share button in an open thread's header. */
+.tp-share{font:700 13px Cinzel,Georgia,serif;color:var(--gold);background:none;
+border:1px solid var(--gold-lo);width:24px;height:22px;line-height:18px;cursor:pointer;padding:0;flex:none}
+.tp-share:hover,.tp-share:focus-visible{color:var(--gold-hi);border-color:var(--gold);outline:none}
+
+/* Who to send it to. Friends first, because sharing is nearly always with somebody you already
+   talk to, and a list that opens on people you know beats one sorted by who happens to be on. */
+.pick-modal{width:min(320px,92vw)}
+.pick-list{max-height:min(46vh,320px);overflow:auto;margin:6px 0;display:flex;flex-direction:column;gap:2px}
+.pick-row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer;
+padding:5px 7px;background:none;border:1px solid transparent;border-radius:4px;color:var(--bone);font:inherit}
+.pick-row:hover,.pick-row:focus-visible{border-color:var(--gold-lo);background:rgba(201,162,74,.08);outline:none}
+.pick-nm{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+font:700 12px Cinzel,Georgia,serif;letter-spacing:.5px;color:var(--gold)}
+.pick-nm.admin{color:var(--admin)}
+.pick-tag{flex:none;font:700 8px Cinzel,Georgia,serif;letter-spacing:1px;text-transform:uppercase;
+color:var(--ash);border:1px solid #3a3026;border-radius:999px;padding:1px 5px}
+.pick-dot{width:7px;height:7px;flex:none;border-radius:50%;background:#4caf50;box-shadow:0 0 5px rgba(76,175,80,.8)}
+.pick-empty{padding:16px 8px;text-align:center;font-style:italic;font-size:12px;color:var(--ash)}
+.pick-cancel{width:100%}
+@media (max-width:500px){.sh{max-width:100%}.pick-row{padding:8px 7px}}
