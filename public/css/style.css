@@ -1808,3 +1808,24 @@ font:700 9px Georgia,serif;color:#fff;background:var(--blood);border:1px solid #
    The buttons carry real text (the emoji), so this has to be set on them, not just on the panel. */
 .rpicker,.rpicker button{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
 -webkit-tap-highlight-color:transparent;touch-action:manipulation}
+
+/* v107: the other half of the iPhone reaction problem. Stopping the PICKER from being selectable
+   (v106, just above) was not enough, because the selection does not start on the picker -- it
+   starts on the message you are pressing, before the picker even exists. Press and hold is how you
+   react here, and it is also exactly how iOS Safari begins a text selection, so a hold on a message
+   would raise the picker and select the message's text and the sender's name underneath it at the
+   same time: blue highlight, selection handles, callout bar, all of it on top of the thing you were
+   trying to react to.
+
+   Touch devices only. On a desktop this never happens -- a selection there needs a drag, and a drag
+   of more than ten pixels cancels the long press before it fires (see LONG_PRESS_SLOP in app.js) --
+   and turning selection off with a mouse present would take away the ordinary ability to highlight
+   and copy what somebody said. On a phone that ability was already gone, since the hold that would
+   start a selection is spoken for. user-select inherits, so setting it on the row covers the name,
+   the body text and the timestamp without naming them. Links keep their own callout, so a long
+   press on a URL still offers Open and Copy Link rather than doing nothing. */
+@media (hover:none) and (pointer:coarse){
+  .log .m[data-mid],.tp-posts .tp-post{-webkit-touch-callout:none;-webkit-user-select:none;
+  user-select:none;-webkit-tap-highlight-color:transparent}
+  .log .m[data-mid] a,.tp-posts .tp-post a{-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto}
+}
