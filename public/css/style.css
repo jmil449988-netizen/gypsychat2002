@@ -170,8 +170,8 @@ background:linear-gradient(180deg,var(--stone-3),var(--stone));border:2px double
 .users .list div.f-idle{color:#7a8494}
 /* .savebtn/.notifbtn were missing from this list, so "Save with email" and "Notifications" rendered as
    the browser's stock light-grey buttons among the dark ones -- v66 brings them in line. */
-.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn,.status .bugbtn,.status .leaderboardbtn,.status .savebtn,.status .notifbtn,.status .whisperbtn,.status .reportsbtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
-.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover,.status .bugbtn:hover,.status .leaderboardbtn:hover,.status .savebtn:hover,.status .notifbtn:hover,.status .whisperbtn:hover,.status .reportsbtn:hover{color:var(--gold-hi);border-color:var(--gold)}
+.status .statusbtn,.status .soundbtn,.status .dmbtn,.status .avabtn,.status .morebtn,.status .bugbtn,.status .leaderboardbtn,.status .savebtn,.status .notifbtn,.status .whisperbtn,.status .reportsbtn,.status .ideabtn{font:inherit;color:var(--ash);background:none;border:1px solid var(--gold-lo);padding:1px 8px;cursor:pointer;border-radius:2px;flex:none}
+.status .statusbtn:hover,.status .soundbtn:hover,.status .dmbtn:hover,.status .avabtn:hover,.status .morebtn:hover,.status .bugbtn:hover,.status .leaderboardbtn:hover,.status .savebtn:hover,.status .notifbtn:hover,.status .whisperbtn:hover,.status .reportsbtn:hover,.status .ideabtn:hover{color:var(--gold-hi);border-color:var(--gold)}
 .status .avabtn{padding:1px 6px}
 .ava-thumb{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#2b2521;color:var(--gold);font-size:12px;line-height:1;overflow:hidden;vertical-align:-3px}
 .ava-thumb img{width:16px;height:16px;border-radius:50%;object-fit:cover;display:block}
@@ -747,7 +747,7 @@ box-shadow:0 0 0 1px #000}
 .gc-root.admin-open .win{display:none}
 .gc-root.admin-open .thread-toggle-fab,.gc-root.admin-open .roulette-toggle-fab{display:none !important}
 .gc-root.admin-open .admin-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;height:100%;border-width:0;border-radius:0;z-index:40}
-.adm-tabs{display:flex;justify-content:center;gap:6px;padding:10px 10px 0;flex:none}
+.adm-tabs{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:10px 10px 0;flex:none}
 .adm-tab{display:inline-flex;align-items:center;gap:8px;font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--ash);
 background:rgba(0,0,0,.25);border:1px solid var(--gold-lo);border-bottom-color:transparent;padding:8px 14px;cursor:pointer;border-radius:3px 3px 0 0}
 .adm-tab:hover,.adm-tab:focus-visible{color:var(--gold-hi);outline:none}
@@ -2346,28 +2346,41 @@ background:linear-gradient(180deg,#0f0d0b,#1a1612);border:1px solid var(--gold-l
 .gr-hd-in:focus{border-color:var(--gold)}
 @media (max-width:560px){.gr-felt .hd-board .pc{width:36px;height:52px;font-size:16px}.gr-felt .hd-board .pc .pc-s{font-size:14px}.gr-hd-hole .pc{width:42px;height:58px}}
 @media (hover:none) and (pointer:coarse){.gr-hd-acts .btn{height:36px}.gr-hd-acts .gr-hd-presets .btn{height:32px;padding:0 10px}.gr-hd-in{height:36px;width:72px;font-size:16px}}
-/* v171: the three page buttons draw their own icons (inline SVG): the Game Room is a poker table, Threads a
-   purple @, Roulette a red Romani wagon wheel (sixteen spokes, as on the flag) that turns slowly. Each wears a
-   glow in its own colour instead of the gold one the old text glyphs had. */
-.fab-ico{display:block;flex:none;pointer-events:none;overflow:visible}
-.thread-toggle-fab .ico-at{width:26px;height:26px}
+/* v172: pixel art on the page buttons (public/icons/ui-*.png, drawn at 4x their pixel grid so the browser only ever
+   scales them down): a thread spool for Threads, a poker table for the Game Room, and a red Romani wagon wheel
+   (sixteen spokes, as on the flag) for Roulette, which turns slowly. Each button glows in its icon's colour. */
+.fab-ico{display:block;flex:none;pointer-events:none;-webkit-user-drag:none;user-select:none}
+.thread-toggle-fab .ico-spool{width:32px;height:32px}
 .roulette-toggle-fab .ico-wheel{width:30px;height:30px}
-.gameroom-toggle-fab .ico-table{width:34px;height:24px}
-.thread-toggle-fab:not(.in-header) .ico-at{filter:drop-shadow(0 0 4px rgba(179,107,255,.6))}
+.gameroom-toggle-fab .ico-table{width:35px;height:auto}
+.thread-toggle-fab:not(.in-header) .ico-spool{filter:drop-shadow(0 0 4px rgba(179,107,255,.5))}
 .roulette-toggle-fab:not(.in-header) .ico-wheel{filter:drop-shadow(0 0 4px rgba(227,38,27,.6))}
 .gameroom-toggle-fab:not(.in-header) .ico-table{filter:drop-shadow(0 1px 2px #000)}
 @media (prefers-reduced-motion:no-preference){.ico-wheel{animation:ico-spin 9s linear infinite}}
 @keyframes ico-spin{to{transform:rotate(360deg)}}
 @media (min-width:501px){
-  .thread-toggle-fab.in-header .ico-at{width:20px;height:20px}
-  .roulette-toggle-fab.in-header .ico-wheel{width:21px;height:21px}
-  .gameroom-toggle-fab.in-header .ico-table{width:25px;height:18px}
-  .thread-toggle-fab.in-header{filter:drop-shadow(0 0 5px rgba(179,107,255,.55))}
+  .thread-toggle-fab.in-header .ico-spool{width:24px;height:24px}
+  .roulette-toggle-fab.in-header .ico-wheel{width:22px;height:22px}
+  .gameroom-toggle-fab.in-header .ico-table{width:27px;height:auto}
+  .thread-toggle-fab.in-header{filter:drop-shadow(0 0 5px rgba(179,107,255,.5))}
   .thread-toggle-fab.in-header:hover,.thread-toggle-fab.in-header:focus-visible{filter:drop-shadow(0 0 9px rgba(179,107,255,.95))}
   .thread-toggle-fab.in-header.open{filter:drop-shadow(0 0 10px rgba(201,162,74,.9))}
   .roulette-toggle-fab.in-header{filter:drop-shadow(0 0 5px rgba(227,38,27,.5))}
   .roulette-toggle-fab.in-header:hover,.roulette-toggle-fab.in-header:focus-visible,.roulette-toggle-fab.in-header.open{filter:drop-shadow(0 0 9px rgba(227,38,27,.9))}
-  .gameroom-toggle-fab.in-header{filter:drop-shadow(0 0 5px rgba(201,162,74,.4))}
+  .gameroom-toggle-fab.in-header{filter:drop-shadow(0 0 5px rgba(201,162,74,.45))}
 }
-.tp-hd .ico-table{display:inline-block;width:25px;height:18px;vertical-align:-3px;margin-right:6px}
-.toast-i .ico-table{width:26px;height:18px;margin-top:2px}
+.tp-hd .ico-table{display:inline-block;width:27px;height:auto;vertical-align:-4px;margin-right:7px}
+.toast-i .ico-table{width:27px;height:auto;margin-top:3px}
+/* the envelope (Messages) and the light bulb (Suggestions): the bottom bar, the Messages bar, the box's title.
+   A faint gold halo keeps their black outlines from sinking into the dark wood. */
+.px-ico{display:inline-block;vertical-align:middle;-webkit-user-drag:none;user-select:none;filter:drop-shadow(0 0 2px rgba(241,217,138,.35))}
+.status .btn-icon .px-ico{height:18px;width:auto}
+@media (min-width:501px){.status .btn-icon .px-ico{height:21px}}
+#statusPopover .btn-icon .px-ico{height:19px;margin:0 4px} /* about an emoji's width, so the labels line up */
+.dm-bar .dm-bar-ico .px-ico{height:16px;width:auto;vertical-align:-3px}
+.modal-hd .px-ico{height:22px;width:auto;vertical-align:-4px;margin-right:8px}
+/* the suggestion box: problems show inside it; the admin tab shows pictures bigger and plays videos in place */
+.idea-err{margin-top:10px;font-size:12px;line-height:1.4;color:#ff8f7a}
+.report-row .rr-media{gap:8px}
+.rr-media .rr-att{width:84px;height:84px}
+.rr-media .rr-video{display:block;width:260px;max-width:100%;max-height:220px;background:#000;border:1px solid var(--gold-lo);box-shadow:0 0 0 1px #000}
