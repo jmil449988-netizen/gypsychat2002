@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 147;
+var BUILD_NUMBER = 148;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -5519,13 +5519,63 @@ place();
 
    This is where the scripture line will attach once its verse list is settled; the bell rings on
    its own until then. */
-var HOURS_OF_THE_DAY = { 0: 'The Midnight Office', 3: 'Matins', 6: 'The First Hour', 9: 'The Third Hour',
-12: 'The Sixth Hour', 15: 'The Ninth Hour', 18: 'Vespers', 21: 'Compline' };
+var HOURS_OF_THE_DAY = {
+0:  { name: 'The Midnight Office', theme: 'the Bridegroom comes at midnight' },
+3:  { name: 'Matins',              theme: 'the light before the dawn' },
+6:  { name: 'The First Hour',      theme: 'Christ before Pilate; the true light' },
+9:  { name: 'The Third Hour',      theme: 'the descent of the Holy Spirit' },
+12: { name: 'The Sixth Hour',      theme: 'the Crucifixion' },
+15: { name: 'The Ninth Hour',      theme: 'the death of Christ' },
+18: { name: 'Vespers',             theme: 'thanksgiving at the close of the day' },
+21: { name: 'Compline',            theme: 'sleep, and trust through the night' }
+};
+
+/* ---------- the reading at each hour (v148) ----------
+   Every word below is the New King James Version, checked against the text rather than written
+   from memory -- quoting scripture wrongly in a room full of Christians is not a small defect.
+   Fifty-two verses in all, which matters: Thomas Nelson allow up to 500 NKJV verses without
+   written permission provided they are not a whole book and not a quarter of the work, and they
+   require the notice that now sits in the ⋯ menu beside the version number. That is also why this
+   is a fixed table baked into the app and not a live Bible lookup -- an open-ended feed of verses
+   would leave the licence behind on its first week of running.
+
+   Each hour carries its own reading because the hours are not interchangeable. The Third Hour is
+   when the Spirit descended at Pentecost, the Sixth is when Christ was nailed to the Cross, the
+   Ninth is when He died, Compline is said before sleep. A verse chosen at random would throw that
+   away, and the hours are the only reason this is more than a clock with a bell on it.
+
+   Each passage keeps the narrative around the saying rather than lifting the words out on their
+   own -- "in context" meant literally. seg[].r marks the words of Christ, which is the only part
+   set in red; "Then Jesus said" is the evangelist speaking, not Him, and colouring it red would
+   be a small lie about who said what. */
+var SCRIPTURE = {"0":[{"ref":"Matthew 25:10-13","seg":[{"t":"And while they went to buy, the bridegroom came, and those who were ready went in with him to the wedding; and the door was shut. Afterward the other virgins came also, saying, “Lord, Lord, open to us!” But he answered and said, "},{"t":"“Assuredly, I say to you, I do not know you. Watch therefore, for you know neither the day nor the hour in which the Son of Man is coming.”","r":1}]},{"ref":"Mark 13:33-37","seg":[{"t":"“Take heed, watch and pray; for you do not know when the time is. It is like a man going to a far country, who left his house and gave authority to his servants, and to each his work, and commanded the doorkeeper to watch. Watch therefore, for you do not know when the master of the house is coming—in the evening, at midnight, at the crowing of the rooster, or in the morning—lest, coming suddenly, he find you sleeping. And what I say to you, I say to all: Watch!”","r":1}]},{"ref":"Luke 12:35-37","seg":[{"t":"“Let your waist be girded and your lamps burning; and you yourselves be like men who wait for their master, when he will return from the wedding, that when he comes and knocks they may open to him immediately. Blessed are those servants whom the master, when he comes, will find watching. Assuredly, I say to you that he will gird himself and have them sit down to eat, and will come and serve them.”","r":1}]}],"3":[{"ref":"John 11:25-26","seg":[{"t":"Jesus said to her, "},{"t":"“I am the resurrection and the life. He who believes in Me, though he may die, he shall live. And whoever lives and believes in Me shall never die. Do you believe this?”","r":1}]},{"ref":"John 8:12","seg":[{"t":"Then Jesus spoke to them again, saying, "},{"t":"“I am the light of the world. He who follows Me shall not walk in darkness, but have the light of life.”","r":1}]},{"ref":"Matthew 28:18-20","seg":[{"t":"And Jesus came and spoke to them, saying, "},{"t":"“All authority has been given to Me in heaven and on earth. Go therefore and make disciples of all the nations, baptizing them in the name of the Father and of the Son and of the Holy Spirit, teaching them to observe all things that I have commanded you; and lo, I am with you always, even to the end of the age.”","r":1},{"t":" Amen."}]}],"6":[{"ref":"John 18:37","seg":[{"t":"Pilate therefore said to Him, “Are You a king then?” Jesus answered, "},{"t":"“You say rightly that I am a king. For this cause I was born, and for this cause I have come into the world, that I should bear witness to the truth. Everyone who is of the truth hears My voice.”","r":1}]},{"ref":"John 12:46","seg":[{"t":"“I have come as a light into the world, that whoever believes in Me should not abide in darkness.”","r":1}]},{"ref":"Matthew 5:14-16","seg":[{"t":"“You are the light of the world. A city that is set on a hill cannot be hidden. Nor do they light a lamp and put it under a basket, but on a lampstand, and it gives light to all who are in the house. Let your light so shine before men, that they may see your good works and glorify your Father in heaven.”","r":1}]}],"9":[{"ref":"John 14:15-17","seg":[{"t":"“If you love Me, keep My commandments. And I will pray the Father, and He will give you another Helper, that He may abide with you forever—the Spirit of truth, whom the world cannot receive, because it neither sees Him nor knows Him; but you know Him, for He dwells with you and will be in you.”","r":1}]},{"ref":"John 16:13-14","seg":[{"t":"“However, when He, the Spirit of truth, has come, He will guide you into all truth; for He will not speak on His own authority, but whatever He hears He will speak; and He will tell you things to come. He will glorify Me, for He will take of what is Mine and declare it to you.”","r":1}]},{"ref":"Luke 11:11-13","seg":[{"t":"“If a son asks for bread from any father among you, will he give him a stone? Or if he asks for a fish, will he give him a serpent instead of a fish? Or if he asks for an egg, will he offer him a scorpion? If you then, being evil, know how to give good gifts to your children, how much more will your heavenly Father give the Holy Spirit to those who ask Him!”","r":1}]}],"12":[{"ref":"Luke 23:33-34","seg":[{"t":"And when they had come to the place called Calvary, there they crucified Him, and the criminals, one on the right hand and the other on the left. Then Jesus said, "},{"t":"“Father, forgive them, for they do not know what they do.”","r":1},{"t":" And they divided His garments and cast lots."}]},{"ref":"John 12:32-33","seg":[{"t":"“And I, if I am lifted up from the earth, will draw all peoples to Myself.”","r":1},{"t":" This He said, signifying by what death He would die."}]},{"ref":"Matthew 16:24-25","seg":[{"t":"Then Jesus said to His disciples, "},{"t":"“If anyone desires to come after Me, let him deny himself, and take up his cross, and follow Me. For whoever desires to save his life will lose it, but whoever loses his life for My sake will find it.”","r":1}]}],"15":[{"ref":"Luke 23:46","seg":[{"t":"And when Jesus had cried out with a loud voice, He said, "},{"t":"“Father, into Your hands I commit My spirit.”","r":1},{"t":" Having said this, He breathed His last."}]},{"ref":"John 19:30","seg":[{"t":"So when Jesus had received the sour wine, He said, "},{"t":"“It is finished!”","r":1},{"t":" And bowing His head, He gave up His spirit."}]},{"ref":"John 15:12-13","seg":[{"t":"“This is My commandment, that you love one another as I have loved you. Greater love has no one than this, than to lay down one’s life for his friends.”","r":1}]}],"18":[{"ref":"Matthew 11:28-30","seg":[{"t":"“Come to Me, all you who labor and are heavy laden, and I will give you rest. Take My yoke upon you and learn from Me, for I am gentle and lowly in heart, and you will find rest for your souls. For My yoke is easy and My burden is light.”","r":1}]},{"ref":"Matthew 6:25-26","seg":[{"t":"“Therefore I say to you, do not worry about your life, what you will eat or what you will drink; nor about your body, what you will put on. Is not life more than food and the body more than clothing? Look at the birds of the air, for they neither sow nor reap nor gather into barns; yet your heavenly Father feeds them. Are you not of more value than they?”","r":1}]},{"ref":"John 6:35","seg":[{"t":"And Jesus said to them, "},{"t":"“I am the bread of life. He who comes to Me shall never hunger, and he who believes in Me shall never thirst.”","r":1}]}],"21":[{"ref":"John 14:27","seg":[{"t":"“Peace I leave with you, My peace I give to you; not as the world gives do I give to you. Let not your heart be troubled, neither let it be afraid.”","r":1}]},{"ref":"Mark 4:39-40","seg":[{"t":"Then He arose and rebuked the wind, and said to the sea, "},{"t":"“Peace, be still!”","r":1},{"t":" And the wind ceased and there was a great calm. But He said to them, "},{"t":"“Why are you so fearful? How is it that you have no faith?”","r":1}]},{"ref":"John 10:27-28","seg":[{"t":"“My sheep hear My voice, and I know them, and they follow Me. And I give them eternal life, and they shall never perish; neither shall anyone snatch them out of My hand.”","r":1}]}]};
+/* Everyone in the room on the same day sees the same reading at the same hour, without a round
+   trip: the index is derived from the date itself, so two people standing in the same hour arrive
+   at the same passage independently. Three readings per hour means a given hour comes back round
+   every third day -- which is roughly how a lectionary behaves, and these are meant to be familiar
+   words rather than a stream of new ones. */
+function readingFor(h) {
+var list = SCRIPTURE[h]; if (!list || !list.length) return null;
+var days = Math.floor(Date.now() / 86400000);
+return list[days % list.length];
+}
+function addScripture(hour, entry) {
+var d = document.createElement('div'); d.className = 'm scripture';
+var body = entry.seg.map(function (s) {
+return s.r ? '<span class="sc-red">' + esc(s.t) + '</span>' : esc(s.t);
+}).join('');
+d.innerHTML = '<div class="sc-hd"><span class="sc-bell" aria-hidden="true">\uD83D\uDD14</span>' +
+esc(hour.name) + '<span class="sc-theme"> \u00B7 ' + esc(hour.theme) + '</span></div>' +
+'<div class="sc-body">' + body + '</div>' +
+'<div class="sc-ref">' + esc(entry.ref) + ' \u00B7 NKJV</div>';
+dayDivider(log, 'room', Date.now());
+log.appendChild(d); log.scrollTop = log.scrollHeight;
+}
 var lastBellKey = null;
 function bellTick() {
 if (!me) return; // the sign-on screen is not the room; no bells for someone still at the door
-var d = new Date(), h = d.getHours(), name = HOURS_OF_THE_DAY[h];
-if (!name) return;
+var d = new Date(), h = d.getHours(), hour = HOURS_OF_THE_DAY[h];
+if (!hour) return;
 /* Only in the first couple of minutes past the hour. A laptop that was shut at 11:30 and opened
    at 14:10 should not fire the noon bell on the way back up -- it would be announcing an hour
    that has been and gone, and on a machine that sleeps a lot it would do it every single time. */
@@ -5534,7 +5584,8 @@ var key = d.toDateString() + ' ' + h;
 if (lastBellKey === key) return; // the 30 s tick visits the same minute more than once
 lastBellKey = key;
 if (!document.hidden) playSound('bell'); // a hidden tab's audio context is suspended anyway
-addSys('\u{1F514} ' + name + '.');
+var entry = readingFor(h);
+if (entry) addScripture(hour, entry); else addSys('\u{1F514} ' + hour.name + '.');
 }
 setInterval(bellTick, 30000);
 
