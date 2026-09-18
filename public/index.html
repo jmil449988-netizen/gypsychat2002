@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=120">
+<link rel="stylesheet" href="./css/style.css?v=121">
 </head>
 <body>
 <div class="gc-root">
@@ -112,7 +112,7 @@
 </div>
 </div>
 
-<div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status"><span class="btn-icon">●</span><span class="popover-label">Status</span></button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs"><span class="btn-icon">💬</span><span class="popover-label">Messages</span></button><button class="cell ballotbtn" id="ballotBtn" type="button" title="Drop an anonymous note in the Ballot Box" aria-label="Drop a note in the Ballot Box"><span class="btn-icon">📜</span><span class="popover-label">Ballot Box</span></button><button class="cell leaderboardbtn" id="leaderboardBtn" type="button" title="Popularity Contest" aria-label="Popularity Contest"><span class="btn-icon">🏆</span><span class="popover-label">Popularity Contest</span></button><button class="cell morebtn hidden" id="moreBtn" type="button" title="More options" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button><div class="status-popover" id="statusPopover" role="menu" aria-label="More options"><div class="pop-hd" aria-hidden="true">Profile</div><button class="cell avabtn hidden" id="avaBtn" type="button" title="Set your profile picture" aria-label="Set your profile picture"><span class="ava-thumb" id="avaThumb">＋</span><span class="popover-label">Picture</span></button><input type="file" id="avaFile" class="hidden" accept="image/*,.heic,.heif"><button class="cell savebtn hidden" id="saveBtn" type="button" title="Save your character with an email" aria-label="Save your character with an email"><span class="btn-icon">🔑</span><span class="popover-label">Save (email)</span></button><button class="cell logoutbtn hidden" id="logoutBtn" type="button" title="Log out of this character on this device" aria-label="Log out"><span class="btn-icon">🚪</span><span class="popover-label">Log out</span></button><div class="pop-hd" aria-hidden="true">Settings</div><button class="cell notifbtn" id="notifBtn" type="button" title="Turn on notifications for whispers & mentions" aria-label="Toggle notifications"><span class="btn-icon">🔕</span><span class="popover-label">Notifications</span></button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds"><span class="btn-icon">🔊</span><span class="popover-label">Sound</span></button><button class="cell whisperbtn" id="whisperBtn" type="button" title="Only friends can whisper you — click to allow everyone" aria-label="Who can whisper you" aria-pressed="false"><span class="btn-icon">🔒</span><span class="popover-label">Whispers: Friends only</span></button><div class="pop-hd" aria-hidden="true">Help</div><button class="cell bugbtn hidden" id="bugBtn" type="button" title="Report a bug" aria-label="Report a bug"><span class="btn-icon">🐞</span><span class="popover-label">Report a bug</span></button><button class="cell reportsbtn hidden" id="reportsBtn" type="button" title="Review user and bug reports" aria-label="Reports"><span class="btn-icon">🛡️</span><span class="popover-label">Reports</span><span class="rbadge hidden" id="reportsBadge">0</span></button><div class="popover-version" id="popoverVersion" aria-hidden="true"></div><!-- Required wherever NKJV text is quoted. Thomas Nelson permit up to 500 verses without
+<div class="status"><span class="cell" id="st">Not signed on</span><button class="cell statusbtn hidden" id="statusBtn" type="button" title="Set your status"><span class="btn-icon">●</span><span class="popover-label">Status</span></button><button class="cell dmbtn" id="dmToggleBtn" type="button" title="Hide/show DM tabs" aria-label="Toggle DM tabs"><span class="btn-icon"><img class="px-ico ico-env" src="./icons/ui-envelope.png" alt="" width="20" height="22" draggable="false"></span><span class="popover-label">Messages</span></button><button class="cell ballotbtn" id="ballotBtn" type="button" title="Drop an anonymous note in the Ballot Box" aria-label="Drop a note in the Ballot Box"><span class="btn-icon">📜</span><span class="popover-label">Ballot Box</span></button><button class="cell leaderboardbtn" id="leaderboardBtn" type="button" title="Popularity Contest" aria-label="Popularity Contest"><span class="btn-icon">🏆</span><span class="popover-label">Popularity Contest</span></button><button class="cell morebtn hidden" id="moreBtn" type="button" title="More options" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button><div class="status-popover" id="statusPopover" role="menu" aria-label="More options"><div class="pop-hd" aria-hidden="true">Profile</div><button class="cell avabtn hidden" id="avaBtn" type="button" title="Set your profile picture" aria-label="Set your profile picture"><span class="ava-thumb" id="avaThumb">＋</span><span class="popover-label">Picture</span></button><input type="file" id="avaFile" class="hidden" accept="image/*,.heic,.heif"><button class="cell savebtn hidden" id="saveBtn" type="button" title="Save your character with an email" aria-label="Save your character with an email"><span class="btn-icon">🔑</span><span class="popover-label">Save (email)</span></button><button class="cell logoutbtn hidden" id="logoutBtn" type="button" title="Log out of this character on this device" aria-label="Log out"><span class="btn-icon">🚪</span><span class="popover-label">Log out</span></button><div class="pop-hd" aria-hidden="true">Settings</div><button class="cell notifbtn" id="notifBtn" type="button" title="Turn on notifications for whispers & mentions" aria-label="Toggle notifications"><span class="btn-icon">🔕</span><span class="popover-label">Notifications</span></button><button class="cell soundbtn" id="soundBtn" type="button" title="Toggle sounds" aria-label="Toggle sounds"><span class="btn-icon">🔊</span><span class="popover-label">Sound</span></button><button class="cell whisperbtn" id="whisperBtn" type="button" title="Only friends can whisper you — click to allow everyone" aria-label="Who can whisper you" aria-pressed="false"><span class="btn-icon">🔒</span><span class="popover-label">Whispers: Friends only</span></button><div class="pop-hd" aria-hidden="true">Help</div><button class="cell ideabtn hidden" id="ideaBtn" type="button" title="Send the admins an idea" aria-label="Suggestion box"><span class="btn-icon"><img class="px-ico ico-bulb" src="./icons/ui-bulb.png" alt="" width="17" height="22" draggable="false"></span><span class="popover-label">Suggestions</span></button><button class="cell bugbtn hidden" id="bugBtn" type="button" title="Report a bug" aria-label="Report a bug"><span class="btn-icon">🐞</span><span class="popover-label">Report a bug</span></button><button class="cell reportsbtn hidden" id="reportsBtn" type="button" title="Review user and bug reports" aria-label="Reports"><span class="btn-icon">🛡️</span><span class="popover-label">Reports</span><span class="rbadge hidden" id="reportsBadge">0</span></button><div class="popover-version" id="popoverVersion" aria-hidden="true"></div><!-- Required wherever NKJV text is quoted. Thomas Nelson permit up to 500 verses without
      written permission provided this notice appears; the hourly readings use 52. -->
 <div class="popover-nkjv" aria-hidden="true">Scripture taken from the New King James Version®. Copyright © 1982 by Thomas Nelson. Used by permission. All rights reserved.</div></div></div>
 <div class="room-footer hidden" id="roomWatermark" aria-live="polite"></div>
@@ -139,7 +139,7 @@
      addressing the same ids. Hidden until signed on; .gc-root.no-dms hides it on request. -->
 <div class="dm-dock collapsed hidden" id="dmDock" aria-label="Messages">
 <div class="dm-bar" id="dmBar" role="button" tabindex="0" aria-expanded="false" aria-controls="dmBody">
-<span class="dm-bar-ico" aria-hidden="true">✉</span><span class="dm-bar-title">Messages</span><span class="rbadge dm-bar-badge hidden" id="dmBarBadge">0</span>
+<span class="dm-bar-ico" aria-hidden="true"><img class="px-ico ico-env" src="./icons/ui-envelope.png" alt="" width="20" height="22" draggable="false"></span><span class="dm-bar-title">Messages</span><span class="rbadge dm-bar-badge hidden" id="dmBarBadge">0</span>
 <span class="dm-bar-chev" aria-hidden="true">⌃</span>
 </div>
 <div class="dm-body" id="dmBody">
@@ -340,10 +340,12 @@
 <div class="adm-tabs" role="tablist">
 <button type="button" class="adm-tab active" id="admTabUsers" role="tab" aria-selected="true" aria-controls="admUsers">User reports <span class="rbadge adm-count hidden" id="admUsersCount">0</span></button>
 <button type="button" class="adm-tab" id="admTabBugs" role="tab" aria-selected="false" aria-controls="admBugs">Bug reports <span class="rbadge adm-count hidden" id="admBugsCount">0</span></button>
+<button type="button" class="adm-tab" id="admTabIdeas" role="tab" aria-selected="false" aria-controls="admIdeas">Suggestions <span class="rbadge adm-count hidden" id="admIdeasCount">0</span></button>
 </div>
 <div class="adm-body">
 <div class="adm-pane" id="admUsers" role="tabpanel"><div class="reports-list" id="reportsList"></div></div>
 <div class="adm-pane hidden" id="admBugs" role="tabpanel"><div class="reports-list" id="bugReportsList"></div></div>
+<div class="adm-pane hidden" id="admIdeas" role="tabpanel"><div class="reports-list" id="ideasList"></div></div>
 </div>
 <div class="tp-watermark" id="adminWatermark" aria-hidden="true"></div>
 </div>
@@ -352,14 +354,14 @@
      same .gc-root.<state>-open full-page takeover as the Popularity Contest. #grBody is painted by
      renderGameRoom() in app.js: the list of tables, or the table you sit at. -->
 <div class="gameroom-panel" id="gameRoomPanel" role="complementary" aria-label="Game Room">
-<div class="tp-hd"><button class="tp-back" type="button" id="gameRoomBack" aria-label="Back to chat">←</button><span><svg class="fab-ico ico-table" viewBox="0 0 32 22" aria-hidden="true" focusable="false"><rect x="1" y="1.5" width="30" height="19" rx="9.5" fill="#6b3f1d" stroke="#1d1007" stroke-width="1"/><rect x="2.3" y="2.8" width="27.4" height="16.4" rx="8.2" fill="none" stroke="#a8703a" stroke-width=".9"/><rect x="4.2" y="4.7" width="23.6" height="12.6" rx="6.3" fill="#1d7a3e" stroke="#0b2e17" stroke-width=".7"/><rect x="6.6" y="7" width="18.8" height="8" rx="4" fill="none" stroke="#e2c064" stroke-width=".55" opacity=".8"/><rect x="11.9" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(-8 13.7 10.9)"/><rect x="16.5" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(8 18.3 10.9)"/><path d="M13.7 9.9l.8 1-.8 1-.8-1z" fill="#c0392b" transform="rotate(-8 13.7 10.9)"/><path d="M18.3 9.9l.8 1-.8 1-.8-1z" fill="#1a1410" transform="rotate(8 18.3 10.9)"/></svg>Game Room</span></div>
+<div class="tp-hd"><button class="tp-back" type="button" id="gameRoomBack" aria-label="Back to chat">←</button><span><img class="fab-ico ico-table" src="./icons/ui-table.png" alt="" width="35" height="24" draggable="false">Game Room</span></div>
 <div class="gr-body" id="grBody"></div>
 </div>
 
-<!-- v171: the three buttons draw their own icons (the same markup as ICON_AT / ICON_WHEEL / ICON_TABLE in app.js) -->
-<button class="thread-toggle-fab" id="threadToggleBtn" type="button" aria-label="Open threads board"><svg class="fab-ico ico-at" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="#b36bff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.9"/><path d="M15.9 8.2v5.1a2.7 2.7 0 0 0 5.4 0v-1.3a9.3 9.3 0 1 0-3.7 7.4"/></svg></button>
-<button class="roulette-toggle-fab" id="rouletteToggleBtn" type="button" aria-label="Gypsy Roulette — coming soon"><svg class="fab-ico ico-wheel" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10.3" fill="none" stroke="#e3261b" stroke-width="2.1"/><circle cx="12" cy="12" r="8.1" fill="none" stroke="#e3261b" stroke-width=".8"/><path d="M12 9.1L12 3.6M13.11 9.32L15.21 4.24M14.05 9.95L17.94 6.06M14.68 10.89L19.76 8.79M14.9 12L20.4 12M14.68 13.11L19.76 15.21M14.05 14.05L17.94 17.94M13.11 14.68L15.21 19.76M12 14.9L12 20.4M10.89 14.68L8.79 19.76M9.95 14.05L6.06 17.94M9.32 13.11L4.24 15.21M9.1 12L3.6 12M9.32 10.89L4.24 8.79M9.95 9.95L6.06 6.06M10.89 9.32L8.79 4.24" stroke="#e3261b" stroke-width="1.05" stroke-linecap="round"/><circle cx="12" cy="12" r="2.9" fill="#e3261b"/><circle cx="12" cy="12" r="1" fill="#3a0d08"/></svg></button>
-<button class="gameroom-toggle-fab" id="gameRoomBtn" type="button" aria-label="Game Room" title="Game Room"><svg class="fab-ico ico-table" viewBox="0 0 32 22" aria-hidden="true" focusable="false"><rect x="1" y="1.5" width="30" height="19" rx="9.5" fill="#6b3f1d" stroke="#1d1007" stroke-width="1"/><rect x="2.3" y="2.8" width="27.4" height="16.4" rx="8.2" fill="none" stroke="#a8703a" stroke-width=".9"/><rect x="4.2" y="4.7" width="23.6" height="12.6" rx="6.3" fill="#1d7a3e" stroke="#0b2e17" stroke-width=".7"/><rect x="6.6" y="7" width="18.8" height="8" rx="4" fill="none" stroke="#e2c064" stroke-width=".55" opacity=".8"/><rect x="11.9" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(-8 13.7 10.9)"/><rect x="16.5" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(8 18.3 10.9)"/><path d="M13.7 9.9l.8 1-.8 1-.8-1z" fill="#c0392b" transform="rotate(-8 13.7 10.9)"/><path d="M18.3 9.9l.8 1-.8 1-.8-1z" fill="#1a1410" transform="rotate(8 18.3 10.9)"/></svg></button>
+<!-- v172: the three buttons wear pixel art from icons/ (the same markup as ICON_SPOOL / ICON_WHEEL / ICON_TABLE in app.js) -->
+<button class="thread-toggle-fab" id="threadToggleBtn" type="button" aria-label="Open threads board"><img class="fab-ico ico-spool" src="./icons/ui-spool.png" alt="" width="30" height="30" draggable="false"></button>
+<button class="roulette-toggle-fab" id="rouletteToggleBtn" type="button" aria-label="Gypsy Roulette — coming soon"><img class="fab-ico ico-wheel" src="./icons/ui-wheel.png" alt="" width="30" height="30" draggable="false"></button>
+<button class="gameroom-toggle-fab" id="gameRoomBtn" type="button" aria-label="Game Room" title="Game Room"><img class="fab-ico ico-table" src="./icons/ui-table.png" alt="" width="35" height="24" draggable="false"></button>
 </div>
 
 <div class="modal-overlay hidden" id="warnOverlay">
@@ -457,6 +459,30 @@
 </div>
 </div>
 
+<!-- The suggestion box (v172): an idea in words, plus up to five pictures or videos. Sent to the admins, who read
+     them on the Reports page in the Suggestions tab. See the suggestion box section in app.js and
+     supabase/suggestions_feature.sql. -->
+<div class="modal-overlay hidden" id="ideaOverlay">
+<div class="modal bug-report-modal idea-modal" role="dialog" aria-modal="true" aria-label="Suggestion box">
+<div class="modal-hd"><img class="px-ico ico-bulb" src="./icons/ui-bulb.png" alt="" width="17" height="22" draggable="false">Suggestion Box</div>
+<div class="modal-body">
+<div class="bug-hint">Got an idea for Gypsy Chat? Tell the admins. Pictures or a short video help show what you mean: attach any you have.</div>
+<textarea id="ideaText" class="sunk bug-desc" maxlength="2000" placeholder="Your idea..."></textarea>
+<div class="bug-attach-row">
+<button class="btn" type="button" id="ideaAttachBtn">📎 Attach files</button>
+<span class="bug-attach-hint" id="ideaAttachHint">Pictures or videos, up to 5</span>
+</div>
+<input type="file" id="ideaFile" class="hidden" accept="image/*,video/*,.heic,.heif" multiple>
+<div class="bug-attach-list" id="ideaAttachList"></div>
+<div class="idea-err hidden" id="ideaErr" role="alert"></div>
+</div>
+<div class="save-actions">
+<button class="btn" type="button" id="ideaCancel">Cancel</button>
+<button class="btn" type="button" id="ideaSubmit">Send Suggestion</button>
+</div>
+</div>
+</div>
+
 <!-- (The admin review queue for the above lives on the Reports page -- #adminPanel, further up.) -->
 
 <!-- Click any posted picture -- in the room, a whisper, or a thread -- to see it full size here.
@@ -484,6 +510,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=171"></script>
+<script src="./js/app.js?v=172"></script>
 </body>
 </html>
