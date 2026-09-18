@@ -2302,3 +2302,47 @@ background:radial-gradient(ellipse at 50% 40%,#215638 0%,#133a23 58%,#0b2415 100
 .gr-announce-join{margin-left:6px;height:22px;padding:0 10px;font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:#1a1208;cursor:pointer;
 background:linear-gradient(180deg,#f1d98a,#a8812e);border:1px solid #f1d98a;border-radius:4px;box-shadow:0 0 0 1px #000}
 .gr-announce-join:hover,.gr-announce-join:focus-visible{box-shadow:0 0 0 1px #000,0 0 10px rgba(241,217,138,.7);outline:none}
+/* Hold'em at the tables (v170): seats with stacks, bets and cards; the board on the felt; my two
+   cards and the betting buttons under it. Reuses the .pc playing cards and the .hd-* chips from the
+   heads-up game in whispers. */
+.gr-row-stakes{font-size:12px;color:var(--gold)}
+.gr-seat.hd{gap:3px}
+.gr-seat.folded{opacity:.55}
+.gr-seat.turn.folded{opacity:1}
+.gr-seat-hd .hd-btn{margin-right:1px}
+.gr-hd-line{display:flex;align-items:center;gap:5px;min-height:20px}
+.gr-hd-pos{flex:none;display:inline-flex;align-items:center;height:15px;padding:0 4px;border-radius:3px;border:1px solid var(--gold-lo);color:var(--gold);font:700 9px Cinzel,Georgia,serif;letter-spacing:.5px}
+.gr-hd-line .hd-bet{margin-left:auto;flex:none}
+.gr-hd-cards{display:flex;align-items:center;gap:3px;flex-wrap:wrap;min-height:36px}
+.gr-hd-note{font-size:11px;color:var(--ash);font-style:italic;margin-left:3px}
+.gr-hd-note.won{color:#8fd08f;font-weight:700;font-style:normal}
+.gr-hd-note.allin{color:#ffb14a;font:700 10px Cinzel,Georgia,serif;letter-spacing:1px;text-transform:uppercase;font-style:normal}
+.pc.dim{opacity:.5}
+.gr-felt .hd-board{max-width:300px;margin:2px auto 8px;gap:6px;background:rgba(0,0,0,.22);border-color:rgba(241,217,138,.28)}
+.gr-felt .hd-board .pc{width:42px;height:60px;font-size:18px}
+.gr-felt .hd-board .pc .pc-s{font-size:16px}
+.gr-felt .hd-board .pc.slot{border-color:rgba(241,217,138,.28)}
+.gr-hd-pot{text-align:center;font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold-hi);margin-bottom:4px;text-shadow:0 0 6px rgba(241,217,138,.35)}
+.gr-hd-result{max-width:440px;margin:0 auto 4px;text-align:center}
+.gr-hd-res-t{font-size:14px;line-height:1.45;color:#fff3cf}
+.gr-hd-cd{margin-top:4px;font-size:12px;font-style:italic;color:#9fb49c}
+.gr-hd-me{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:10px;border:1px solid var(--gold-lo);background:rgba(0,0,0,.25);border-radius:8px}
+.gr-hd-hole{display:flex;gap:6px;flex:none}
+.gr-hd-hole .pc{width:46px;height:64px;font-size:19px}
+.gr-hd-hole .pc .pc-s{font-size:17px}
+.gr-hd-hole.folded{opacity:.45;filter:grayscale(.6)}
+.gr-hd-acts{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;min-width:0}
+.gr-hd-acts .btn{height:30px;min-width:0;padding:0 12px;font-size:11px}
+.gr-hd-acts .btn.gr-hd-fold{color:var(--ash)}
+.gr-hd-acts .btn.gr-hd-call{color:#cdeecd;border-color:var(--leaf)}
+.gr-hd-acts .btn.gr-hd-raise-btn{color:var(--gold-hi);border-color:var(--gold)}
+.gr-hd-acts .gr-hint{text-align:center}
+.gr-hd-raise{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap}
+.gr-hd-presets{display:flex;gap:4px}
+.gr-hd-acts .gr-hd-presets .btn{height:26px;padding:0 8px;font-size:10px;color:var(--ash)}
+.gr-hd-in{width:64px;height:30px;box-sizing:border-box;padding:0 6px;font:14px "IM Fell English",Georgia,serif;color:var(--bone);text-align:center;
+background:linear-gradient(180deg,#0f0d0b,#1a1612);border:1px solid var(--gold-lo);outline:none;-moz-appearance:textfield;appearance:textfield}
+.gr-hd-in::-webkit-outer-spin-button,.gr-hd-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.gr-hd-in:focus{border-color:var(--gold)}
+@media (max-width:560px){.gr-felt .hd-board .pc{width:36px;height:52px;font-size:16px}.gr-felt .hd-board .pc .pc-s{font-size:14px}.gr-hd-hole .pc{width:42px;height:58px}}
+@media (hover:none) and (pointer:coarse){.gr-hd-acts .btn{height:36px}.gr-hd-acts .gr-hd-presets .btn{height:32px;padding:0 10px}.gr-hd-in{height:36px;width:72px;font-size:16px}}
