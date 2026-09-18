@@ -2047,3 +2047,18 @@ color:var(--ash);border:1px solid #3a3026;border-radius:999px;padding:1px 5px}
 .pick-empty{padding:16px 8px;text-align:center;font-style:italic;font-size:12px;color:var(--ash)}
 .pick-cancel{width:100%}
 @media (max-width:500px){.sh{max-width:100%}.pick-row{padding:8px 7px}}
+
+/* ---------- v114: group chats ----------
+   The multi-select picker is the single-select one with a tick and a Done button: same rows, same
+   avatars, same friend tag, so choosing four people looks like choosing one, four times. */
+.pick-actions{display:flex;gap:6px}
+.pick-actions .btn{flex:1 1 0}
+.pick-actions .pick-cancel{width:auto}
+.pick-check{flex:none;width:16px;text-align:center;font-size:12px;color:var(--gold);opacity:0;transition:opacity .12s ease}
+.pick-row.picked{border-color:var(--gold);background:rgba(201,162,74,.14)}
+.pick-row.picked .pick-check{opacity:1}
+.pick-done:disabled{opacity:.45;cursor:default}
+/* A group has no avatar of its own; the two-figure glyph stands in for one, at the same size so
+   the inbox rows stay on the same grid as the whispers above and below them. */
+.im-group .wava,.im-tab .tava{line-height:1}
+.im-group .bar .gmembers{font-size:14px}
