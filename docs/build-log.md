@@ -282,7 +282,8 @@ undoing 152's +6 dB. Checked on the deployed file, decoded in the browser: 1.50 
 
 # Builds 161 → 162 · 18 September 2026
 
-Current state: **app.js 162, style.css 115, cache `gc2000-v193`, APP_VERSION Beta v0.8.0.**
+State at the end of this section: app.js 162, style.css 115, cache `gc2000-v193` (163 follows
+below).
 
 The three things found in 160, fixed, plus a fourth that was worse than any of them.
 
@@ -370,3 +371,76 @@ Tic-Tac-Toe challenge, and a closed group nobody can open.
   null`). There is no button for it, but a hand-made request could react to a group line.
 - Nobody else in a group is told when someone leaves or is added. A group line only pushes when
   someone is @mentioned. A group you were just added to lands at the bottom of the inbox.
+
+---
+
+# Build 163 · 18 September 2026 · board notifications
+
+Current state: **app.js 163, style.css 115, cache `gc2000-v194`, APP_VERSION Beta v0.8.0.**
+`send-board-push` redeployed.
+
+The user had followed /gen/ on both of their accounts, posted, and never got a notification. It took
+four separate faults, found one under the other, to explain that.
+
+## 1. Your own posts never notify you (by design)
+
+In the first test the poster was AA. The only other follower of /gen/ was Steve miller, and Steve had
+**no device registered for push at all**. Calling the function by hand as AA answered
+`{"sent":0,"followers":1}`: one follower, nowhere to send.
+
+## 2. A device registered to one account could never move to another (fixed)
+
+Steve's phone *had* been registered, for **AA**, since 17 Sept 06:40 UTC. `subscribeToPush()` saved a
+device with a plain `upsert` on `endpoint`, and RLS on `push_subscriptions` only lets a browser touch
+rows that are already its own. So once a device belonged to one account, any other account signing
+in on it failed to save it. That covers a log out, a new anonymous login, or a second character on
+the same phone. The error was never checked. AA's notifications, whisper previews included, kept
+going to a phone now used as Steve, and Steve got nothing. The practice run reproduced it on live
+data: "new row violates row-level security policy (USING expression)".
+
+- `gc_save_push_subscription(endpoint, p256dh, auth)` (`push_devices_fix.sql`) is SECURITY DEFINER.
+  It takes the endpoint over for whoever is signed in. This is safe because an endpoint is a secret
+  only the owning browser knows. A thief could at most stop someone's pushes until their next
+  sign-in, and could never read them: pushes are encrypted to keys the device holds.
+- `subscribeToPush()` and the `pushsubscriptionchange` refresh both use it and log a failure.
+- Logging out deletes this device's row (before `signOut`), so a device you left stops showing your
+  notifications. The browser keeps its subscription; the next sign-in saves it under whoever that is.
+
+When Steve opened 163 on the phone, the row moved from AA to Steve (its `created_at` still says 17
+Sept).
+
+## 3. The in-app gap (fixed)
+
+`sw.js` drops a push whenever any Gypsy Chat window has focus. That is right for a whisper, which
+the page already shows. For a board, nothing on the page said a word unless you were reading that
+board, so a follower sitting in the app heard nothing. `boardPostArrived()` now shows a pop-up with
+a ding for a new thread on a followed board, under the same condition the service worker drops the
+push (`document.hasFocus()`), so the two never both fire. Tapping it opens the thread.
+
+## 4. Board pushes went out at low priority (fixed; the real reason nothing showed)
+
+With 2 and 3 fixed, pushes to the phone still reported `sent: 1` and never appeared. `send-push`, the
+whisper function, passes `{ urgency: 'high', TTL: 43200 }`, with a comment explaining that without it
+FCM treats a push as low priority and holds it until the device next wakes. `send-board-push` was
+written later, from scratch, and left the options out. "sent" only ever meant "the push service
+accepted it", which it always did. It now passes the same two options, and writes one line per call
+to its Logs tab (board, followers, devices, sent, pruned, failed status codes; never who). Redeployed
+from the dashboard; the repo copy is identical.
+
+**Verified by the user:** AA posted a thread on /gen/ from the desktop and it arrived on Steve's
+phone. The function log for AA's "test 1" read
+`{"board":"gen","followers":1,"devices":1,"sent":1,"pruned":0,"failed":[]}`.
+
+Not yet seen live: a thread posted from the phone reaching the desktop after the fix. The two posts
+from the phone went out before the priority fix.
+
+## How to test notifications from now on
+
+A notification only appears when the Gypsy Chat window on the receiving device is **not** in front.
+If it is, a whisper shows in the window and a followed board shows the in-app pop-up. Test with two
+accounts on two devices: post from one, and have the other locked or switched away. The function's
+Logs tab now says what was sent to how many devices.
+
+Two low-priority test notifications from before the fix ("Push test from AA.Romani.world") may still
+turn up late on the phone. The test threads on /gen/ ("Push test" ×2 by Steve miller, "test 1" and
+"test" by AA) are ordinary posts and can be deleted from the board.
