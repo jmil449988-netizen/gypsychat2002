@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 148;
+var BUILD_NUMBER = 149;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -2239,10 +2239,11 @@ if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
 el.dataset.peer = id; // replyKeyFor() reads this to keep each conversation's reply target its own
 el.innerHTML = '<div class="bar"><button class="back" type="button" title="Back to messages" aria-label="Back to messages">‹</button><span class="wava" aria-hidden="true"></span><span class="nmwrap"><span class="nm" tabindex="0" role="button" aria-label="' + esc(name) + ' options"></span><span class="im-sub" aria-live="polite"></span></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" title="Collapse messages" aria-label="Collapse messages">–</button></div>' +
-'<div class="ilog" aria-live="polite"></div><div class="reply-bar hidden"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
+'<div class="ilog" aria-live="polite"></div><div class="reply-bar hidden"></div><div class="vn-bar hidden"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn media" type="button" title="Send a photo or GIF" aria-label="Send a photo or GIF" aria-haspopup="menu">📎</button>' +
 '<button class="btn games" type="button" title="Play a game" aria-label="Challenge ' + esc(name) + ' to a game" aria-haspopup="menu">🎲</button>' +
+'<button class="btn mic" type="button" title="Record a voice note" aria-label="Record a voice note">🎤</button>' +
 '<input type="file" class="im-img-file hidden" accept="image/*,.heic,.heif">' +
 '<textarea maxlength="500"></textarea><button class="btn" type="button">Send</button></div>';
 el.querySelector('.nm').textContent = name;
@@ -2250,13 +2251,19 @@ if (isAdminId(id)) el.querySelector('.nm').classList.add('admin');
 // typingPeer/typingTimer track whether -- and until when -- the OTHER person in this whisper is
 // shown as typing; see markImTyping/clearImTyping in the typing-indicator section below.
 // snippet: the last line of the conversation, for this conversation's inbox row (see updateTab).
-var win = { el: el, log: el.querySelector('.ilog'), replyBar: el.querySelector('.reply-bar'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !(people[id] || recentPeopleEntries()[id]), name: name, minimized: true, tab: null, snippet: '' };
+var win = { el: el, log: el.querySelector('.ilog'), replyBar: el.querySelector('.reply-bar'), voiceBar: el.querySelector('.vn-bar'), micBtn: el.querySelector('.icomp .mic'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !(people[id] || recentPeopleEntries()[id]), name: name, minimized: true, tab: null, snippet: '' };
 win.ta.placeholder = 'Whisper to ' + name + '...';
 win.ta.addEventListener('input', function () { sendTyping(id, !!win.ta.value); });
 el.querySelector('.back').onclick = function () { showInbox(); };
 el.querySelector('.x').onclick = function () { minimizeIM(id); };
 el.querySelector('.buzz').onclick = function () { sendBuzz(id); };
 el.querySelector('.icomp .btn:last-child').onclick = function () { sendIM(id); };
+var micBtnWin = el.querySelector('.icomp .mic');
+micBtnWin.onclick = function () { if (voiceRec[id]) finishVoice(id, true); else startVoice(id); };
+el.querySelector('.vn-bar').onclick = function (e) {
+if (e.target.closest('.vn-cancel')) { finishVoice(id, false); return; }
+if (e.target.closest('.vn-send')) finishVoice(id, true);
+};
 var emoBtnWin = el.querySelector('.icomp .emo');
 emoBtnWin.onclick = function () { openEmojiPicker(win.ta, emoBtnWin); };
 var imgFile = el.querySelector('.im-img-file');
@@ -2526,7 +2533,7 @@ var w = ensureWin(otherId, otherName); // never pops the window open on its own 
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them'); d.dataset.mid = m.id;
 if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
-d.innerHTML = replyStubHtml(m.reply_to) + '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + '<span class="nmt">' + esc(m.sender_name) + '</span>:</b> ' + bodyHtml(m.body);
+d.innerHTML = replyStubHtml(m.reply_to) + '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + '<span class="nmt">' + esc(m.sender_name) + '</span>:</b> ' + (m.voice_path ? voiceHtml(m) : bodyHtml(m.body));
 if (m.reply_to) fillReplyStub(m.reply_to);
 dayDivider(w.log, 'im:' + otherId, m.created_at);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
@@ -2574,6 +2581,149 @@ w.ta.focus();
 /* Photo-send in a whisper: reuses the same upload (and the same "thread-images" bucket) as thread
    image posts, then sends the resulting URL as an ordinary whisper message -- bodyHtml's OWN_IMG_RE
    is what makes it show up embedded rather than as a bare link. */
+/* ---------- voice notes (v149) ----------
+   Hold nothing, tap twice: 🎤 starts, ⏹ stops and sends, ✕ throws it away. Press-and-hold is what
+   the phone apps do, but it is miserable with a mouse and it makes a sixty-second note impossible
+   to record without cramp, so the same two-tap works identically on both.
+
+   The file goes to a PRIVATE bucket, unlike the pictures in these same windows, which sit in a
+   public one where the URL alone is enough to fetch them. That is tolerable for a GIF and not for
+   a recording of somebody's voice. Playback therefore needs a signed URL, minted on demand and
+   short-lived; the object cannot be reached without one.
+
+   The folder is named after the pair -- both ids, sorted so either person computes the same string.
+   That is what lets the storage policy say "you may read this if you are one of the two people in
+   this conversation", which a folder named after only the sender could never have expressed. */
+var VOICE_MAX_SECS = 120, voiceRec = {}; // peer id -> { rec, chunks, started, timer, stream, mime }
+
+/* Browsers disagree about what a MediaRecorder can produce and there is no format all of them
+   share. Chrome and Firefox do Opus in WebM; Safari, on the Mac and on the iPhone, cannot write
+   WebM at all and gives mp4/AAC. So ask rather than assume, and let the bucket accept both. */
+function voiceMime() {
+if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
+var want = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/mpeg'];
+for (var i = 0; i < want.length; i++) if (MediaRecorder.isTypeSupported(want[i])) return want[i];
+return '';
+}
+function voiceExt(mime) {
+if (mime.indexOf('webm') >= 0) return 'webm';
+if (mime.indexOf('mp4') >= 0) return 'mp4';
+if (mime.indexOf('ogg') >= 0) return 'ogg';
+if (mime.indexOf('mpeg') >= 0) return 'mp3';
+return 'webm';
+}
+function voiceFolder(peerId) { return [me.id, peerId].sort().join('_'); }
+function mmss(t) { var m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ':' + (s < 10 ? '0' : '') + s; }
+
+function voiceBar(w, on) {
+if (!w || !w.voiceBar) return;
+w.voiceBar.classList.toggle('hidden', !on);
+if (on) w.voiceBar.innerHTML = '<span class="vn-dot" aria-hidden="true"></span><span class="vn-time">0:00</span>' +
+'<span class="vn-hint">recording\u2026</span>' +
+'<button type="button" class="vn-cancel" aria-label="Discard this recording">\u2715</button>' +
+'<button type="button" class="vn-send" aria-label="Stop and send">\u23F9 Send</button>';
+}
+async function startVoice(id) {
+var w = wins[id]; if (!w || voiceRec[id]) return;
+if (w.gone) { imSys(id, w.name + ' is not here to hear you.'); return; }
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+imSys(id, 'This browser cannot record audio. On an iPhone this needs Gypsy Chat added to the Home Screen and opened from there.'); return;
+}
+var mime = voiceMime();
+if (!mime) { imSys(id, 'This browser has no audio format I can record in.'); return; }
+var stream;
+try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+catch (e) {
+/* Refused, or no microphone at all. Both arrive here as an exception and both need saying out
+   loud -- a 🎤 button that does nothing when pressed is the worst of the possible outcomes. */
+imSys(id, e && e.name === 'NotAllowedError'
+? 'Microphone access was refused. Allow it for this site in your browser settings, then try again.'
+: 'No microphone was found.');
+return;
+}
+var rec;
+try { rec = new MediaRecorder(stream, { mimeType: mime }); }
+catch (e) { stream.getTracks().forEach(function (t) { t.stop(); }); imSys(id, 'Could not start recording.'); return; }
+var st = { rec: rec, chunks: [], started: Date.now(), stream: stream, mime: mime, timer: null };
+voiceRec[id] = st;
+rec.ondataavailable = function (e) { if (e.data && e.data.size) st.chunks.push(e.data); };
+rec.start();
+voiceBar(w, true);
+if (w.micBtn) { w.micBtn.classList.add('on'); w.micBtn.textContent = '\u23F9'; }
+st.timer = setInterval(function () {
+var secs = (Date.now() - st.started) / 1000;
+var t = w.voiceBar && w.voiceBar.querySelector('.vn-time');
+if (t) t.textContent = mmss(secs);
+if (secs >= VOICE_MAX_SECS) finishVoice(id, true); // a forgotten recording stops itself and sends
+}, 250);
+}
+function teardownVoice(id) {
+var st = voiceRec[id]; if (!st) return;
+clearInterval(st.timer);
+try { st.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} // releases the mic indicator
+delete voiceRec[id];
+var w = wins[id];
+if (w) { voiceBar(w, false); if (w.micBtn) { w.micBtn.classList.remove('on'); w.micBtn.textContent = '\uD83C\uDFA4'; } }
+}
+async function finishVoice(id, send) {
+var st = voiceRec[id]; if (!st) return;
+var secs = Math.max(1, Math.round((Date.now() - st.started) / 1000));
+var mime = st.mime, chunks = st.chunks, rec = st.rec;
+clearInterval(st.timer);
+var done = new Promise(function (res) { rec.onstop = res; });
+try { rec.stop(); } catch (e) {}
+await done;
+teardownVoice(id);
+if (!send) return;
+var blob = new Blob(chunks, { type: mime.split(';')[0] });
+if (!blob.size) { imSys(id, 'That recording came out empty.'); return; }
+var w = wins[id]; if (!w) return;
+var path = voiceFolder(id) + '/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + voiceExt(mime);
+if (w.micBtn) w.micBtn.disabled = true;
+var up = await sb.storage.from('voice-notes').upload(path, blob, { contentType: mime.split(';')[0], upsert: false });
+if (w.micBtn) w.micBtn.disabled = false;
+if (up.error) { imSys(id, 'That voice note did not send: ' + up.error.message); return; }
+/* The body is readable text, not the path. A client that knows nothing about voice notes, a push
+   notification and the inbox snippet all then say something sensible rather than showing a storage
+   key as gibberish. */
+await post('\uD83C\uDFA4 Voice note (' + mmss(secs) + ')', id, w.name, { voice_path: path, voice_secs: secs });
+}
+
+/* Playback. The signed URL is minted when the bubble is drawn rather than stored with the message,
+   because a signed URL expires and a message does not -- baking one into the row would leave every
+   old voice note pointing at a dead link an hour later. */
+var voiceUrlCache = {};
+async function voiceSrc(path) {
+if (voiceUrlCache[path]) return voiceUrlCache[path];
+var r = await sb.storage.from('voice-notes').createSignedUrl(path, 3600);
+var u = (!r.error && r.data && r.data.signedUrl) || null;
+if (u) voiceUrlCache[path] = u;
+return u;
+}
+function voiceHtml(m) {
+return '<span class="vn" data-vn="' + esc(m.voice_path) + '">' +
+'<button type="button" class="vn-play" aria-label="Play voice note">\u25B6</button>' +
+'<span class="vn-len">' + esc(mmss(m.voice_secs || 0)) + '</span></span>';
+}
+/* One delegated handler, like the reply stubs: whisper windows are created and destroyed freely and
+   binding per bubble would leave listeners behind on every one of them. */
+document.addEventListener('click', async function (e) {
+var b = e.target.closest && e.target.closest('.vn-play'); if (!b) return;
+var host = b.closest('.vn'); if (!host) return;
+var au = host.querySelector('audio');
+if (au) { if (au.paused) au.play(); else { au.pause(); au.currentTime = 0; b.textContent = '\u25B6'; } return; }
+b.disabled = true;
+var url = await voiceSrc(host.dataset.vn);
+b.disabled = false;
+if (!url) { host.insertAdjacentHTML('beforeend', '<span class="vn-gone">unavailable</span>'); return; }
+au = document.createElement('audio'); au.src = url; au.preload = 'none';
+au.onplay = function () { b.textContent = '\u23F8'; };
+au.onpause = function () { b.textContent = '\u25B6'; };
+au.onended = function () { b.textContent = '\u25B6'; au.currentTime = 0; };
+host.appendChild(au);
+au.play().catch(function () { b.textContent = '\u25B6'; });
+});
+
 async function sendIMImage(id, file) {
 var w = wins[id]; if (!w) return;
 if (w.gone) { imSys(id, w.name + ' is not here to hear you.'); return; }
@@ -3397,7 +3547,7 @@ leaveRoom('You were disconnected after 30 minutes of inactivity. Tap in again wh
 }
 
 /* ---------- sending ---------- */
-async function post(body, recipientId, recipientName) {
+async function post(body, recipientId, recipientName, extra) {
 var now = Date.now();
 if (now - lastSend < 700) { return; } // gentle client-side throttle; the DB enforces its own too
 if (moderation.muted) { updateComposeLock(); warnPopup(moderation.offenseCount, true, moderation.mutedPermanent, 0); return; }
@@ -3419,6 +3569,11 @@ if (recipientId) { row.recipient_id = recipientId; row.recipient_name = recipien
    sending, so a reply cannot leak onto the next thing you type if this send is refused. */
 var rkey = recipientId || 'room';
 if (replyTo[rkey]) { row.reply_to = replyTo[rkey]; clearReplyTarget(rkey); }
+/* extra carries columns that are not part of an ordinary line of text -- voice_path/voice_secs so
+   far. It is merged after the rest, but it cannot smuggle in a different sender: sender_id and
+   sender_name are pinned by the insert policy against the signed-in account, so a forged value
+   here is refused by the database rather than trusted. */
+if (extra) for (var k in extra) if (extra[k] != null) row[k] = extra[k];
 var r = await sb.from('messages').insert(row).select().single();
 if (r.error) {
 /* A refused whisper gets its explanation in the whisper window it was typed in, in plain words
