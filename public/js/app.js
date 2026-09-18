@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 161;
+var BUILD_NUMBER = 162;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -2345,9 +2345,10 @@ Object.keys(myGroups).forEach(function (cid) { updateTab(groupKey(cid)); updateW
 /* pickPeople is pickPerson's multiple-choice sibling: same list, same rows, but tapping a row
    toggles it and the modal stays open until Done. */
 var multiPickOverlay = null;
-function pickPeople(title, max) {
+function pickPeople(title, max, exclude) {
 return new Promise(function (resolve) {
-var list = shareableTargets(), chosen = {};
+/* exclude (v162): ids not to offer at all -- "Add to this group" listed the people already in it. */
+var list = shareableTargets().filter(function (x) { return !(exclude && exclude[x.id]); }), chosen = {};
 if (!multiPickOverlay) {
 multiPickOverlay = document.createElement('div');
 multiPickOverlay.className = 'modal-overlay hidden';
@@ -2385,14 +2386,20 @@ function close(v) { multiPickOverlay.classList.add('hidden'); resolve(v); }
 /* v161: an account with no character name -- usually an old anonymous login whose name has since
    been claimed from another device -- cannot be added (gc_create_group and gc_add_to_group refuse
    it), so it is not offered. The list shows at once and this thins it a moment later. The token
-   stops a slow answer for an earlier opening of the picker from pruning a later one. */
+   stops a slow answer for an earlier opening of the picker from pruning a later one.
+   v162: "no character name" includes a profiles row whose name claim_name() emptied -- v161 only
+   dropped accounts with no row at all, so the old "Steve miller" login was still offered. The same
+   answer also puts each row's CURRENT name on it: the friends list keeps the name someone had when
+   the friendship was made, so a friend who has renamed since showed up under the old one. */
 var pickToken = {}; multiPickOverlay._token = pickToken;
 if (list.length) {
-sb.from('profiles').select('user_id').in('user_id', list.map(function (x) { return x.id; })).then(function (r) {
+sb.from('profiles').select('user_id, name').in('user_id', list.map(function (x) { return x.id; })).then(function (r) {
 if (r.error || !r.data || multiPickOverlay._token !== pickToken) return;
-var named = {}; r.data.forEach(function (x) { named[x.user_id] = 1; });
+var named = {}; r.data.forEach(function (x) { if (x.name) named[x.user_id] = x.name; });
 [].forEach.call(box.querySelectorAll('.pick-row'), function (row) {
-if (!named[row.dataset.id]) { delete chosen[row.dataset.id]; row.parentNode.removeChild(row); }
+if (!named[row.dataset.id]) { delete chosen[row.dataset.id]; row.parentNode.removeChild(row); return; }
+var nmEl = row.querySelector('.pick-nm');
+if (nmEl && nmEl.textContent !== named[row.dataset.id]) nmEl.textContent = named[row.dataset.id];
 });
 if (!box.querySelector('.pick-row')) box.innerHTML = '<div class="pick-empty">Nobody to add yet. Make a friend first.</div>';
 paint();
@@ -2467,7 +2474,7 @@ var g = myGroups[cid]; if (!g) return;
 if (liveMembers(g).length >= GROUP_MAX) { imSys(groupKey(cid), 'A group holds ' + GROUP_MAX + ' people.'); return; }
 var already = {};
 liveMembers(g).forEach(function (m) { already[m.user_id] = 1; });
-var picked = await pickPeople('Add to this group…', GROUP_MAX - liveMembers(g).length);
+var picked = await pickPeople('Add to this group…', GROUP_MAX - liveMembers(g).length, already);
 if (!picked || !picked.length) return;
 var added = 0, failed = null;
 for (var i = 0; i < picked.length; i++) {
