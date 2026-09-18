@@ -3,8 +3,8 @@ Chat itself always needs a connection; this only makes the UI load offline.
 v2: bumped the cache name and hardened the fetch/install paths to bypass the HTTP cache — iOS
 Safari in particular can hold onto an old app.js/index.html far more stubbornly than desktop
 Chrome, which silently ran stale code (missing new features) even though the deploy succeeded. */
-var CACHE = 'gc2000-v194';
-var SHELL = ['./', './index.html', './css/style.css?v=115', './js/appconfig.js?v=2', './js/app.js?v=163', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png', './sounds/airhorn.mp3', './sounds/badum.mp3', './sounds/boo.mp3', './sounds/burp.mp3', './sounds/cheers.mp3', './sounds/clap.mp3', './sounds/crickets.mp3', './sounds/cry.mp3', './sounds/friend-logon.mp3', './sounds/gunshot.mp3', './sounds/howl.mp3', './sounds/kiss.mp3', './sounds/knock.mp3', './sounds/laugh.mp3', './sounds/slap.mp3', './sounds/sneeze.mp3', './sounds/login.mp3', './sounds/pm.mp3', './sounds/friend-request.mp3', './sounds/game-invite.mp3', './sounds/spit.mp3', './sounds/fart.mp3', './sounds/drumroll.mp3', './sounds/ding.mp3', './sounds/buzz.mp3', './sounds/turn.mp3', './sounds/tick.mp3', './sounds/tock.mp3', './sounds/coin.mp3', './sounds/win.mp3', './sounds/lose.mp3', './sounds/hm-right.mp3', './sounds/hm-wrong.mp3', './sounds/levelup.mp3', './sounds/intro.mp3', './sounds/logout.mp3', './sounds/signoff.mp3', './sounds/unroll.mp3', './sounds/wheel.mp3', './sounds/card.mp3', './sounds/chips.mp3', './sounds/trapdoor.mp3', './sounds/fortune.mp3', './sounds/send.mp3', './sounds/recv.mp3', './sounds/bell.mp3'];
+var CACHE = 'gc2000-v195';
+var SHELL = ['./', './index.html', './css/style.css?v=115', './js/appconfig.js?v=2', './js/app.js?v=164', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png', './sounds/airhorn.mp3', './sounds/badum.mp3', './sounds/boo.mp3', './sounds/burp.mp3', './sounds/cheers.mp3', './sounds/clap.mp3', './sounds/crickets.mp3', './sounds/cry.mp3', './sounds/friend-logon.mp3', './sounds/gunshot.mp3', './sounds/howl.mp3', './sounds/kiss.mp3', './sounds/knock.mp3', './sounds/laugh.mp3', './sounds/slap.mp3', './sounds/sneeze.mp3', './sounds/login.mp3', './sounds/pm.mp3', './sounds/friend-request.mp3', './sounds/game-invite.mp3', './sounds/spit.mp3', './sounds/fart.mp3', './sounds/drumroll.mp3', './sounds/ding.mp3', './sounds/buzz.mp3', './sounds/turn.mp3', './sounds/tick.mp3', './sounds/tock.mp3', './sounds/coin.mp3', './sounds/win.mp3', './sounds/lose.mp3', './sounds/hm-right.mp3', './sounds/hm-wrong.mp3', './sounds/levelup.mp3', './sounds/intro.mp3', './sounds/logout.mp3', './sounds/signoff.mp3', './sounds/unroll.mp3', './sounds/wheel.mp3', './sounds/card.mp3', './sounds/chips.mp3', './sounds/trapdoor.mp3', './sounds/fortune.mp3', './sounds/send.mp3', './sounds/recv.mp3', './sounds/bell.mp3'];
 self.addEventListener('install', function (e) {
 e.waitUntil(
 caches.open(CACHE).then(function (c) {
@@ -49,6 +49,15 @@ if (alreadyLooking) return;
 return self.registration.showNotification(title, {
 body: body,
 tag: tag,
+/* v195 (build 164): renotify makes every push pop up, not just the first one. Without it, a
+   notification whose tag matches one still sitting in the notification centre is filed there
+   silently -- on Windows, Chrome sets SuppressPopup on the toast whenever renotify is false and a
+   toast with the same tag already exists. Board pushes all share one tag per board
+   (gc-board-gen), and whispers one per sender, so after the first notification that nobody
+   cleared, every later one on that board or from that person arrived with no banner and no
+   sound. The tag still does its job of keeping one entry per board or person instead of a pile.
+   Needs a non-empty tag, which is why `tag` above always falls back to 'gc-push'. */
+renotify: true,
 icon: './icons/icon-192.png',
 /* NOT icon-192.png here -- Android renders `badge` using ONLY that image's alpha channel
    (every opaque pixel becomes solid white, regardless of color), so handing it a full-color icon
