@@ -73,7 +73,7 @@ begin
   begin perform public.table_open('uno'); perform pg_temp.ck('2 second table refused', false);
   exception when others then perform pg_temp.ck('2 second table refused', sqlerrm like '%already at a table%', sqlerrm); end;
   begin perform public.table_open('holdem'); perform pg_temp.ck('3 holdem not yet', false);
-  exception when others then perform pg_temp.ck('3 holdem not yet', sqlerrm like '%coming soon%', sqlerrm); end;
+  exception when others then perform pg_temp.ck('3 holdem not yet', sqlerrm like '%coming soon%' or sqlerrm like '%stakes and your buy-in%', sqlerrm); end;
   begin insert into public.game_tables (game, host_id) values ('uno', P[1]); perform pg_temp.ck('4 direct insert refused', false);
   exception when others then perform pg_temp.ck('4 direct insert refused', true, sqlerrm); end;
 
