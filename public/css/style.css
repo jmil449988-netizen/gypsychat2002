@@ -2021,6 +2021,10 @@ display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hi
 .sh-gone{display:inline-block;cursor:default;font-style:italic;font-size:11px;color:var(--ash);
 opacity:.75;border:none;background:none;padding:2px 0;max-width:none}
 .sh-user .ava-menu{width:40px;height:40px;flex:none}
+/* Waiting on the lookup, not missing. Styled like the card it is about to become rather than like
+   the "gone" line, so a card that resolves in 200ms does not flash an error first. */
+.sh-pending{display:inline-flex;align-items:center;min-height:30px;padding:4px 10px;
+border:1px solid #4a3560;border-radius:8px;background:linear-gradient(180deg,#201828,#140e18);cursor:default}
 
 /* Share button in an open thread's header. */
 .tp-share{font:700 13px Cinzel,Georgia,serif;color:var(--gold);background:none;
