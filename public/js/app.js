@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 165;
+var BUILD_NUMBER = 166;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -4128,6 +4128,7 @@ delete bans[id]; addSys(name + ' may return.');
    after one path removed it and the other didn't. */
 function leaveRoom(message, rejoinable) {
 hideConnBar(); clearNewPill();
+roomHistoryIn = false; // v166: no reading goes into a room that is not there (bellTick)
 if (channel) { channel.unsubscribe(); channel = null; }
 unsubscribeThreads();
 unsubscribeReports();
@@ -6380,13 +6381,16 @@ var SCRIPTURE = {"0":[{"ref":"Matthew 25:10-13","seg":[{"t":"And while they went
    trip: the index is derived from the date itself, so two people standing in the same hour arrive
    at the same passage independently. Three readings per hour means a given hour comes back round
    every third day -- which is roughly how a lectionary behaves, and these are meant to be familiar
-   words rather than a stream of new ones. */
-function readingFor(h) {
-var list = SCRIPTURE[h]; if (!list || !list.length) return null;
+   words rather than a stream of new ones.
+   v166: returns the index, not the passage, because the index is what gets remembered (hoursSeen,
+   below): a reading put back after a reload has to be the passage that was shown, even if the day
+   has turned since. -1 for an hour with no readings. */
+function readingIndexFor(h) {
+var list = SCRIPTURE[h]; if (!list || !list.length) return -1;
 var days = Math.floor(Date.now() / 86400000);
-return list[days % list.length];
+return days % list.length;
 }
-function addScripture(hour, entry) {
+function addScripture(hour, entry, at) {
 var d = document.createElement('div'); d.className = 'm scripture';
 var body = entry.seg.map(function (s) {
 return s.r ? '<span class="sc-red">' + esc(s.t) + '</span>' : esc(s.t);
@@ -6395,8 +6399,12 @@ d.innerHTML = '<div class="sc-hd"><span class="sc-bell" aria-hidden="true">\uD83
 esc(hour.name) + '<span class="sc-theme"> \u00B7 ' + esc(hour.theme) + '</span></div>' +
 '<div class="sc-body">' + body + '</div>' +
 '<div class="sc-ref">' + esc(entry.ref) + ' \u00B7 NKJV</div>';
-dayDivider(log, 'room', Date.now());
-log.appendChild(d); log.scrollTop = log.scrollHeight;
+var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+dayDivider(log, 'room', at || Date.now());
+log.appendChild(d);
+/* A new reading always brings the log down to it, as it always did. One being put back during the
+   history replay follows the replay's own rule instead (renderRoom): only if already at the bottom. */
+if (!replayingHistory || atBottom) log.scrollTop = log.scrollHeight;
 }
 /* v153: which canonical hour we are IN, not which one has just struck. The hours are periods and
    not instants -- the Ninth Hour runs from three o'clock until Vespers -- so arriving at 15:40
@@ -6409,24 +6417,70 @@ function canonicalHourNow(d) {
 for (var h = d.getHours(); h >= 0; h--) if (HOURS_OF_THE_DAY[h]) return h;
 return null;
 }
-/* One key, not a list: the only question ever asked is whether the hour we are in now has been
-   read yet, and the key carries its date, so it cleans up after itself. */
-var shownHour = null;
-try { shownHour = localStorage.getItem('gc_hour_shown') || null; } catch (e) {}
+/* v166: the readings come back after a reload or a log out.
+   A reading is drawn in this page and nowhere else -- nothing is written to the database (see the
+   hours, above) -- so anything that rebuilt the chat from the database dropped every one of them:
+   a refresh, the update banner's reload, closing the app and signing in again later. Even the
+   reading for the hour we were in stayed away, because the one key this used to keep
+   (gc_hour_shown) told the device it had already been shown.
+
+   So each device keeps a short list of the readings it has shown: which hour, which passage, and
+   when it was drawn. The history replay at sign-on (joinInner) puts each one back among the
+   messages where it stood, and the reading for the hour we are in is always on screen once the
+   room is. It is still true that a bell you missed is a bell you missed: only readings this device
+   showed come back, never ones for hours nobody here was in the room. A week's worth at most. */
+var HOURS_KEEP_MS = 7 * 86400000;
+var hoursSeen = [];
+try { hoursSeen = JSON.parse(localStorage.getItem('gc_hours_seen') || '[]'); } catch (e) { hoursSeen = []; }
+if (!Array.isArray(hoursSeen)) hoursSeen = [];
+try { localStorage.removeItem('gc_hour_shown'); } catch (e) {} // the one-key version this replaces
+var hoursInLog = {};       // key -> 1 for each reading drawn into this page's room log
+var roomHistoryIn = false; // set once sign-on has replayed the history; cleared by leaveRoom
+function hourEntryOk(x) {
+return !!x && typeof x.k === 'string' && typeof x.at === 'number' && !!HOURS_OF_THE_DAY[x.h] && !!SCRIPTURE[x.h] && !!SCRIPTURE[x.h][x.i];
+}
+function saveHoursSeen() {
+var cutoff = Date.now() - HOURS_KEEP_MS;
+hoursSeen = hoursSeen.filter(function (x) { return hourEntryOk(x) && x.at > cutoff; }).slice(-60);
+try { localStorage.setItem('gc_hours_seen', JSON.stringify(hoursSeen)); } catch (e) {}
+}
+function drawHour(x) {
+hoursInLog[x.k] = 1;
+addScripture(HOURS_OF_THE_DAY[x.h], SCRIPTURE[x.h][x.i], x.at);
+}
+/* Which readings to put back into a history that is being replayed, oldest first: the ones this
+   device showed from the oldest room message in that history onwards. Anything older left the
+   room's backlog along with the messages around it. */
+function hoursToRestore(rows) {
+var oldest = null;
+for (var j = 0; j < rows.length; j++) if (!rows[j].recipient_id && !rows[j].conversation_id) { oldest = Date.parse(rows[j].created_at); break; }
+if (oldest === null || isNaN(oldest)) return [];
+var now = Date.now();
+return hoursSeen.filter(function (x) { return hourEntryOk(x) && x.at >= oldest && x.at <= now && !hoursInLog[x.k]; })
+.sort(function (a, b) { return a.at - b.at; });
+}
 function bellTick() {
-if (!me) return; // the sign-on screen is not the room; no bells for someone still at the door
+if (!me || !roomHistoryIn) return; // the sign-on screen is not the room, and nor is a room whose history is still coming in
 var d = new Date(), h = canonicalHourNow(d), hour = h === null ? null : HOURS_OF_THE_DAY[h];
 if (!hour) return;
 var key = d.toDateString() + ' ' + h;
-if (shownHour === key) return;
-shownHour = key;
-try { localStorage.setItem('gc_hour_shown', key); } catch (e) {}
+if (hoursInLog[key]) return; // already on screen
+var before = null;
+for (var j = 0; j < hoursSeen.length; j++) if (hoursSeen[j] && hoursSeen[j].k === key) before = hoursSeen[j];
 /* The bell announces an hour striking. A reading being caught up on -- a phone unlocked at 15:40,
    a tab opened after lunch -- arrives quietly, because ringing for an hour that struck forty
-   minutes ago would be announcing something that has already happened. */
-if (d.getHours() === h && d.getMinutes() <= 2 && !document.hidden) playSound('bell');
-var entry = readingFor(h);
-if (entry) addScripture(hour, entry); else addSys('\u{1F514} ' + hour.name + '.');
+   minutes ago would be announcing something that has already happened. Nor does it ring again for
+   a reading this device has already shown, which is being put back after a reload. */
+if (!before && d.getHours() === h && d.getMinutes() <= 2 && !document.hidden) playSound('bell');
+var i = before && hourEntryOk(before) ? before.i : readingIndexFor(h);
+if (i < 0) { hoursInLog[key] = 1; addSys('\u{1F514} ' + hour.name + '.'); return; }
+/* Drawn now, at the bottom -- so it is remembered as drawn now. That includes a reading this device
+   showed earlier in the hour that did not come back with the history, because the room has moved
+   on by more than a backlog since: next time it goes back where it is about to appear. */
+var at = Date.now();
+if (before) { before.i = i; before.at = at; } else hoursSeen.push({ k: key, h: h, i: i, at: at });
+saveHoursSeen();
+drawHour({ k: key, h: h, i: i, at: at });
 }
 setInterval(bellTick, 30000);
 /* A locked phone stops the interval above dead, so every way the app can come back to life
@@ -7725,8 +7779,17 @@ if ($('roomWatermark')) $('roomWatermark').classList.remove('hidden');
    only messages that arrived later in the session ever appeared. */
 await loadMyGroups();
 replayingHistory = true;
-h.data.reverse().forEach(handleMessage);
+/* v166: the readings this device showed go back in among the messages, each where it stood (see
+   hoursSeen). Merged by time as the rows go past, so the day dividers still come out right. */
+var rows = h.data.reverse(), hoursBack = hoursToRestore(rows);
+rows.forEach(function (m) {
+var t = Date.parse(m.created_at);
+while (hoursBack.length && hoursBack[0].at <= t) drawHour(hoursBack.shift());
+handleMessage(m);
+});
+hoursBack.forEach(drawHour);
 replayingHistory = false;
+roomHistoryIn = true;
 /* Badges were accumulated silently during the replay above; paint them once, now, rather than
    re-rendering the whole people list on every one of up to 200 historical messages. */
 renderPeople();
