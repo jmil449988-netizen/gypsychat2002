@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 155;
+var BUILD_NUMBER = 156;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -1601,7 +1601,17 @@ log.addEventListener('scroll', function () { if (newBelow && log.scrollHeight - 
 window.addEventListener('resize', placeNewPill);
 }
 var lastMsgAt = null; // newest created_at seen -- catchUp() fetches anything after it
-function handleMessage(m) { if (m.created_at && (!lastMsgAt || m.created_at > lastMsgAt)) lastMsgAt = m.created_at; if (blocked[m.sender_id]) return; if (m.recipient_id) renderIM(m); else renderRoom(m); }
+/* v155: a group line has no recipient_id -- it is addressed to the conversation -- so routing on
+   recipient_id alone sent every one of them to the room renderer, where renderRoom had nothing to
+   do with it and the group window stayed empty.
+   The block check is skipped for a group on purpose: a block governs whispers and the room, and
+   hiding a member's lines from one person only would give that person a different history of the
+   same conversation, with replies answering messages they cannot see. */
+function handleMessage(m) {
+if (m.created_at && (!lastMsgAt || m.created_at > lastMsgAt)) lastMsgAt = m.created_at;
+if (!m.conversation_id && blocked[m.sender_id]) return;
+if (m.recipient_id || m.conversation_id) renderIM(m); else renderRoom(m);
+}
 /* v121: connection state. The realtime socket reconnects on its own (and the channel re-joins,
    which fires SUBSCRIBED again -- see channel.subscribe in join()), but nothing that happened
    while it was down ever arrives: those events are gone. So while the link is down a small
@@ -2087,6 +2097,7 @@ if ($('ucount')) $('ucount').textContent = '· ' + ids.length;
    refuse to deliver a whisper to someone who never actually left. */
 var reachablePool = recentPeopleEntries();
 Object.keys(wins).forEach(function (id) {
+if (isGroupKey(id)) return; // v155: a group does not come and go, and its name is not a person's
 var w = wins[id], here = !!(people[id] || reachablePool[id]);
 if (!here && !w.gone) { w.gone = true; imSys(id, w.name + ' has left the room.'); }
 if (here && w.gone) { w.gone = false; imSys(id, w.name + ' is back.'); }
