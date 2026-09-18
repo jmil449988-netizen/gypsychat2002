@@ -77,7 +77,14 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 170;
+var BUILD_NUMBER = 171;
+/* v171: the icons of the three page buttons (and the Game Room's own header and toasts), drawn inline so they
+   look the same on every phone and desktop, which emoji don't: a poker table for the Game Room, a purple @ for
+   Threads, and for Roulette a red Romani wagon wheel -- sixteen spokes, as on the flag -- that turns slowly
+   (.fab-ico / .ico-wheel in style.css). index.html carries the same markup for the first paint. */
+var ICON_TABLE = '<svg class="fab-ico ico-table" viewBox="0 0 32 22" aria-hidden="true" focusable="false"><rect x="1" y="1.5" width="30" height="19" rx="9.5" fill="#6b3f1d" stroke="#1d1007" stroke-width="1"/><rect x="2.3" y="2.8" width="27.4" height="16.4" rx="8.2" fill="none" stroke="#a8703a" stroke-width=".9"/><rect x="4.2" y="4.7" width="23.6" height="12.6" rx="6.3" fill="#1d7a3e" stroke="#0b2e17" stroke-width=".7"/><rect x="6.6" y="7" width="18.8" height="8" rx="4" fill="none" stroke="#e2c064" stroke-width=".55" opacity=".8"/><rect x="11.9" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(-8 13.7 10.9)"/><rect x="16.5" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(8 18.3 10.9)"/><path d="M13.7 9.9l.8 1-.8 1-.8-1z" fill="#c0392b" transform="rotate(-8 13.7 10.9)"/><path d="M18.3 9.9l.8 1-.8 1-.8-1z" fill="#1a1410" transform="rotate(8 18.3 10.9)"/></svg>';
+var ICON_AT = '<svg class="fab-ico ico-at" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="#b36bff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.9"/><path d="M15.9 8.2v5.1a2.7 2.7 0 0 0 5.4 0v-1.3a9.3 9.3 0 1 0-3.7 7.4"/></svg>';
+var ICON_WHEEL = '<svg class="fab-ico ico-wheel" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10.3" fill="none" stroke="#e3261b" stroke-width="2.1"/><circle cx="12" cy="12" r="8.1" fill="none" stroke="#e3261b" stroke-width=".8"/><path d="M12 9.1L12 3.6M13.11 9.32L15.21 4.24M14.05 9.95L17.94 6.06M14.68 10.89L19.76 8.79M14.9 12L20.4 12M14.68 13.11L19.76 15.21M14.05 14.05L17.94 17.94M13.11 14.68L15.21 19.76M12 14.9L12 20.4M10.89 14.68L8.79 19.76M9.95 14.05L6.06 17.94M9.32 13.11L4.24 15.21M9.1 12L3.6 12M9.32 10.89L4.24 8.79M9.95 9.95L6.06 6.06M10.89 9.32L8.79 4.24" stroke="#e3261b" stroke-width="1.05" stroke-linecap="round"/><circle cx="12" cy="12" r="2.9" fill="#e3261b"/><circle cx="12" cy="12" r="1" fill="#3a0d08"/></svg>';
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -4163,7 +4170,7 @@ if (bugBtn) bugBtn.classList.add('hidden');
 if (bugReportOverlay) bugReportOverlay.classList.add('hidden');
 if (gcRoot) gcRoot.classList.remove('admin-open');
 if (threadsPanel) { threadsPanel.classList.remove('ready'); }
-if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.textContent = '🧵'; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
+if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.innerHTML = ICON_AT; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
 if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('leaderboard-open'); gcRoot.classList.remove('signed-on'); }
 openThreadId = null;
 placeThreadBtn(); // signed off: the threads takeover is gone, so the button belongs to .title again
@@ -5610,8 +5617,8 @@ r.data.forEach(function (g) { if (gameShowsCard(g)) renderBsCard(g, { scroll: fa
 }
 
 /* ---------- the Game Room: tables for up to four players (v169) ----------
-   A page of its own -- the same full-screen takeover as the Popularity Contest -- opened from 🎴 in
-   the title bar on a desktop, or the 🎴 bubble on a phone. It lists the open tables. Each table has
+   A page of its own -- the same full-screen takeover as the Popularity Contest -- opened from the poker
+   table in the title bar on a desktop, or the poker-table bubble on a phone. It lists the open tables. Each table has
    four player seats and four spectator seats, a chat of its own, and a game: UNO for 2-4 players
    (v169), or no-limit Hold'em for 2-4 betting real XP (v170). supabase/game_tables_feature.sql and
    holdem_tables_feature.sql hold the rules and the security; every move here is an rpc, and this
@@ -5722,7 +5729,7 @@ renderGameRoom(); grMarkBtn();
 if (grFirstLoad) {
 grFirstLoad = false;
 var mt = grMySeat && grTables[grMySeat.table_id];
-if (mt && !grOpen()) showToast({ peer: 'gtable', kind: 'seat', icon: '🎴', text: 'You’re still at ' + (mt.host_id === me.id ? 'your' : (mt.host_name || 'someone') + '’s') + ' ' + grGame(mt).name + ' table', sub: 'Tap to go back to it', ttl: 12000, onClick: openGameRoom });
+if (mt && !grOpen()) showToast({ peer: 'gtable', kind: 'seat', icon: ICON_TABLE, text: 'You’re still at ' + (mt.host_id === me.id ? 'your' : (mt.host_name || 'someone') + '’s') + ' ' + grGame(mt).name + ' table', sub: 'Tap to go back to it', ttl: 12000, onClick: openGameRoom });
 }
 }
 function grSetMySeat(seat) {
@@ -5749,12 +5756,12 @@ grSetMySeat(null);
 if (wasHd && typeof refreshMyStats === 'function') refreshMyStats(); // my stack went back to my XP
 grNote = why || 'You’re no longer at that table.';
 renderGameRoom(); grMarkBtn();
-if (!grOpen()) showToast({ peer: 'gtable', kind: 'seat', icon: '🎴', text: grNote, sub: 'Tap to open the Game Room', ttl: 9000, onClick: openGameRoom });
+if (!grOpen()) showToast({ peer: 'gtable', kind: 'seat', icon: ICON_TABLE, text: grNote, sub: 'Tap to open the Game Room', ttl: 9000, onClick: openGameRoom });
 }
 /* One line for the person: into the table chat when seated, otherwise at the top of the list. */
 function grNotice(text) {
 if (grMySeat) grSys(text); else { grNote = text; renderGameRoom(); }
-if (!grOpen()) showToast({ peer: 'gtable', kind: 'note', icon: '🎴', text: text, sub: 'Tap to open the Game Room', ttl: 7000, onClick: openGameRoom });
+if (!grOpen()) showToast({ peer: 'gtable', kind: 'note', icon: ICON_TABLE, text: text, sub: 'Tap to open the Game Room', ttl: 7000, onClick: openGameRoom });
 }
 
 /* ----- realtime ----- */
@@ -5992,7 +5999,7 @@ if (grMySeat && grMySeat.table_id === row.table_id) return;
 grInvites[row.table_id] = row;
 var t = grTables[row.table_id];
 playSound('challenge');
-showToast({ peer: 'gtable-' + row.table_id, kind: 'invite', icon: '🎴', text: (row.from_name || 'A friend') + ' invites you to their ' + (t ? grGame(t).name : 'game') + ' table',
+showToast({ peer: 'gtable-' + row.table_id, kind: 'invite', icon: ICON_TABLE, text: (row.from_name || 'A friend') + ' invites you to their ' + (t ? grGame(t).name : 'game') + ' table',
 sub: 'In the Game Room', ttl: 60000, onClick: function () { grJoin(row.table_id); },
 actions: [['Join', function () { grJoin(row.table_id); }], ['No thanks', function () { grDismissInvite(row.table_id); }]] });
 if (document.hidden) bumpTitle();
@@ -6626,7 +6633,7 @@ if (gameRoomBtn) {
 gameRoomBtn.onclick = function () { if (grOpen()) closeGameRoom(); else openGameRoom(); };
 makeFabDraggable(gameRoomBtn, 'gc_fab_gameroom', true);
 }
-/* Desktop: into the title bar, just inside the Roulette button (the name then reads roulette / 🎴 /
+/* Desktop: into the title bar, just inside the Roulette button (the name then reads roulette / table /
    lantern / GYPSY CHAT 2000 / lantern / threads). Phone: a bubble above the other two. Only once
    signed on -- before that the button is hidden and the title keeps its old balance. */
 function placeGameRoomBtn() {
@@ -8032,7 +8039,7 @@ var opening = !gcRoot.classList.contains('mobile-threads-open');
 if (opening) rememberChatScroll();
 var open = gcRoot.classList.toggle('mobile-threads-open');
 threadToggleBtn.classList.toggle('open', open);
-threadToggleBtn.textContent = open ? '💬' : '🧵';
+threadToggleBtn.innerHTML = open ? '💬' : ICON_AT;
 threadToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Open threads board');
 if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidden'); }
 else returnToChat();
@@ -9282,8 +9289,8 @@ placeThreadBtn(); // desktop: into the title bar beside the name, rather than fl
 /* The desktop half of this tip used to say the board was "to the right", from back when it was
    a side panel in the gutter, and the phone half said "in the corner" -- neither is true on a
    desktop any more now that the board is a full-screen takeover opened from the title bar. */
-if (window.matchMedia('(min-width:501px)').matches) addSys('Tip: the 🧵 button up in the title bar opens the Threads board — general chat, no topics, post anything.');
-else addSys('Tip: tap the 🧵 button in the corner to open the Threads board.');
+if (window.matchMedia('(min-width:501px)').matches) addSys('Tip: the purple @ up in the title bar opens the Threads board — general chat, no topics, post anything.');
+else addSys('Tip: tap the purple @ bubble to open the Threads board.');
 }
 pinLogBottom();
 loadGames(); // Tic-Tac-Toe cards into their whisper windows (open games + results from the last hour)
@@ -9291,7 +9298,7 @@ loadUno();   // same for UNO
 loadHangman(); loadHoldem(); loadPrasta(); loadBattleship();
 grSubscribe(); // v169: the Game Room -- its own channel; loads the tables once subscribed
 var grTipSeen = false; try { grTipSeen = localStorage.getItem('gc_gameroom_tip') === '1'; } catch (e) {}
-if (!grTipSeen) { addSys('New: the 🎴 Game Room. Open a table for UNO with up to four players and four watchers, or join someone else’s. ' + (window.matchMedia('(min-width:501px)').matches ? 'It’s up in the title bar.' : 'Tap the 🎴 bubble.')); try { localStorage.setItem('gc_gameroom_tip', '1'); } catch (e) {} }
+if (!grTipSeen) { addSys('New: the Game Room. Open a table for UNO or Hold’em with up to four players and four watchers, or join someone else’s. ' + (window.matchMedia('(min-width:501px)').matches ? 'It’s the little poker table up in the title bar.' : 'Tap the poker-table bubble.')); try { localStorage.setItem('gc_gameroom_tip', '1'); } catch (e) {} }
 resetIdle();
 startRecentPeopleHeartbeat();
 autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
