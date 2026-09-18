@@ -194,3 +194,87 @@ reporting, which is why two silent build-number mismatches went unnoticed until 
 Small: `pm.mp3` has been unused since build 135; leftover "sound test" and sound-effect lines are
 sitting in main chat from testing; the hourly bell will ring at 3 a.m. for anyone who left the tab
 open and visible.
+
+---
+
+# Builds 153 → 160 · 18 September 2026
+
+Previous state: build 152, style.css 113, cache `gc2000-v183`.
+Current state: **app.js 160, style.css 115, cache `gc2000-v191`, APP_VERSION Beta v0.8.0.**
+
+153 – 158 were written up only in their commit messages, so this part is a summary of those:
+153 kept the Messages pill from vanishing on a phone and got the hourly readings to phones;
+154 – 155 added group chats (`group_chats_feature.sql`) with their own picker, window and composer
+grid, and hid the composer buttons that are still one-to-one only (games, voice notes); 156 sent
+group lines to the group's own window; 157 loaded the groups before the history replay, because
+the replay was throwing every group's history away; 158 stopped the 👥 member menu closing on the
+same click that opened it.
+
+## Naming a group (159)
+
+Anyone in a group can name it, rename it, or clear the name from the 👥 menu ("✎ Name this group",
+or "✎ Rename this group" once it has one). Blank means no name: the group is called after the
+people in it again. Tapping the group's name in its title bar opens the same menu — before this it
+opened a person menu for the window key `g<id>`, whose Get Info, Block and Add Friend all failed.
+
+The write goes through `gc_rename_group` (`group_names_feature.sql`), because `conversations` has
+no UPDATE policy. It checks membership and mutes, tidies the text the same way the client does
+(whitespace runs to one space, control characters out, trimmed), refuses more than 40 characters,
+and records `title_by` / `title_at`. One person gets one rename every five seconds, since every
+rename puts a line in up to seven other windows. The rename reaches the other members as a
+realtime UPDATE on `conversations`: "Alice named the group “Road trip”." The renamer's own window
+says "You named…". `catchUp()` re-reads the names after a dropped connection.
+
+Tested in a rolled-back practice run first (11 checks: member rename, the five-second rule, a
+direct UPDATE changing 0 rows, a second member, tidying, 41 characters refused, clearing, an
+outsider refused, someone who left refused), then live in the user's own test group, including a
+rename made from the SQL Editor that the open tab picked up without a reload.
+
+## The outage this found (160)
+
+**From build 154 until the fix, nothing on the room channel arrived live**: messages, whispers,
+group lines, reactions, read receipts, game moves, XP. The channel still said SUBSCRIBED, and
+presence and broadcasts (typing, buzz, sounds) kept working, which is why it looked alive. New
+lines only showed up on a reload, or on a catch-up after a reconnect or a long spell in the
+background.
+
+The cause: v154's client listens to `conversation_members`, but `group_chats_feature.sql` never
+added that table to the `supabase_realtime` publication. Realtime creates all of a channel's
+postgres_changes subscriptions in one transaction and rolls the whole lot back when any table in
+it is missing from the publication. Found because `realtime.subscription` had rows for the
+threads, reports and friend-request channels but none at all for the room channel's tables, with
+three clients connected. Proved with two probe channels: `threads` alone replied "Subscribed to
+PostgreSQL"; `threads` + `conversation_members` replied "Unable to subscribe to changes with given
+parameters … table: conversation_members".
+
+Fixed by `group_members_realtime_fix.sql`, which adds the table to the publication. Clients get
+live delivery back the next time they load the page.
+
+**Rule from here on: a table the client listens to goes into the publication before the client
+that listens to it ships. And a feature isn't verified until something has arrived live on a
+second screen: the sender's own copy is drawn locally, so it proves nothing.**
+
+With the membership feed working for the first time, 160 also:
+
+- skips the membership reload when an UPDATE is only a read marker moving, which is most of
+  them, because `gc_mark_group_read` runs whenever anyone reads the group;
+- puts "3 in the group · 1 here now" under a group's name instead of "Offline". It used to treat
+  the group as a person, and asked `profiles` about a user called `g<id>` on every window.
+
+## The leaving sound, twice as fast (160)
+
+The request in 152 was twice as fast, not twice as loud. `signoff.mp3` is now the original
+recording played at double speed, an octave up (`asetrate=88200,aresample=44100`), 3.03 s → 1.54 s.
+The user picked it over a same-pitch time-stretch. It is back at its original volume: the file is
+matched to the original's peak momentary loudness, and `SOUND_GAIN.signoff` is back to 0.8,
+undoing 152's +6 dB. Checked on the deployed file, decoded in the browser: 1.50 s, peak −4.4 dBFS.
+
+## Not done, found on the way
+
+- A group line is capped at 140 characters, the main room's limit: `post()` and the
+  `messages_body_check` constraint both key on `recipient_id is null`. The group composer takes
+  500, so anything past 140 is cut off without a word.
+- An @mention in a group line sends that person a "mentioned you" push with the text in it, even
+  when they are not in the group.
+- One member of the test group shows as "someone": their `member_name` is empty, probably one of
+  the accounts with no `profiles` row.
