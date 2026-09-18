@@ -77,7 +77,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 168;
+var BUILD_NUMBER = 169;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -392,7 +392,7 @@ showInfoBubble(b, 'Level ' + s.level + ' · ' + xpOf(s) + ' XP', [
 (s.reactions_received || 0) + ' XP from reactions on ' + (who === 'You' ? 'your' : 'their') + ' messages',
 (s.game_points || 0) + ' XP from winning games',
 xpToNext(s) ? xpToNext(s) + ' XP to level ' + (s.level + 1) : 'Level ' + (s.level + 1) + ' is next',
-'XP comes from reactions to what you say and from winning games in whispers (game XP caps at 500 a day).'
+'XP comes from reactions to what you say and from winning games, in whispers and at the Game Room tables (game XP caps at 500 a day; Hold’em and Prasta chips just change hands).'
 ]);
 }, true);
 /* The 🎲 menu -- one place to add a game. */
@@ -1430,6 +1430,7 @@ if ($('saveOverlay') && !$('saveOverlay').classList.contains('hidden')) $('saveO
 if ($('imgLightbox') && !$('imgLightbox').classList.contains('hidden')) closeLightbox();
 if (bugReportOverlay && !bugReportOverlay.classList.contains('hidden')) closeBugReportModal();
 if (typeof closeAdminPanel === 'function' && gcRoot && gcRoot.classList.contains('admin-open')) closeAdminPanel();
+if (typeof grOpen === 'function' && grOpen() && !(e.target && e.target.classList && e.target.classList.contains('gr-chatin') && e.target.value)) closeGameRoom();
 });
 
 /* ---------- image lightbox: click any posted picture (room, whispers, threads) to see it full
@@ -1673,7 +1674,7 @@ if (lastMsgAt) {
 var r = await sb.from('messages').select('*').eq('room', C.ROOM || 'main').gt('created_at', lastMsgAt).order('created_at', { ascending: true }).limit(200);
 if (!r.error && r.data) r.data.forEach(handleMessage);
 }
-await Promise.all([loadGames(), loadUno(), loadHangman(), loadHoldem(), loadBattleship(), refreshGroupNames()]);
+await Promise.all([loadGames(), loadUno(), loadHangman(), loadHoldem(), loadBattleship(), refreshGroupNames(), loadGameRoom()]);
 if (typeof refreshMyStats === 'function') refreshMyStats();
 } catch (e) {}
 }
@@ -3396,6 +3397,7 @@ function tagInChat(name) {
   if (gcRoot.classList.contains('mobile-threads-open') && threadToggleBtn) threadToggleBtn.click();
   if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
   if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
+  if (grOpen()) closeGameRoom();
   var v = msg.value;
   var s = typeof msg.selectionStart === 'number' ? msg.selectionStart : v.length;
   var e = typeof msg.selectionEnd === 'number' ? msg.selectionEnd : v.length;
@@ -3667,6 +3669,7 @@ if (users) loadReports(); else loadBugReports();
 function openAdminPanel(which) {
 if (!isAdmin || !adminPanel) return;
 closeGif();
+if (grOpen()) closeGameRoom();
 if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
 if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
 if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
@@ -4139,6 +4142,10 @@ delete bans[id]; addSys(name + ' may return.');
    after one path removed it and the other didn't. */
 function leaveRoom(message, rejoinable) {
 hideConnBar(); clearNewPill();
+/* v169: signing off (or being removed) gives up a Game Room seat at once, rather than leaving it
+   to the five-minute sweep -- best effort, the session may already be on its way out */
+if (grMySeat && sb) { try { sb.rpc('table_leave', { p_table: grMySeat.table_id }).then(function () {}, function () {}); } catch (e) {} }
+grUnsubscribe();
 roomHistoryIn = false; // v166: no reading goes into a room that is not there (bellTick)
 if (channel) { channel.unsubscribe(); channel = null; }
 unsubscribeThreads();
@@ -4433,6 +4440,7 @@ else { games[r.data.id] = r.data; renderGameCard(r.data, { scroll: false }); }
 }
 });
 bsClockTick(); // v167: Battleship keeps two clocks (placing, then shots) -- see bsClockTick
+grClockTick(); // v169: the Game Room table I sit at
 }
 setInterval(clockTick, 250);
 async function challengeGame(peerId, name) {
@@ -5596,6 +5604,699 @@ var f = await sb.from('battleship_fleets').select('game_id, user_id, layout').in
 (f.data || []).forEach(function (x) { if (x.user_id === me.id) { bsFleet[x.game_id] = x.layout; if (!bsDraft[x.game_id]) bsDraft[x.game_id] = x.layout; } else bsReveal[x.game_id] = x.layout; });
 }
 r.data.forEach(function (g) { if (gameShowsCard(g)) renderBsCard(g, { scroll: false }); });
+}
+
+/* ---------- the Game Room: tables for up to four players (v169) ----------
+   A page of its own -- the same full-screen takeover as the Popularity Contest -- opened from 🎴 in
+   the title bar on a desktop, or the 🎴 bubble on a phone. It lists the open tables. Each table has
+   four player seats and four spectator seats, a chat of its own, and a game: UNO for 2-4 players
+   for now (Hold'em comes next, on the same tables). supabase/game_tables_feature.sql holds the rules
+   and the security; every move here is an rpc, and this client repaints from what comes back and
+   from realtime.
+
+   Realtime lives on channels of its own, NOT the room channel: 'gameroom' (the table list, and my
+   invites) for as long as I am signed on, and 'gtable:<id>' (the round, my hand, the table chat)
+   while I sit at a table. A listened-to table missing from the publication stops every listener on
+   its channel (the build 154 outage) -- kept apart, a mistake here can never take the room down.
+   Seats are not published: every seat, host or status change touches game_tables.updated_at, and
+   the UPDATE that produces is the cue to re-read that table's seats.
+
+   While seated, the browser says "still here" once a minute (table_heartbeat); a seat not heard
+   from for five minutes is freed, except a player holding cards in a running round -- the turn
+   clock handles those (two missed turns in a row and they are out). */
+var gameRoomPanel = $('gameRoomPanel'), gameRoomBtn = $('gameRoomBtn'), grBody = $('grBody'), gameRoomBack = $('gameRoomBack');
+var gameRoomBtnHome = gameRoomBtn ? gameRoomBtn.parentNode : null;
+var GR_GAMES = { uno: { name: 'UNO', icon: '🃏' }, holdem: { name: 'Hold’em', icon: '♠' } };
+var GR_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
+var grTables = {}, grSeats = {}, grInvites = {}, grMySeat = null;
+var grUno = null, grHand = [], grHandRound = 0, grLog = [], grPick = null, grNote = '';
+var grChannel = null, grTableChannel = null, grTableChannelId = null, grHeartbeatTimer = null, grSeatTimers = {}, grUnoTimer = null;
+var grFirstLoad = false, grSeatGen = 0, grBusy = false, grLeaveArmed = false, grLeaveTimer = null, grUnread = 0, grAnnounced = {}, grTimeoutFired = {}, grLastTick = '';
+
+function grGame(t) { return GR_GAMES[t && t.game] || { name: 'game', icon: '🎲' }; }
+function grOpen() { return !!(gcRoot && gcRoot.classList.contains('gameroom-open')); }
+function grMyIndex() { return grUno && me ? grUno.players.indexOf(me.id) : -1; }
+function grSeatsOf(tid, role) { return (grSeats[tid] || []).filter(function (s) { return !role || s.role === role; }).sort(function (a, b) { return a.seat - b.seat; }); }
+function grOrdinal(n) { return n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th'); }
+function grRoundOf(tid) { var t = grTables[tid]; return grUno && t && grUno.table_id === tid && grUno.round === t.round ? grUno : null; }
+function grMyTurn() { var u = grUno, i = grMyIndex(); return !!(u && u.status === 'playing' && i >= 0 && u.turn === i + 1 && u.place[i] === 0); }
+
+/* ----- the page ----- */
+function openGameRoom() {
+if (!me || !gcRoot) return;
+closeGif();
+if (gcRoot.classList.contains('mobile-threads-open') && threadToggleBtn) threadToggleBtn.click();
+if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
+if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
+if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
+if (!grOpen()) rememberChatScroll();
+gcRoot.classList.add('gameroom-open');
+grUnread = 0; dismissToasts('gtable'); grMarkBtn();
+renderGameRoom();
+grRefresh();
+}
+function closeGameRoom() {
+if (!grOpen()) return;
+gcRoot.classList.remove('gameroom-open');
+closeMiniMenu();
+grMarkBtn();
+returnToChat();
+}
+/* "Still here" plus the housekeeping sweep, then a fresh list -- so the page never opens on
+   tables that have already emptied out. */
+async function grRefresh() {
+if (!me || !sb) return;
+try { await sb.rpc('table_heartbeat'); } catch (e) {}
+await loadGameRoom();
+}
+async function loadGameRoom() {
+if (!me || !sb) return;
+var gen = grSeatGen;
+var t = await sb.from('game_tables').select('*').neq('status', 'closed').order('created_at', { ascending: false }).limit(40);
+if (t.error) return;
+var tables = {}; (t.data || []).forEach(function (row) { tables[row.id] = row; });
+var mine = await sb.from('table_seats').select('*').eq('user_id', me.id).maybeSingle();
+if (mine.error) return;
+if (mine.data && !tables[mine.data.table_id]) {
+var mt = await sb.from('game_tables').select('*').eq('id', mine.data.table_id).maybeSingle();
+if (mt.data) tables[mt.data.id] = mt.data;
+}
+var ids = Object.keys(tables).map(Number), seats = {};
+if (ids.length) {
+var s = await sb.from('table_seats').select('table_id, user_id, name, role, seat, joined_at').in('table_id', ids);
+if (s.error) return;
+(s.data || []).forEach(function (x) { (seats[x.table_id] = seats[x.table_id] || []).push(x); });
+}
+var inv = await sb.from('table_invites').select('*').eq('user_id', me.id);
+grTables = tables; grSeats = seats; grInvites = {};
+(inv.data || []).forEach(function (x) { if (tables[x.table_id] && !blocked[x.from_id]) grInvites[x.table_id] = x; });
+if (gen === grSeatGen) { // unless I sat down or left while this was loading
+if (grMySeat && !mine.data) grMySeatGone(grWhyGone(grMySeat.table_id));
+else grSetMySeat(mine.data || null);
+}
+if (grMySeat) grLoadTable(grMySeat.table_id);
+renderGameRoom(); grMarkBtn();
+/* back after a reload or a new sign-on while still holding a seat: say where */
+if (grFirstLoad) {
+grFirstLoad = false;
+var mt = grMySeat && grTables[grMySeat.table_id];
+if (mt && !grOpen()) showToast({ peer: 'gtable', kind: 'seat', icon: '🎴', text: 'You’re still at ' + (mt.host_id === me.id ? 'your' : (mt.host_name || 'someone') + '’s') + ' ' + grGame(mt).name + ' table', sub: 'Tap to go back to it', ttl: 12000, onClick: openGameRoom });
+}
+}
+function grSetMySeat(seat) {
+if ((grMySeat && grMySeat.table_id) !== (seat && seat.table_id)) grSeatGen++;
+grMySeat = seat;
+var tid = seat ? seat.table_id : null;
+if (tid !== grTableChannelId) grWatchTable(tid);
+if (tid) grStartHeartbeat(); else grStopHeartbeat();
+}
+function grWhyGone(tid) {
+var t = grTables[tid], mi = grMyIndex();
+if (!t || t.status === 'closed') return 'The table closed.';
+if (grUno && grUno.table_id === tid && mi >= 0 && grUno.outcome[mi] === 'idle') return 'You missed two turns in a row, so you were taken off the table.';
+return 'You were taken off the table: this device went quiet for a few minutes.';
+}
+/* My seat is gone without my asking (two missed turns, a quiet device, the table closed). */
+function grMySeatGone(why) {
+if (!grMySeat) return;
+grSetMySeat(null);
+grNote = why || 'You’re no longer at that table.';
+renderGameRoom(); grMarkBtn();
+if (!grOpen()) showToast({ peer: 'gtable', kind: 'seat', icon: '🎴', text: grNote, sub: 'Tap to open the Game Room', ttl: 9000, onClick: openGameRoom });
+}
+/* One line for the person: into the table chat when seated, otherwise at the top of the list. */
+function grNotice(text) {
+if (grMySeat) grSys(text); else { grNote = text; renderGameRoom(); }
+if (!grOpen()) showToast({ peer: 'gtable', kind: 'note', icon: '🎴', text: text, sub: 'Tap to open the Game Room', ttl: 7000, onClick: openGameRoom });
+}
+
+/* ----- realtime ----- */
+function grSubscribe() {
+if (grChannel || !sb || !me) return;
+grFirstLoad = true;
+grChannel = sb.channel('gameroom')
+.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_tables' }, function (p) { grTableRowArrived(p.new, true); })
+.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_tables' }, function (p) { grTableRowArrived(p.new, false); })
+.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'table_invites', filter: 'user_id=eq.' + me.id }, function (p) { grInviteArrived(p.new); })
+.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'table_invites', filter: 'user_id=eq.' + me.id }, function (p) { grInviteArrived(p.new); })
+.subscribe(function (status) { if (status === 'SUBSCRIBED') loadGameRoom(); });
+}
+function grUnsubscribe() {
+if (grChannel) { try { sb.removeChannel(grChannel); } catch (e) {} grChannel = null; }
+grWatchTable(null); grStopHeartbeat();
+grTables = {}; grSeats = {}; grInvites = {}; grMySeat = null; grLog = []; grNote = ''; grUnread = 0; grAnnounced = {};
+if (grBody) { grBody.innerHTML = ''; grBody.dataset.view = ''; }
+if (gcRoot) gcRoot.classList.remove('gameroom-open');
+if (gameRoomBtn) gameRoomBtn.classList.remove('ready', 'news', 'seated');
+}
+function grWatchTable(tid) {
+if (grTableChannel) { try { sb.removeChannel(grTableChannel); } catch (e) {} grTableChannel = null; }
+grTableChannelId = tid || null;
+grUno = null; grHand = []; grHandRound = 0; grLog = []; grPick = null; grLeaveArmed = false;
+if (!tid || !sb || !me) return;
+grTableChannel = sb.channel('gtable:' + tid)
+.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_tables', filter: 'table_id=eq.' + tid }, function (p) { grUnoArrived(p.new); })
+.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_tables', filter: 'table_id=eq.' + tid }, function (p) { grUnoArrived(p.new); grRefetchUno(tid); })
+.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'table_messages', filter: 'table_id=eq.' + tid }, function (p) { grMsgArrived(p.new); })
+.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_table_hands', filter: 'user_id=eq.' + me.id }, function (p) { grHandArrived(p.new); })
+.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_table_hands', filter: 'user_id=eq.' + me.id }, function (p) { grHandArrived(p.new); })
+.subscribe(function (status) { if (status === 'SUBSCRIBED') grLoadTable(tid); });
+}
+/* The round, my hand and the chat for the table I sit at. The chat keeps the seat-change lines
+   this device wrote itself, merged back in by time. */
+async function grLoadTable(tid) {
+if (!sb || !me) return;
+var u = await sb.from('uno_tables').select('*').eq('table_id', tid).maybeSingle();
+var h = await sb.from('uno_table_hands').select('*').eq('table_id', tid).eq('user_id', me.id).maybeSingle();
+var m = await sb.from('table_messages').select('*').eq('table_id', tid).order('id', { ascending: false }).limit(60);
+if (grTableChannelId !== tid) return; // moved on meanwhile
+if (!u.error) { var prev = grUno; grUno = u.data || null; if (grUno && prev && prev.round === grUno.round && new Date(prev.updated_at) > new Date(grUno.updated_at)) grUno = prev; }
+if (!h.error) { grHand = h.data ? (h.data.cards || []) : []; grHandRound = h.data ? h.data.round : 0; }
+if (!m.error) {
+var sys = grLog.filter(function (x) { return x.sys; });
+var msgs = (m.data || []).filter(function (x) { return !blocked[x.sender_id]; }).map(function (x) { return { row: x, at: Date.parse(x.created_at) }; });
+grLog = sys.concat(msgs).sort(function (a, b) { return a.at - b.at; }).slice(-150);
+if (grBody && grBody.dataset.view === 'table:' + tid) grPaintChat();
+}
+renderGameRoom(); grMarkBtn();
+}
+function grRefetchUno(tid) {
+clearTimeout(grUnoTimer);
+grUnoTimer = setTimeout(function () {
+sb.from('uno_tables').select('*').eq('table_id', tid).maybeSingle().then(function (r) { if (!r.error && r.data) grUnoArrived(r.data); });
+}, 300);
+}
+async function grFetchHand() {
+if (!grMySeat || !sb) return;
+var tid = grMySeat.table_id;
+var r = await sb.from('uno_table_hands').select('*').eq('table_id', tid).eq('user_id', me.id).maybeSingle();
+if (r.error || grTableChannelId !== tid) return;
+grHand = r.data ? (r.data.cards || []) : []; grHandRound = r.data ? r.data.round : 0;
+renderGameRoom();
+}
+function grHandArrived(row) {
+if (!row || row.user_id !== me.id || row.table_id !== grTableChannelId) return;
+if (grHandRound && row.round < grHandRound) return;
+grHand = row.cards || []; grHandRound = row.round;
+renderGameRoom();
+}
+function grTableRowArrived(row, isNew) {
+if (!row || !me) return;
+var prev = grTables[row.id];
+if (row.status === 'closed') { delete grTables[row.id]; delete grInvites[row.id]; }
+else grTables[row.id] = row;
+if (isNew && row.status === 'open') grAnnounce(row);
+if (grMySeat && grMySeat.table_id === row.id) {
+if (row.status === 'closed') { grMySeatGone('The table closed.'); return; }
+if (prev && prev.host_id !== row.host_id && row.host_id) grSys(row.host_id === me.id ? 'You’re the host now: you deal the rounds and can invite friends.' : (row.host_name || 'Someone') + ' is the host now.');
+}
+/* re-read the seats shortly after -- at most once per 150 ms per table however many changes land,
+   and never pushed back by a later change (so a busy table can't starve its own seat list) */
+if (row.status !== 'closed') {
+if (!grSeatTimers[row.id]) grSeatTimers[row.id] = setTimeout(function () { delete grSeatTimers[row.id]; grFetchSeats(row.id); }, 150);
+} else delete grSeats[row.id];
+renderGameRoom(); grMarkBtn();
+}
+async function grFetchSeats(tid) {
+var gen = grSeatGen;
+var r = await sb.from('table_seats').select('table_id, user_id, name, role, seat, joined_at').eq('table_id', tid);
+if (r.error) return;
+var old = grSeats[tid];
+grSeats[tid] = r.data || [];
+if (grMySeat && grMySeat.table_id === tid && gen === grSeatGen) {
+var mine = grSeats[tid].filter(function (s) { return s.user_id === me.id; })[0];
+if (old) grDiffSeats(old, grSeats[tid]);
+if (!mine) { grMySeatGone(grWhyGone(tid)); return; }
+grMySeat = mine;
+}
+renderGameRoom();
+}
+/* Who came, went, or moved, as lines in the table chat (only for the table I sit at). */
+function grDiffSeats(old, now) {
+var o = {}, n = {};
+old.forEach(function (s) { o[s.user_id] = s; }); now.forEach(function (s) { n[s.user_id] = s; });
+now.forEach(function (s) {
+if (s.user_id === me.id) return;
+var p = o[s.user_id], nm = s.name || 'Someone';
+if (!p) grSys(nm + (s.role === 'player' ? ' sat down.' : ' is watching.'));
+else if (p.role !== s.role) grSys(nm + (s.role === 'player' ? ' took a seat for the next round.' : ' moved to watching.'));
+});
+old.forEach(function (s) { if (!n[s.user_id] && s.user_id !== me.id) grSys((s.name || 'Someone') + ' left the table.'); });
+}
+function grUnoArrived(row) {
+if (!row || row.table_id !== grTableChannelId) return;
+var prev = grUno;
+if (prev && prev.round === row.round && prev.updated_at && row.updated_at && new Date(row.updated_at) < new Date(prev.updated_at)) return; // an older, half-way row
+if (prev && prev.round > row.round) return;
+grUno = row;
+var newRound = !prev || prev.round !== row.round;
+if (newRound) { grPick = null; if (row.players.indexOf(me.id) >= 0) grFetchHand(); }
+grUnoEvents(prev, row, newRound);
+renderGameRoom(); grMarkBtn();
+}
+/* Sounds, toasts and the title nudge for what just happened at my table. */
+function grUnoEvents(prev, u, newRound) {
+var mi = u.players.indexOf(me.id), key = 'gt' + u.table_id;
+if (u.status === 'playing' && (newRound || prev.last_action !== u.last_action)) gameSfx(key, 'card');
+if (newRound && u.status === 'playing' && mi >= 0 && !grOpen()) showToast({ peer: 'gtable', kind: 'deal', icon: '🃏', text: 'UNO: round ' + u.round + ' is dealt', sub: 'Tap to play', ttl: 8000, onClick: openGameRoom });
+var myTurn = u.status === 'playing' && mi >= 0 && u.turn === mi + 1 && u.place[mi] === 0;
+if (myTurn && (newRound || prev.turn !== u.turn || prev.turn_started_at !== u.turn_started_at)) {
+playSound('turn');
+if (!grOpen() || document.hidden) {
+var secs = Math.ceil(turnSecondsLeft(u));
+showToast({ peer: 'gtable', kind: 'turn', icon: '🃏', text: 'UNO: your turn', sub: secs + 's left — tap to play', countdown: secs, ttl: Math.max(3000, secs * 1000), onClick: openGameRoom });
+}
+if (document.hidden) bumpTitle();
+}
+if (prev && !newRound && mi >= 0 && prev.place[mi] === 0 && u.outcome[mi] === 'out' && u.place[mi] === 1) playSound('win');
+if (prev && !newRound && prev.status === 'playing' && u.status === 'over') {
+if (mi >= 0 && u.outcome[mi] === 'last') playSound('lose'); else if (mi < 0) playSound('ding');
+if (mi >= 0 && !grOpen()) {
+var first = u.place.indexOf(1);
+showToast({ peer: 'gtable', kind: 'over', icon: '🃏', text: u.outcome[mi] === 'out' ? 'UNO: you placed ' + grOrdinal(u.place[mi]) + (u.points[mi] > 0 ? ' (+' + u.points[mi] + ' XP)' : '') : 'UNO: round over' + (first >= 0 && u.outcome[first] === 'out' ? ' — ' + u.names[first] + ' won' : ''), sub: 'Tap to see the table', ttl: 9000, onClick: openGameRoom });
+}
+}
+}
+function grMsgArrived(row) {
+if (!row || !grMySeat || row.table_id !== grMySeat.table_id || blocked[row.sender_id]) return;
+if (grLog.some(function (x) { return x.row && x.row.id === row.id; })) return;
+grPushLog({ row: row, at: Date.parse(row.created_at) || Date.now() });
+if (row.sender_id === me.id) return;
+if (!grOpen()) { grUnread++; grMarkBtn(); } else messageSound(true);
+if (document.hidden) bumpTitle();
+}
+function grInviteArrived(row) {
+if (!row || row.user_id !== me.id || blocked[row.from_id]) return;
+if (grMySeat && grMySeat.table_id === row.table_id) return;
+grInvites[row.table_id] = row;
+var t = grTables[row.table_id];
+playSound('challenge');
+showToast({ peer: 'gtable-' + row.table_id, kind: 'invite', icon: '🎴', text: (row.from_name || 'A friend') + ' invites you to their ' + (t ? grGame(t).name : 'game') + ' table',
+sub: 'In the Game Room', ttl: 60000, onClick: function () { grJoin(row.table_id); },
+actions: [['Join', function () { grJoin(row.table_id); }], ['No thanks', function () { grDismissInvite(row.table_id); }]] });
+if (document.hidden) bumpTitle();
+if (!t) loadGameRoom(); else { renderGameRoom(); grMarkBtn(); }
+}
+/* A new table, in the main chat, with a Join button. Drawn from the realtime INSERT itself, so the
+   name on it is always the real host. */
+function grAnnounce(row) {
+if (!row || grAnnounced[row.id] || row.host_id === me.id || blocked[row.host_id] || !roomHistoryIn || !log) return;
+grAnnounced[row.id] = true;
+var g = grGame(row), now = Date.now();
+var d = document.createElement('div'); d.className = 'm sys gr-announce';
+d.innerHTML = '<span class="t">' + fmt(now) + '</span>' + g.icon + ' <b class="gr-an-who">' + esc(row.host_name || 'Someone') + '</b> opened ' + (/^[AEIOU]/.test(g.name) ? 'an ' : 'a ') + esc(g.name) + ' table in the Game Room. <button type="button" class="gr-announce-join">Join</button>';
+d.querySelector('button').onclick = function () { grJoin(row.id); };
+var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+dayDivider(log, 'room', now);
+log.appendChild(d);
+if (atBottom) log.scrollTop = log.scrollHeight; else bumpNewPill();
+}
+function grMarkBtn() {
+if (!gameRoomBtn) return;
+var news = Object.keys(grInvites).length > 0 || (!grOpen() && (grUnread > 0 || grMyTurn()));
+gameRoomBtn.classList.toggle('news', news);
+gameRoomBtn.classList.toggle('seated', !!grMySeat);
+gameRoomBtn.setAttribute('aria-label', 'Game Room' + (grMyTurn() ? ' — your turn' : (Object.keys(grInvites).length ? ' — you have an invite' : '')));
+}
+
+/* ----- heartbeat ----- */
+function grBeat() { if (me && sb && grMySeat) sb.rpc('table_heartbeat').then(function () {}, function () {}); }
+function grStartHeartbeat() { if (!grHeartbeatTimer) grHeartbeatTimer = setInterval(grBeat, 60000); }
+function grStopHeartbeat() { clearInterval(grHeartbeatTimer); grHeartbeatTimer = null; }
+document.addEventListener('visibilitychange', function () { if (!document.hidden) grBeat(); });
+
+/* ----- actions ----- */
+async function grOpenTable(game) {
+if (grBusy || !me) return;
+grBusy = true;
+try {
+var r = await sb.rpc('table_open', { p_game: game });
+if (r.error) { grNotice(r.error.message); return; }
+grTables[r.data.id] = r.data; grAnnounced[r.data.id] = true; grNote = '';
+var s = await sb.from('table_seats').select('*').eq('user_id', me.id).maybeSingle();
+grSetMySeat(s.data || null);
+await grFetchSeats(r.data.id);
+grSys('Your table is open, and it has been announced in the main chat. Deal once at least one more player sits down, or invite a friend.');
+} finally { grBusy = false; renderGameRoom(); grMarkBtn(); }
+}
+async function grSit(tid, role) {
+if (grBusy || !me) return;
+grBusy = true;
+try {
+var r = await sb.rpc('table_sit', { p_table: tid, p_role: role });
+if (r.error) { grNotice(r.error.message); return; }
+grTables[tid] = r.data; delete grInvites[tid]; grNote = ''; dismissToasts('gtable-' + tid);
+var s = await sb.from('table_seats').select('*').eq('user_id', me.id).maybeSingle();
+grSetMySeat(s.data || null);
+await grFetchSeats(tid);
+} finally { grBusy = false; renderGameRoom(); grMarkBtn(); }
+}
+/* From an announcement, an invite toast or the list: sit down if a player seat is free and no game
+   is on, otherwise take a spectator seat. */
+async function grJoin(tid) {
+openGameRoom();
+if (grMySeat && grMySeat.table_id === tid) return;
+if (grMySeat) { grNotice('You’re at another table. Leave it first to join this one.'); return; }
+if (!grTables[tid]) await loadGameRoom();
+var t = grTables[tid];
+if (!t) { grNotice('That table has closed.'); return; }
+var players = grSeatsOf(tid, 'player').length;
+await grSit(tid, t.status === 'open' && players < 4 ? 'player' : 'spectator');
+}
+async function grDismissInvite(tid) {
+delete grInvites[tid]; dismissToasts('gtable-' + tid);
+renderGameRoom(); grMarkBtn();
+try { await sb.rpc('table_invite_dismiss', { p_table: tid }); } catch (e) {}
+}
+/* Leaving in the middle of a round forfeits it (you take the lowest place, no XP), so that asks
+   twice: the first press arms the button for four seconds. */
+async function grLeave() {
+if (!grMySeat) return;
+var u = grRoundOf(grMySeat.table_id), mi = grMyIndex();
+if (u && u.status === 'playing' && mi >= 0 && u.place[mi] === 0 && !grLeaveArmed) {
+grLeaveArmed = true; renderGameRoom();
+clearTimeout(grLeaveTimer); grLeaveTimer = setTimeout(function () { grLeaveArmed = false; renderGameRoom(); }, 4000);
+return;
+}
+grLeaveArmed = false; clearTimeout(grLeaveTimer);
+var tid = grMySeat.table_id;
+grSetMySeat(null); grNote = '';
+renderGameRoom(); grMarkBtn();
+var r = await sb.rpc('table_leave', { p_table: tid });
+if (r.error) grNotice(r.error.message);
+await loadGameRoom();
+}
+/* Every game move: one rpc, then repaint from the row it returns (and re-read my hand). */
+async function grMove(fn, args) {
+if (grBusy || !grMySeat) return;
+grBusy = true;
+try {
+var r = await sb.rpc(fn, Object.assign({ p_table: grMySeat.table_id }, args || {}));
+if (r.error) grSys(r.error.message);
+else if (r.data) { noteServerTime(r.data); grUnoArrived(r.data); }
+} finally {
+grBusy = false;
+if (grMySeat) grFetchHand();
+renderGameRoom(); grMarkBtn();
+}
+}
+function grPlay(card, colour) {
+if (grBusy) return;
+var i = grHand.indexOf(card); if (i >= 0) grHand.splice(i, 1); // optimistic; grFetchHand puts it right
+grPick = null;
+grMove('uno_table_play', { p_card: card, p_color: colour || null });
+}
+async function grSay() {
+var inp = grBody && grBody.querySelector('.gr-chatin');
+if (!inp || !grMySeat) return;
+var body = sanitizeInput(inp.value).trim().slice(0, 300);
+if (!body) return;
+if (!(await threadGate())) return; // the same spam cooldown as the room and the threads board
+var r = await sb.rpc('table_say', { p_table: grMySeat.table_id, p_body: body });
+if (r.error) { grSys(r.error.message); return; }
+inp.value = '';
+messageSound(false);
+grMsgArrived(r.data);
+}
+function grInviteMenu(anchor) {
+if (!grMySeat) return;
+var tid = grMySeat.table_id, seated = {};
+(grSeats[tid] || []).forEach(function (s) { seated[s.user_id] = true; });
+var ids = Object.keys(friends).filter(function (id) { return !seated[id] && !blocked[id]; });
+if (!ids.length) { grSys('Only people on your friends list can be invited. Anyone else can find the table in the Game Room.'); return; }
+ids.sort(function (a, b) { return (people[b] ? 1 : 0) - (people[a] ? 1 : 0) || String(friends[a].name || '').localeCompare(String(friends[b].name || '')); });
+showMiniMenu(anchor, 'Invite a friend', ids.slice(0, 30).map(function (id) {
+return [(people[id] ? '● ' : '○ ') + esc(friends[id].name || '?'), function () { grInvite(tid, id, friends[id].name || 'them'); }];
+}));
+}
+async function grInvite(tid, id, name) {
+var r = await sb.rpc('table_invite', { p_table: tid, p_user: id });
+if (r.error) { grSys(r.error.message); return; }
+grSys('Invited ' + name + '.');
+triggerPush(id, me.name + ' invites you to their ' + grGame(grTables[tid]).name + ' table', 'Open the Game Room to join.', 'gc-table-' + tid);
+}
+async function grAdminClose(tid) {
+var r = await sb.rpc('table_close', { p_table: tid });
+if (r.error) grNotice(r.error.message); else loadGameRoom();
+}
+
+/* ----- drawing: the list ----- */
+function renderGameRoom() {
+if (!grBody || !me || !grOpen()) return;
+var tid = grMySeat && grMySeat.table_id;
+if (tid && grTables[tid]) renderGrTable(tid); else renderGrLobby();
+}
+function renderGrLobby() {
+grBody.dataset.view = 'lobby';
+var html = grNote ? '<div class="gr-note">' + esc(grNote) + '</div>' : '';
+var invs = Object.keys(grInvites).map(function (k) { return grInvites[k]; }).filter(function (v) { return grTables[v.table_id]; });
+if (invs.length) html += '<div class="gr-invites">' + invs.map(function (v) {
+return '<div class="gr-invite"><span>✉ <b>' + esc(v.from_name || 'A friend') + '</b> invites you to their ' + esc(grGame(grTables[v.table_id]).name) + ' table.</span>'
++ '<span class="gr-btns"><button type="button" class="btn gr-join" data-t="' + v.table_id + '">Join</button><button type="button" class="btn gr-noinv" data-t="' + v.table_id + '">No thanks</button></span></div>';
+}).join('') + '</div>';
+html += '<div class="gr-open"><div class="gr-open-hd">Start a table</div><div class="gr-open-row">'
++ '<button type="button" class="gr-newtable" data-game="uno"><span class="gr-nt-i">🃏</span><span class="gr-nt-n">UNO</span><span class="gr-nt-s">2–4 players · watchers welcome</span></button>'
++ '<button type="button" class="gr-newtable" data-game="holdem" disabled><span class="gr-nt-i">♠</span><span class="gr-nt-n">Hold’em</span><span class="gr-nt-s">coming soon</span></button>'
++ '</div></div>';
+var list = Object.keys(grTables).map(function (k) { return grTables[k]; })
+.filter(function (t) { return t.status !== 'closed' && !blocked[t.host_id]; })
+.sort(function (a, b) { return (a.status === 'open' ? 0 : 1) - (b.status === 'open' ? 0 : 1) || b.id - a.id; });
+html += '<div class="gr-list-hd">Tables</div>';
+html += list.length ? list.map(grTableRowHtml).join('') : '<div class="gr-empty">No tables yet. Start one: it gets announced in the main chat.</div>';
+grBody.innerHTML = html;
+}
+function grTableRowHtml(t) {
+var players = grSeatsOf(t.id, 'player'), watchers = grSeatsOf(t.id, 'spectator'), g = grGame(t);
+var state = t.status === 'playing' ? 'Round ' + t.round + ' in play' : (players.length >= 2 ? 'Waiting to deal' : 'Waiting for players');
+var canPlay = t.status === 'open' && players.length < 4, canWatch = watchers.length < 4;
+var names = function (list, none) { return list.map(function (s) { return '<span class="gr-nm">' + esc(s.name || '?') + '</span>'; }).join(', ') || '<i>' + none + '</i>'; };
+return '<div class="gr-row' + (grInvites[t.id] ? ' invited' : '') + '">'
++ '<div class="gr-row-hd"><span class="gr-row-g">' + g.icon + ' ' + esc(g.name) + '</span><span class="gr-row-host">' + esc((t.host_name || 'Someone') + '’s table') + '</span><span class="gr-row-st' + (t.status === 'playing' ? ' live' : '') + '">' + esc(state) + '</span></div>'
++ '<div class="gr-row-who"><span class="gr-row-lbl">Players ' + players.length + '/4</span> ' + names(players, 'none yet') + '<br><span class="gr-row-lbl">Watching ' + watchers.length + '/4</span> ' + names(watchers, 'nobody') + '</div>'
++ '<div class="gr-btns">' + (isAdmin ? '<button type="button" class="btn gr-close" data-t="' + t.id + '">Close</button>' : '')
++ (canPlay ? '<button type="button" class="btn gr-sit" data-t="' + t.id + '" data-role="player">Sit down</button>' : '')
++ (canWatch ? '<button type="button" class="btn gr-sit" data-t="' + t.id + '" data-role="spectator">Watch</button>' : '')
++ (!canPlay && !canWatch ? '<span class="gr-full">Full</span>' : '') + '</div></div>';
+}
+
+/* ----- drawing: my table ----- */
+function renderGrTable(tid) {
+if (grBody.dataset.view !== 'table:' + tid) {
+grBody.dataset.view = 'table:' + tid;
+grBody.innerHTML = '<div class="gr-table"><div class="gr-game"><div class="gr-thd"></div><div class="gr-seats"></div><div class="gr-felt"></div><div class="gr-mine"></div><div class="gr-watch"></div></div>'
++ '<div class="gr-chat"><div class="gr-chat-hd">Table chat</div><div class="gr-chatlog" aria-live="polite" aria-label="Table chat"></div>'
++ '<form class="gr-chatform" autocomplete="off"><input type="text" class="sunk gr-chatin" maxlength="300" enterkeyhint="send" placeholder="Talk to the table…" aria-label="Talk to the table"><button type="submit" class="btn">Send</button></form></div></div>';
+grPaintChat();
+}
+grPaintTop(tid); grPaintSeats(tid); grPaintFelt(tid); grPaintMine(tid); grPaintWatch(tid);
+}
+function grPaintTop(tid) {
+var el = grBody.querySelector('.gr-thd'); if (!el) return;
+var t = grTables[tid], g = grGame(t);
+el.innerHTML = '<span class="gr-thd-t">' + g.icon + ' ' + esc((t.host_name || 'Someone') + '’s ' + g.name + ' table') + (t.round ? '<span class="gr-thd-r"> · round ' + t.round + '</span>' : '') + '</span>'
++ '<span class="gr-btns">' + (t.host_id === me.id ? '<button type="button" class="btn gr-invbtn">Invite</button>' : '')
++ '<button type="button" class="btn gr-leave' + (grLeaveArmed ? ' armed' : '') + '">' + (grLeaveArmed ? 'Forfeit and leave?' : 'Leave') + '</button></span>';
+}
+function grPaintSeats(tid) {
+var el = grBody.querySelector('.gr-seats'); if (!el) return;
+var t = grTables[tid], u = grRoundOf(tid), live = !!(u && u.status === 'playing'), bySeat = {};
+grSeatsOf(tid, 'player').forEach(function (s) { bySeat[s.seat] = s; });
+var canSit = grMySeat.role === 'spectator' && t.status === 'open';
+el.innerHTML = [1, 2, 3, 4].map(function (n) {
+var s = bySeat[n];
+if (!s) return '<div class="gr-seat empty"><span class="gr-seat-n">Seat ' + n + '</span>' + (canSit ? '<button type="button" class="btn gr-sit" data-t="' + tid + '" data-role="player">Sit here</button>' : '<span class="gr-seat-e">empty</span>') + '</div>';
+var i = u ? u.players.indexOf(s.user_id) : -1;
+var html = '<div class="gr-seat' + (s.user_id === me.id ? ' me' : '') + (live && i >= 0 && u.turn === i + 1 ? ' turn' : '') + (i >= 0 && u.place[i] > 0 ? ' done' : '') + '">'
++ '<div class="gr-seat-hd">' + (t.host_id === s.user_id ? '<span class="gr-host" title="Host">👑</span>' : '') + '<b class="gr-seat-nm">' + esc(s.name || '?') + '</b>' + (s.user_id === me.id ? '<span class="gr-you">you</span>' : '') + '</div>';
+if (i >= 0 && u.place[i] === 0) {
+var c = u.cards[i], backs = '';
+for (var k = 0; k < Math.min(c, 7); k++) backs += '<span class="uno-c back small" aria-hidden="true"></span>';
+html += '<div class="gr-seat-cards"><span class="uno-backs">' + backs + '</span><span class="gr-ct" aria-label="' + c + ' cards">' + c + '</span>' + (u.uno[i] ? '<span class="uno-badge">UNO!</span>' : '') + '</div>';
+if (live && u.missed[i] > 0) html += '<div class="gr-seat-warn">⏰ missed a turn</div>';
+} else if (i >= 0) html += '<div class="gr-seat-place">' + grPlaceHtml(u, i) + '</div>';
+else html += '<div class="gr-seat-wait">' + (live ? 'plays next round' : 'ready') + '</div>';
+return html + '</div>';
+}).join('');
+}
+function grPlaceHtml(u, i) {
+var o = u.outcome[i], p = u.place[i];
+if (o === 'left') return '<span class="gr-gone">left</span>';
+if (o === 'idle') return '<span class="gr-gone">timed out</span>';
+if (o === 'last') return p === 1 ? '<span class="gr-gone">last one left, no XP</span>' : grOrdinal(p);
+if (o === 'out') return '<span class="gr-medal">' + (GR_MEDAL[p] || grOrdinal(p)) + '</span> ' + (u.points[i] > 0 ? '<span class="gr-xp">+' + u.points[i] + ' XP</span>' : '<span class="ttt-cap">daily XP cap reached</span>');
+return '';
+}
+function grPaintFelt(tid) {
+var el = grBody.querySelector('.gr-felt'); if (!el) return;
+var t = grTables[tid], u = grRoundOf(tid), n = grSeatsOf(tid, 'player').length, html = '';
+if (u && u.status === 'playing') {
+var mi = grMyIndex(), myTurn = grMyTurn(), canDraw = myTurn && u.phase === 'play' && !grPick && !grBusy;
+var hand = grHandRound === u.round ? grHand : [];
+var anyFits = hand.some(function (c) { return unoPlayable(c, u.top_card, u.color); });
+var left = turnSecondsLeft(u);
+html += '<div class="gr-piles">'
++ '<button type="button" class="uno-pile gr-draw' + (canDraw && !anyFits ? ' must' : '') + '"' + (canDraw ? '' : ' disabled') + ' title="Draw a card" aria-label="Draw pile, ' + u.draw_count + ' cards"><span class="uno-c back">' + u.draw_count + '</span><span class="uno-pile-lbl">' + (canDraw ? 'Draw' : 'Pile') + '</span></button>'
++ '<div class="uno-top">' + unoCardHtml(u.top_card, 'top', 'disabled') + '<span class="uno-colour ' + u.color + '" title="Current colour: ' + UNO_COLOUR[u.color] + '" aria-label="Current colour: ' + UNO_COLOUR[u.color] + '"></span></div>'
++ '<span class="gr-dir" title="' + (u.direction === 1 ? 'Play goes round in seat order' : 'Play goes round backwards') + '" aria-label="' + (u.direction === 1 ? 'Play goes round in seat order' : 'Play goes round backwards') + '">' + (u.direction === 1 ? '↻' : '↺') + '</span></div>';
+html += '<div class="gr-turn">' + (myTurn ? '<b>Your turn</b>' + (u.phase === 'after_draw' ? ': play the card you drew, or pass' : '') : esc(u.names[u.turn - 1] || '?') + '’s turn') + '</div>';
+html += '<div class="turn-clock gr-clock' + (left <= 15 ? ' low' : '') + '" aria-label="Turn clock"><span class="tc-bar" style="width:' + Math.round(100 * left / TURN_SECONDS) + '%"></span><span class="tc-num">' + Math.ceil(left) + '</span></div>';
+if (u.last_action) html += '<div class="uno-last">' + esc(u.last_action) + '</div>';
+} else {
+if (u && u.status === 'over') html += grResultsHtml(u);
+if (t.host_id === me.id) html += '<div class="gr-dealrow">' + (n >= 2 ? '<button type="button" class="btn gr-deal">' + (u ? 'Deal the next round' : 'Deal') + '</button>' : '<span class="gr-wait">Waiting for at least one more player…</span>') + '</div>';
+else html += '<div class="gr-wait">' + (n >= 2 ? 'Waiting for ' + esc(t.host_name || 'the host') + ' to deal…' : 'Waiting for players…') + '</div>';
+if (!u) html += '<div class="gr-rules">UNO for 2–4 players. Get rid of all your cards to place: 1st +10 XP, 2nd +5, 3rd +2. Whoever is left holding cards gets nothing. Miss two turns in a row and you’re out.</div>';
+}
+el.innerHTML = html;
+el.classList.toggle('live', !!(u && u.status === 'playing'));
+}
+function grResultsHtml(u) {
+var order = u.players.map(function (id, i) { return i; }).sort(function (a, b) { return (u.place[a] || 99) - (u.place[b] || 99); });
+return '<div class="gr-results"><div class="gr-results-hd">Round ' + u.round + '</div>' + order.map(function (i) {
+var o = u.outcome[i], p = u.place[i];
+var mark = o === 'out' && GR_MEDAL[p] ? GR_MEDAL[p] : (p ? grOrdinal(p) : '–');
+var note = o === 'out' ? (u.points[i] > 0 ? '+' + u.points[i] + ' XP' : 'daily XP cap reached') : o === 'left' ? 'left' : o === 'idle' ? 'timed out' : o === 'last' ? (p === 1 ? 'everyone else left: no XP' : 'left holding cards') : 'round stopped';
+return '<div class="gr-res' + (u.players[i] === me.id ? ' me' : '') + '"><span class="gr-res-p">' + mark + '</span><span class="gr-res-n">' + esc(u.names[i] || '?') + '</span><span class="gr-res-x' + (o === 'out' && u.points[i] > 0 ? ' xp' : '') + '">' + note + '</span></div>';
+}).join('') + (u.last_action ? '<div class="uno-last">' + esc(u.last_action) + '</div>' : '') + '</div>';
+}
+function grPaintMine(tid) {
+var el = grBody.querySelector('.gr-mine'); if (!el) return;
+var u = grRoundOf(tid), mi = grMyIndex();
+if (!u || u.status !== 'playing' || mi < 0) { el.innerHTML = ''; el.classList.add('hidden'); return; }
+el.classList.remove('hidden');
+if (u.place[mi] > 0) { el.innerHTML = '<div class="gr-outnote">You’re out in ' + grOrdinal(u.place[mi]) + ' place' + (u.points[mi] > 0 ? ' (+' + u.points[mi] + ' XP)' : '') + '. Stay and watch the rest of the round.</div>'; return; }
+var myTurn = grMyTurn(), hand = grHandRound === u.round ? grHand : [];
+var html = '<div class="uno-hand' + (myTurn ? ' live' : '') + '" role="group" aria-label="Your hand">' + hand.map(function (c, k) {
+var ok = myTurn && !grPick && !grBusy && unoPlayable(c, u.top_card, u.color) && (u.phase !== 'after_draw' || k === hand.length - 1);
+return unoCardHtml(c, ok ? 'ok' : '', 'data-card="' + esc(c) + '"' + (ok ? '' : ' disabled'));
+}).join('') + '</div>';
+var acts = '', n = u.cards[mi];
+/* UNO! stays on offer while a wild waits for its colour: with two cards, that wild is the card
+   that leaves you on one, so the call has to be makeable before the colour is picked */
+var unoBtn = !u.uno[mi] && (n === 1 || (n === 2 && myTurn)) ? '<button type="button" class="btn gr-uno">UNO!</button>' : '';
+if (grPick) {
+acts = '<span class="gr-pick">Pick a colour for your ' + esc(unoName(grPick)) + ':</span>' + ['R', 'G', 'B', 'Y'].map(function (k) { return '<button type="button" class="uno-col ' + k + '" data-col="' + k + '" title="' + UNO_COLOUR[k] + '" aria-label="' + UNO_COLOUR[k] + '"></button>'; }).join('') + '<button type="button" class="btn gr-nopick">Back</button>' + unoBtn;
+} else {
+if (myTurn && u.phase === 'after_draw') acts += '<button type="button" class="btn gr-pass">Pass</button>';
+acts += unoBtn;
+var x = u.exposed;
+if (x && x !== mi + 1 && u.place[x - 1] === 0 && u.cards[x - 1] === 1 && !u.uno[x - 1]) acts += '<button type="button" class="btn gr-catch">Catch ' + esc(u.names[x - 1] || 'them') + '!</button>';
+}
+if (acts) html += '<div class="gr-acts">' + acts + '</div>';
+el.innerHTML = html;
+}
+function grPaintWatch(tid) {
+var el = grBody.querySelector('.gr-watch'); if (!el) return;
+var t = grTables[tid], watchers = grSeatsOf(tid, 'spectator'), players = grSeatsOf(tid, 'player');
+var u = grRoundOf(tid), mi = grMyIndex(), activeMe = !!(u && u.status === 'playing' && mi >= 0 && u.place[mi] === 0);
+var who = watchers.map(function (s) { return '<span class="gr-nm' + (s.user_id === me.id ? ' me' : '') + '">' + esc(s.name || '?') + '</span>'; }).join(', ') || '<i>nobody</i>';
+var btn = '';
+if (grMySeat.role === 'spectator') {
+if (t.status === 'open' && players.length < 4) btn = '<button type="button" class="btn gr-sit" data-t="' + tid + '" data-role="player">Take a seat</button>';
+else if (t.status === 'playing') btn = '<span class="gr-hint">Free seats open up when this round ends.</span>';
+} else if (!activeMe && watchers.length < 4) btn = '<button type="button" class="btn gr-sit" data-t="' + tid + '" data-role="spectator">Just watch</button>';
+el.innerHTML = '<div class="gr-watch-l"><span class="gr-row-lbl">Watching ' + watchers.length + '/4</span> ' + who + '</div>' + (btn ? '<div class="gr-watch-b">' + btn + '</div>' : '');
+}
+function grChatLineHtml(it) {
+if (it.sys) return '<div class="gr-line sys"><span class="t">' + fmt(it.at) + '</span>' + esc(it.text) + '</div>';
+var m = it.row, mine = m.sender_id === me.id;
+return '<div class="gr-line ' + (mine ? 'me' : 'them') + '"><span class="t">' + fmt(m.created_at) + '</span><b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name || '?') + '" tabindex="0">' + esc(m.sender_name || '?') + ':</b> ' + bodyHtml(m.body) + '</div>';
+}
+function grPaintChat() {
+var el = grBody && grBody.querySelector('.gr-chatlog'); if (!el) return;
+el.innerHTML = grLog.map(grChatLineHtml).join('');
+el.scrollTop = el.scrollHeight;
+}
+function grPushLog(it) {
+grLog.push(it); if (grLog.length > 150) grLog.splice(0, grLog.length - 150);
+var el = grBody && grBody.querySelector('.gr-chatlog'); if (!el || !grMySeat || grBody.dataset.view !== 'table:' + grMySeat.table_id) return;
+var atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+el.insertAdjacentHTML('beforeend', grChatLineHtml(it));
+while (el.children.length > 150) el.firstChild.remove();
+if (atBottom || (it.row && it.row.sender_id === me.id)) el.scrollTop = el.scrollHeight;
+}
+function grSys(text) { grPushLog({ sys: true, text: text, at: Date.now() }); }
+
+/* ----- the turn clock (driven by clockTick, four times a second) ----- */
+function grClockTick() {
+var u = grUno;
+if (!u || u.status !== 'playing' || !grMySeat || u.table_id !== grMySeat.table_id) return;
+var left = turnSecondsLeft(u), sec = Math.ceil(left);
+var el = grBody && grBody.querySelector('.gr-clock');
+if (el) {
+el.classList.toggle('low', left <= 15);
+el.querySelector('.tc-bar').style.width = Math.round(100 * left / TURN_SECONDS) + '%';
+el.querySelector('.tc-num').textContent = sec;
+}
+var key = u.table_id + ':' + u.round + ':' + u.turn_started_at, mine = grMyTurn();
+if (left > 0 && left <= 15 && grLastTick !== key + ':' + sec) {
+grLastTick = key + ':' + sec;
+if (mine || (grOpen() && !document.hidden)) tickSound(sec % 2 === 0);
+}
+/* at zero, everyone at the table asks the server to move the turn on -- it checks its own clock,
+   so an early or duplicate call does nothing */
+if (left <= 0 && !grTimeoutFired[key]) {
+grTimeoutFired[key] = true;
+sb.rpc('uno_table_timeout', { p_table: u.table_id }).then(function (r) { if (!r.error && r.data) { grUnoArrived(r.data); if (grMyIndex() >= 0) grFetchHand(); } });
+}
+}
+
+/* ----- wiring ----- */
+if (grBody) {
+grBody.addEventListener('click', function (e) {
+var b = e.target.closest ? e.target.closest('button, .who') : null;
+if (!b || !grBody.contains(b)) return;
+if (b.classList.contains('who')) { if (b.dataset.id && b.dataset.id !== me.id) { e.stopPropagation(); openMenu(b.dataset.id, b, b.dataset.name); } return; }
+if (b.disabled) return;
+var cl = b.classList;
+if (cl.contains('gr-newtable')) grOpenTable(b.dataset.game);
+else if (cl.contains('gr-sit')) grSit(Number(b.dataset.t), b.dataset.role);
+else if (cl.contains('gr-join')) grJoin(Number(b.dataset.t));
+else if (cl.contains('gr-noinv')) grDismissInvite(Number(b.dataset.t));
+else if (cl.contains('gr-close')) grAdminClose(Number(b.dataset.t));
+else if (cl.contains('gr-leave')) grLeave();
+else if (cl.contains('gr-invbtn')) { e.stopPropagation(); grInviteMenu(b); }
+else if (cl.contains('gr-deal')) grMove('table_start');
+else if (cl.contains('gr-draw')) grMove('uno_table_draw');
+else if (cl.contains('gr-pass')) grMove('uno_table_pass');
+else if (cl.contains('gr-uno')) grMove('uno_table_call');
+else if (cl.contains('gr-catch')) grMove('uno_table_catch');
+else if (cl.contains('gr-nopick')) { grPick = null; renderGameRoom(); }
+else if (cl.contains('uno-col')) { var wc = grPick; if (wc) grPlay(wc, b.dataset.col); }
+else if (b.dataset.card) {
+if (b.dataset.card.charAt(0) === 'W') { grPick = b.dataset.card; renderGameRoom(); }
+else grPlay(b.dataset.card);
+}
+});
+grBody.addEventListener('submit', function (e) { e.preventDefault(); grSay(); });
+grBody.addEventListener('keydown', function (e) {
+var w = e.target.closest && e.target.closest('.who');
+if (w && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); w.click(); }
+});
+}
+if (gameRoomBack) gameRoomBack.onclick = closeGameRoom;
+if (gameRoomBtn) {
+gameRoomBtn.onclick = function () { if (grOpen()) closeGameRoom(); else openGameRoom(); };
+makeFabDraggable(gameRoomBtn, 'gc_fab_gameroom', true);
+}
+/* Desktop: into the title bar, just inside the Roulette button (the name then reads roulette / 🎴 /
+   lantern / GYPSY CHAT 2000 / lantern / threads). Phone: a bubble above the other two. Only once
+   signed on -- before that the button is hidden and the title keeps its old balance. */
+function placeGameRoomBtn() {
+if (!gameRoomBtn) return;
+var title = document.querySelector('.win > .title');
+var host = (window.innerWidth > 500 && title && gameRoomBtn.classList.contains('ready')) ? title : gameRoomBtnHome;
+if (!host) return;
+if (gameRoomBtn.parentNode !== host) {
+if (host === title) title.insertBefore(gameRoomBtn, title.querySelector('.lantern') || title.firstChild);
+else host.appendChild(gameRoomBtn);
+}
+var inHeader = host === title;
+gameRoomBtn.classList.toggle('in-header', inHeader);
+if (inHeader) {
+gameRoomBtn.style.left = ''; gameRoomBtn.style.top = ''; gameRoomBtn.style.right = ''; gameRoomBtn.style.bottom = ''; gameRoomBtn.style.transform = '';
+gameRoomBtn.classList.remove('fab-docked', 'fab-dragging');
+}
 }
 
 /* ---------- typing indicators (main room + whispers) ----------
@@ -6916,6 +7617,7 @@ var title = document.querySelector('.win > .title');
 if (!title) return;
 title.classList.toggle('hb-left', !!(rouletteToggleBtn && rouletteToggleBtn.parentNode === title));
 title.classList.toggle('hb-right', !!(threadToggleBtn && threadToggleBtn.parentNode === title));
+title.classList.toggle('hb-gr', !!(gameRoomBtn && gameRoomBtn.parentNode === title)); // v169: the Game Room, left of the name beside Roulette
 }
 function placeRouletteBtn() {
 if (!rouletteToggleBtn) return;
@@ -6937,6 +7639,7 @@ rouletteToggleBtn.style.right = ''; rouletteToggleBtn.style.bottom = '';
 rouletteToggleBtn.style.transform = '';
 rouletteToggleBtn.classList.remove('fab-docked', 'fab-dragging');
 }
+placeGameRoomBtn(); // v169
 markHeaderBtns();
 }
 function placeThreadBtn() {
@@ -6969,6 +7672,7 @@ window.addEventListener('resize', placeThreadBtn);
 if (threadToggleBtn) {
 threadToggleBtn.onclick = function () {
 closeGif();
+if (grOpen()) closeGameRoom();
 if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
 if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
 if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
@@ -7085,6 +7789,7 @@ rouletteToggleBtn.setAttribute('aria-label', 'Gypsy Roulette — coming soon');
 if (rouletteToggleBtn) {
 rouletteToggleBtn.onclick = function () {
 closeGif();
+if (grOpen()) closeGameRoom();
 if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
 if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
 if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
@@ -7116,6 +7821,7 @@ returnToChat();
 if (leaderboardBtn) {
 leaderboardBtn.onclick = function () {
 closeGif();
+if (grOpen()) closeGameRoom();
 if (gcRoot.classList.contains('mobile-threads-open')) threadToggleBtn.click();
 if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
 if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
@@ -7190,6 +7896,7 @@ var PANEL_CLOSERS = {
 'admin-open': function () { closeAdminPanel(); },
 'mobile-threads-open': function () { if (threadToggleBtn) threadToggleBtn.click(); },
 'mobile-roulette-open': function () { closeMobileRoulette(); returnToChat(); },
+'gameroom-open': function () { closeGameRoom(); },
 'dm-open': function () { dockOpen = false; saveDockOpen(); syncDock(); }
 };
 function panelOpened(name) {
@@ -7518,7 +8225,7 @@ docked = true; edge = which;
 var cy = clampFree(0, y).y;
 applyPos(which === 'left' ? -(SIZE - TAB) : window.innerWidth - TAB, cy);
 btn.classList.add('fab-docked');
-btn.setAttribute('aria-label', 'Bring back the ' + (storageKey.indexOf('roulette') >= 0 ? 'roulette' : 'threads') + ' button');
+btn.setAttribute('aria-label', 'Bring back the ' + (storageKey.indexOf('roulette') >= 0 ? 'roulette' : storageKey.indexOf('gameroom') >= 0 ? 'Game Room' : 'threads') + ' button');
 if (!skipSave) save();
 }
 
@@ -8223,6 +8930,7 @@ renderBoards(); renderTags(); fillNewSelects(); loadMySubs();
 loadThreads();
 subscribeThreads();
 if (threadToggleBtn) threadToggleBtn.classList.add('ready');
+if (gameRoomBtn) gameRoomBtn.classList.add('ready'); // v169: before placeThreadBtn, which puts it in the title bar
 placeThreadBtn(); // desktop: into the title bar beside the name, rather than floating beside the window
 /* The desktop half of this tip used to say the board was "to the right", from back when it was
    a side panel in the gutter, and the phone half said "in the corner" -- neither is true on a
@@ -8234,6 +8942,9 @@ pinLogBottom();
 loadGames(); // Tic-Tac-Toe cards into their whisper windows (open games + results from the last hour)
 loadUno();   // same for UNO
 loadHangman(); loadHoldem(); loadPrasta(); loadBattleship();
+grSubscribe(); // v169: the Game Room -- its own channel; loads the tables once subscribed
+var grTipSeen = false; try { grTipSeen = localStorage.getItem('gc_gameroom_tip') === '1'; } catch (e) {}
+if (!grTipSeen) { addSys('New: the 🎴 Game Room. Open a table for UNO with up to four players and four watchers, or join someone else’s. ' + (window.matchMedia('(min-width:501px)').matches ? 'It’s up in the title bar.' : 'Tap the 🎴 bubble.')); try { localStorage.setItem('gc_gameroom_tip', '1'); } catch (e) {} }
 resetIdle();
 startRecentPeopleHeartbeat();
 autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
