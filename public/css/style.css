@@ -2135,3 +2135,170 @@ color:var(--ash);border:1px solid #3a3026;border-radius:999px;padding:1px 5px}
 @media (hover:none) and (pointer:coarse){.bs-tools .btn{height:34px}}
 @media (prefers-reduced-motion:reduce){.bs-cell.bs-aim,.bs-place.bs-nope{animation:none}}
 @media (max-width:500px){.lb-tabs .adm-tab{flex-basis:22%}} /* seven game tabs: four on the first row, three on the second */
+
+/* ==================== v118 (build 169): the Game Room ====================
+   Tables for up to four players and four watchers (renderGameRoom in app.js). The page is the same
+   .gc-root.<state>-open takeover as the Popularity Contest. Its button lives in the title bar on a
+   desktop (placeGameRoomBtn moves it there, beside Roulette) and floats as a bubble on a phone,
+   above the Roulette and Threads bubbles. */
+.gameroom-toggle-fab{display:none;position:fixed;right:12px;top:50%;bottom:auto;transform:translateY(calc(-50% - 81px));z-index:55;
+width:46px;height:46px;padding:0;align-items:center;justify-content:center;font-size:21px;line-height:1;cursor:pointer;color:var(--gold-hi);
+background:linear-gradient(160deg,#3a3026,#1a1511 70%);border:2px solid var(--gold-lo);border-radius:10px;
+box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 10px rgba(201,162,74,.35);touch-action:none;transition:left .22s ease,top .22s ease,opacity .18s ease}
+.gameroom-toggle-fab.ready{display:flex}
+.gameroom-toggle-fab:hover,.gameroom-toggle-fab:focus-visible{border-color:var(--gold);box-shadow:0 0 0 1px #000,0 4px 16px #000,0 0 16px rgba(201,162,74,.7);outline:none}
+.gameroom-toggle-fab.fab-dragging{transition:none;box-shadow:0 0 0 1px #000,0 6px 20px #000,0 0 20px rgba(201,162,74,.9)}
+.gameroom-toggle-fab.fab-docked{opacity:.5}
+.gameroom-toggle-fab.fab-docked:hover,.gameroom-toggle-fab.fab-docked:focus-visible{opacity:1}
+/* something is waiting in there: an invite, your turn, or table chat you haven't seen */
+.gameroom-toggle-fab.news::after{content:"";position:absolute;top:3px;right:3px;width:10px;height:10px;border-radius:50%;background:var(--blood);
+box-shadow:0 0 0 1px #000,0 0 8px rgba(179,38,30,.9);pointer-events:none}
+@media (max-width:500px){.gameroom-toggle-fab{right:8px}}
+@media (min-width:501px){
+  .gameroom-toggle-fab.in-header{position:relative !important;top:auto !important;right:auto !important;left:auto !important;bottom:auto !important;
+  transform:none !important;width:26px;height:auto;flex:none;justify-content:center;padding:0;border:none;border-radius:0;background:none;box-shadow:none;
+  font-size:18px;line-height:1;opacity:.92;filter:drop-shadow(0 0 6px rgba(201,162,74,.5));transition:transform .15s ease,filter .15s ease,opacity .15s ease}
+  .gameroom-toggle-fab.in-header.ready{display:inline-flex}
+  .gameroom-toggle-fab.in-header:hover,.gameroom-toggle-fab.in-header:focus-visible{border:none;box-shadow:none;outline:none;opacity:1;
+  transform:translateY(-1px) scale(1.14) !important;filter:drop-shadow(0 0 11px rgba(201,162,74,.95))}
+  .gameroom-toggle-fab.in-header.news::after{top:-3px;right:-1px;width:8px;height:8px}
+  /* The title's balance with three glyphs: Roulette and the Game Room on the left of the name, Threads
+     on its right, so the right side gets one glyph's width of blank (see markHeaderBtns). */
+  .win > .title.hb-gr.hb-left.hb-right::after{content:"";flex:none;width:26px}
+  .win > .title.hb-gr.hb-left:not(.hb-right)::after{content:"";flex:none;width:52px}
+  .win > .title.hb-gr.hb-right:not(.hb-left)::before{content:none}
+}
+@media (prefers-reduced-motion:reduce){.gameroom-toggle-fab,.gameroom-toggle-fab.in-header{transition:none}}
+
+.gameroom-panel{display:none;flex-direction:column;background:linear-gradient(180deg,var(--stone-2),var(--stone));overflow:hidden;z-index:8}
+.gc-root.gameroom-open .win{display:none}
+.gc-root.gameroom-open .gameroom-panel{display:flex !important;position:fixed;inset:0;width:100%;max-width:100%;height:100%;border-width:0;border-radius:0;z-index:40}
+.gc-root.gameroom-open .thread-toggle-fab,.gc-root.gameroom-open .roulette-toggle-fab,.gc-root.gameroom-open .gameroom-toggle-fab,
+.gc-root.leaderboard-open .gameroom-toggle-fab,.gc-root.admin-open .gameroom-toggle-fab{display:none !important}
+@media (max-width:500px){.gc-root.dm-open .gameroom-toggle-fab{display:none !important}}
+html.ios .gc-root.gameroom-open .gameroom-panel{padding-top:calc(env(safe-area-inset-top) + 44px);box-sizing:border-box}
+.gr-body{flex:1;min-height:0;overflow-y:auto;width:100%;max-width:1000px;margin:0 auto;padding:12px 14px 18px;box-sizing:border-box;scrollbar-color:var(--gold-lo) #0f0d0b}
+.gr-note{margin:0 0 10px;padding:7px 10px;border:1px solid var(--gold-lo);background:rgba(201,162,74,.08);color:var(--gold-hi);font-size:13px;text-align:center}
+
+/* the list */
+.gr-open{border:1px solid var(--gold-lo);background:rgba(0,0,0,.25);padding:10px 12px 12px;margin-bottom:16px}
+.gr-open-hd,.gr-list-hd{font:700 12px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-transform:uppercase;margin:0 0 8px}
+.gr-open-row{display:flex;gap:10px;flex-wrap:wrap}
+.gr-newtable{flex:1 1 180px;display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:center;text-align:left;padding:10px 12px;cursor:pointer;
+color:var(--bone);font:13px "IM Fell English",Georgia,serif;background:radial-gradient(ellipse at 30% 30%,#24553a,#11301d 75%);border:1px solid #6e5323;
+border-radius:8px;box-shadow:0 0 0 1px #000,inset 0 0 16px rgba(0,0,0,.8)}
+.gr-newtable .gr-nt-i{grid-row:1 / span 2;font-size:28px;line-height:1}
+.gr-newtable .gr-nt-n{font:700 14px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold-hi)}
+.gr-newtable .gr-nt-s{font-size:12px;color:#b9c8b4}
+.gr-newtable:hover,.gr-newtable:focus-visible{border-color:var(--gold-hi);box-shadow:0 0 0 1px #000,inset 0 0 16px rgba(0,0,0,.8),0 0 14px rgba(241,217,138,.45);outline:none}
+.gr-newtable[disabled]{cursor:default;opacity:.45;filter:saturate(.3);box-shadow:0 0 0 1px #000}
+.gr-row{border:1px solid var(--gold-lo);background:rgba(0,0,0,.25);padding:8px 10px;margin-bottom:8px}
+.gr-row.invited{border-color:var(--gold-hi);box-shadow:0 0 12px rgba(241,217,138,.3)}
+.gr-row-hd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.gr-row-g{font:700 13px Cinzel,Georgia,serif;color:var(--gold-hi);letter-spacing:.5px}
+.gr-row-host{color:var(--bone)}
+.gr-row-st{margin-left:auto;font-size:12px;color:var(--ash);font-style:italic}
+.gr-row-st.live{color:#8fd08f}
+.gr-row-who{font-size:13px;color:var(--bone);line-height:1.6}
+.gr-row-lbl{font:700 10px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--ash);text-transform:uppercase;margin-right:4px}
+.gr-row-who i,.gr-watch i{color:#5f5648}
+.gr-btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;margin-top:6px}
+.gr-btns .btn,.gr-watch .btn,.gr-acts .btn,.gr-thd .btn,.gr-seat .btn{height:28px;min-width:0;padding:0 12px;font-size:11px}
+.gr-btns .btn.gr-close{color:#e07a7a;border-color:#7a2a2a}
+.gr-full{font-size:12px;color:var(--ash);font-style:italic}
+.gr-empty{padding:18px 8px;text-align:center;color:#5f5648;font-style:italic}
+.gr-invites{margin-bottom:12px}
+.gr-invite{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;padding:8px 10px;margin-bottom:6px;border:1px solid var(--gold);
+background:rgba(201,162,74,.1);color:var(--bone)}
+.gr-invite b{color:var(--gold-hi)}
+.gr-invite .gr-btns{margin-top:0}
+
+/* a table */
+.gr-table{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+@media (min-width:900px){.gr-table{grid-template-columns:minmax(0,1fr) 300px;align-items:start}}
+.gr-thd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.gr-thd-t{flex:1;min-width:0;font:700 14px Cinzel,Georgia,serif;letter-spacing:.5px;color:var(--gold-hi)}
+.gr-thd-r{color:var(--ash);font-weight:400}
+.gr-thd .gr-btns{margin-top:0}
+.gr-thd .btn.gr-leave.armed{color:#fff;border-color:var(--blood);background:linear-gradient(180deg,#b3261e,#5a120e)}
+.gr-seats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px}
+@media (max-width:560px){.gr-seats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.gr-seat{min-height:72px;min-width:0;border:1px solid var(--gold-lo);background:rgba(0,0,0,.3);padding:6px 8px;display:flex;flex-direction:column;gap:4px;border-radius:6px}
+.gr-seat.me{border-color:#8a6d33;background:rgba(201,162,74,.07)}
+.gr-seat.turn{border-color:var(--gold-hi);box-shadow:0 0 0 1px var(--gold-hi),0 0 14px rgba(241,217,138,.55)}
+.gr-seat.done{opacity:.85}
+.gr-seat.empty{border-style:dashed;align-items:center;justify-content:center;background:rgba(0,0,0,.15)}
+.gr-seat-n{font:700 10px Cinzel,Georgia,serif;letter-spacing:1px;color:#5f5648;text-transform:uppercase}
+.gr-seat-e{font-size:12px;color:#5f5648;font-style:italic}
+.gr-seat-hd{display:flex;align-items:center;gap:4px;min-width:0}
+.gr-seat-nm{font:700 12px Cinzel,Georgia,serif;color:var(--bone);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.gr-seat.turn .gr-seat-nm{color:var(--gold-hi)}
+.gr-host{flex:none;font-size:12px}
+.gr-you{flex:none;font-size:11px;color:var(--ash);font-style:italic}
+.gr-seat-cards{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.gr-ct{font:700 13px Cinzel,Georgia,serif;color:var(--bone)}
+.gr-seat-warn{font-size:11px;color:#ffb14a}
+.gr-seat-place,.gr-seat-wait{font-size:12px;color:var(--ash)}
+.gr-medal{font-size:16px}
+.gr-xp{color:#8fd08f;font-weight:700}
+.gr-gone{color:#c98a7a;font-style:italic}
+.gr-felt{position:relative;border:2px solid #6e5323;border-radius:16px;padding:12px 12px 10px;margin-bottom:10px;
+background:radial-gradient(ellipse at 50% 40%,#215638 0%,#133a23 58%,#0b2415 100%);box-shadow:0 0 0 1px #000,inset 0 0 34px #000,0 4px 14px #000}
+.gr-piles{display:flex;align-items:center;justify-content:center;gap:26px;margin:2px 0 6px}
+.gr-dir{font-size:28px;line-height:1;color:var(--gold-hi);text-shadow:0 0 8px rgba(241,217,138,.6)}
+.gr-turn{text-align:center;font-size:14px;color:var(--bone);margin-bottom:4px}
+.gr-turn b{color:var(--gold-hi)}
+.gr-felt .turn-clock{margin:4px 16% 6px;border-color:#2f5b3d}
+.gr-felt .turn-clock .tc-bar{background:linear-gradient(90deg,#6e5323,#e6c56a)}
+.gr-felt .turn-clock .tc-num{color:#fff3cf}
+.gr-felt .turn-clock.low .tc-bar{background:linear-gradient(90deg,#7a1f17,#e0402f)}
+.gr-felt .uno-last{color:#c9d8c4}
+.gr-felt .uno-pile{color:#c9d8c4}
+.gr-wait{text-align:center;color:#c9d8c4;font-style:italic;padding:8px 0}
+.gr-dealrow{display:flex;justify-content:center;padding:6px 0}
+.gr-dealrow .btn.gr-deal{height:34px;padding:0 24px;font-size:13px;color:#1a1208;text-shadow:none;background:linear-gradient(180deg,#f1d98a,#a8812e);border-color:#f1d98a}
+.gr-dealrow .btn.gr-deal:hover{color:#000;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 1px #000,0 0 14px rgba(241,217,138,.7)}
+.gr-rules{max-width:460px;margin:6px auto 0;text-align:center;font-size:12px;line-height:1.5;color:#9fb49c}
+.gr-results{max-width:380px;margin:0 auto 8px;border:1px solid rgba(241,217,138,.35);background:rgba(0,0,0,.28);padding:6px 10px 4px;border-radius:8px}
+.gr-results-hd{font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);text-transform:uppercase;text-align:center;margin-bottom:4px}
+.gr-res{display:flex;align-items:center;gap:8px;padding:2px 0;font-size:13px}
+.gr-res-p{flex:none;width:34px;text-align:center;color:var(--ash)}
+.gr-res-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bone)}
+.gr-res.me .gr-res-n{color:var(--gold-hi)}
+.gr-res-x{flex:none;font-size:12px;color:var(--ash)}
+.gr-res-x.xp{color:#8fd08f;font-weight:700}
+.gr-results .uno-last{margin-top:4px}
+.gr-mine{margin-bottom:10px}
+.gr-mine .uno-hand{margin:0;padding:10px 6px 8px;border:1px solid var(--gold-lo);background:rgba(0,0,0,.25);border-radius:8px}
+.gr-acts{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.gr-acts .btn.gr-uno{color:#fff;border-color:var(--blood);background:linear-gradient(180deg,#b3261e,#5a120e);font-weight:700;letter-spacing:1px}
+.gr-acts .btn.gr-catch{color:var(--gold-hi);border-color:var(--gold)}
+.gr-acts .btn.gr-nopick{color:var(--ash)}
+.gr-pick{font-size:13px;color:var(--bone)}
+.gr-outnote{text-align:center;color:var(--bone);font-style:italic;padding:6px 0}
+.gr-watch{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--bone);padding:8px 2px 2px;border-top:1px solid rgba(110,83,35,.5)}
+.gr-nm.me{color:var(--gold-hi)}
+.gr-hint{font-size:12px;color:var(--ash);font-style:italic}
+.gr-chat{display:flex;flex-direction:column;min-height:0;border:1px solid var(--gold-lo);background:rgba(0,0,0,.25)}
+@media (min-width:900px){.gr-chat{position:sticky;top:0;height:min(640px,calc(100vh - 90px))}}
+.gr-chat-hd{flex:none;font:700 11px Cinzel,Georgia,serif;letter-spacing:1.5px;color:var(--gold);text-transform:uppercase;padding:7px 10px;border-bottom:1px solid var(--gold-lo)}
+.gr-chatlog{flex:1;min-height:150px;max-height:300px;overflow-y:auto;padding:6px 10px;line-height:1.45;font-size:13px;word-wrap:break-word;scrollbar-color:var(--gold-lo) #0f0d0b}
+@media (min-width:900px){.gr-chatlog{max-height:none}}
+.gr-line{margin-bottom:2px}
+.gr-line b.who{font-weight:normal;font-family:Cinzel,Georgia,serif;font-size:12px;letter-spacing:.5px;cursor:pointer;color:var(--them)}
+.gr-line.me b.who{color:var(--me)}
+.gr-line b.who.admin{color:var(--admin)}
+.gr-line b.who:hover,.gr-line b.who:focus-visible{text-decoration:underline;outline:none}
+.gr-line.sys{color:var(--sys);font-style:italic}
+.gr-line .t{color:#5f5648;font-size:11px;margin-right:6px}
+.gr-line img.gif{display:block;max-width:180px;max-height:140px;margin-top:2px}
+.gr-chatform{flex:none;display:flex;gap:6px;padding:6px;border-top:1px solid var(--gold-lo)}
+.gr-chatin{flex:1;min-width:0;height:32px;padding:0 8px;color:var(--bone);font:14px "IM Fell English",Georgia,serif}
+.gr-chatform .btn{height:32px;min-width:0}
+@media (hover:none) and (pointer:coarse){.gr-chatin{font-size:16px}.gr-btns .btn,.gr-watch .btn,.gr-acts .btn,.gr-thd .btn,.gr-seat .btn{height:34px}}
+/* the announcement in the main chat */
+.log .m.gr-announce{color:var(--gold-hi);font-style:normal}
+.log .m.gr-announce .gr-an-who{font-family:Cinzel,Georgia,serif;font-size:12px}
+.gr-announce-join{margin-left:6px;height:22px;padding:0 10px;font:700 11px Cinzel,Georgia,serif;letter-spacing:1px;color:#1a1208;cursor:pointer;
+background:linear-gradient(180deg,#f1d98a,#a8812e);border:1px solid #f1d98a;border-radius:4px;box-shadow:0 0 0 1px #000}
+.gr-announce-join:hover,.gr-announce-join:focus-visible{box-shadow:0 0 0 1px #000,0 0 10px rgba(241,217,138,.7);outline:none}
