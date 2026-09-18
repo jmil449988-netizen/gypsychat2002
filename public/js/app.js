@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 149;
+var BUILD_NUMBER = 150;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -2533,8 +2533,9 @@ var w = ensureWin(otherId, otherName); // never pops the window open on its own 
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them'); d.dataset.mid = m.id;
 if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
-d.innerHTML = replyStubHtml(m.reply_to) + '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + '<span class="nmt">' + esc(m.sender_name) + '</span>:</b> ' + (m.voice_path ? voiceHtml(m) : bodyHtml(m.body));
+d.innerHTML = replyStubHtml(m.reply_to) + '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + '<span class="nmt">' + esc(m.sender_name) + '</span>:</b> ' + (m.voice_path ? voiceHtml(m) : m.share_thread ? shareThreadHtml(m.share_thread) : m.share_user ? shareUserHtml(m.share_user) : bodyHtml(m.body));
 if (m.reply_to) fillReplyStub(m.reply_to);
+if (m.share_thread) fillShareThread(m.share_thread);
 dayDivider(w.log, 'im:' + otherId, m.created_at);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
 /* Inbox row: last line as its snippet, and newest activity floats to the top of the list.
@@ -2581,6 +2582,154 @@ w.ta.focus();
 /* Photo-send in a whisper: reuses the same upload (and the same "thread-images" bucket) as thread
    image posts, then sends the resulting URL as an ordinary whisper message -- bodyHtml's OWN_IMG_RE
    is what makes it show up embedded rather than as a bare link. */
+/* ---------- sharing a thread or a person into a whisper (v150) ----------
+   Both work the same way and deliberately so: the message carries an id, and the card is drawn
+   from the live row when it is read. Nothing about the thread or the person is copied into the
+   message, so a share cannot be forged to say something the original never said, and what the
+   reader is allowed to see is decided by the ordinary select policies rather than by whatever the
+   sender chose to paste in.
+
+   Both go through pickPerson(), which is the only new piece of chrome either feature needed. */
+function shareableTargets() {
+/* Friends first, then anyone reachable right now. Friends come first because sharing is almost
+   always with somebody you already talk to, and a list that opens on the people you know is
+   faster than one sorted by who happens to be online. Yourself excluded -- a card sent to
+   yourself is a dead end, and the whisper insert policy refuses it anyway. */
+var seen = {}, out = [];
+Object.keys(friends).forEach(function (id) {
+if (id === me.id || blocked[id]) return;
+seen[id] = 1;
+out.push({ id: id, name: (people[id] && people[id].name) || friends[id].name, friend: true, online: !!people[id] });
+});
+var recent = recentPeopleEntries();
+Object.keys(recent).forEach(function (id) {
+if (id === me.id || seen[id] || blocked[id]) return;
+out.push({ id: id, name: recent[id].name, friend: false, online: !!people[id] });
+});
+out.sort(function (a, b) {
+if (a.friend !== b.friend) return a.friend ? -1 : 1;
+if (a.online !== b.online) return a.online ? -1 : 1;
+return a.name.localeCompare(b.name);
+});
+return out;
+}
+var pickOverlay = null;
+function pickPerson(title) {
+return new Promise(function (resolve) {
+var list = shareableTargets();
+if (!pickOverlay) {
+pickOverlay = document.createElement('div');
+pickOverlay.className = 'modal-overlay hidden';
+pickOverlay.innerHTML = '<div class="modal pick-modal" role="dialog" aria-modal="true">' +
+'<div class="modal-hd"></div><div class="pick-list"></div>' +
+'<button class="btn pick-cancel" type="button">Cancel</button></div>';
+document.body.appendChild(pickOverlay);
+}
+pickOverlay.querySelector('.modal-hd').textContent = title;
+var box = pickOverlay.querySelector('.pick-list');
+box.innerHTML = list.length
+? list.map(function (p) {
+return '<button type="button" class="pick-row" data-id="' + esc(p.id) + '">' +
+avatarHtml(p.id, p.name) +
+'<span class="pick-nm' + (isAdminId(p.id) ? ' admin' : '') + '">' + esc(p.name) + '</span>' +
+(p.friend ? '<span class="pick-tag">friend</span>' : '') +
+(p.online ? '<span class="pick-dot" title="online"></span>' : '') + '</button>';
+}).join('')
+: '<div class="pick-empty">Nobody to send this to yet. Add a friend first.</div>';
+pickOverlay.classList.remove('hidden');
+function done(v) {
+pickOverlay.classList.add('hidden');
+box.onclick = null; pickOverlay.onclick = null;
+pickOverlay.querySelector('.pick-cancel').onclick = null;
+resolve(v);
+}
+box.onclick = function (e) { var b = e.target.closest('.pick-row'); if (b) done(b.dataset.id); };
+pickOverlay.querySelector('.pick-cancel').onclick = function () { done(null); };
+pickOverlay.onclick = function (e) { if (e.target === pickOverlay) done(null); };
+});
+}
+
+/* The body text is what a client that knows nothing about shares would show, and what goes in the
+   push notification and the inbox snippet -- so it is a readable sentence, not a marker. */
+async function shareThreadWith(threadId) {
+if (!me) return;
+var t = threadsCache[threadId];
+var to = await pickPerson('Send this thread to\u2026');
+if (!to) return;
+var w = await tryWhisper(to, (people[to] && people[to].name) || (friends[to] && friends[to].name) || 'them', true);
+if (!w) return; // turned into a friend-request offer instead
+var who = (people[to] && people[to].name) || (friends[to] && friends[to].name) || 'them';
+await post('\uD83E\uDDF5 Shared a thread' + (t && t.op_name ? ' by ' + t.op_name : ''), to, who, { share_thread: threadId });
+}
+async function shareUserWith(userId, userName) {
+if (!me) return;
+var to = await pickPerson('Send ' + userName + '\u2019s card to\u2026');
+if (!to) return;
+if (to === userId) { addSys('That is the same person.'); return; }
+var who = (people[to] && people[to].name) || (friends[to] && friends[to].name) || 'them';
+var w = await tryWhisper(to, who, true);
+if (!w) return;
+await post('\uD83D\uDC64 Shared ' + userName + '\u2019s card', to, who, { share_user: userId });
+}
+
+/* Cards are painted from whatever the reader can actually see. A thread that has since been
+   deleted, or a person whose account is gone, resolves to nothing and says so rather than
+   rendering a card full of blanks. */
+var shareThreadCache = {};
+function shareThreadHtml(id) {
+var t = threadsCache[id] || shareThreadCache[id];
+if (!t) return '<button type="button" class="sh sh-thread" data-sht="' + id + '"><span class="sh-load">\u2026</span></button>';
+var img = t.image_url ? '<img class="sh-thumb" src="' + esc(t.image_url) + '" alt="" loading="lazy">' : '';
+var n = t.reply_count || 0;
+return '<button type="button" class="sh sh-thread" data-sht="' + id + '">' + img +
+'<span class="sh-body"><span class="sh-kind">Thread \u00B7 ' + esc(boardById(t.board || 'gen').label) + '</span>' +
+'<span class="sh-op">' + esc(t.op_name) + '</span>' +
+'<span class="sh-txt">' + esc(String(t.body || '').slice(0, 90)) + '</span>' +
+'<span class="sh-meta">' + n + ' repl' + (n === 1 ? 'y' : 'ies') + '</span></span></button>';
+}
+async function fillShareThread(id) {
+if (!id || threadsCache[id] || shareThreadCache[id] || !sb) return;
+var r = await sb.from('threads').select('*').eq('id', id).maybeSingle();
+if (!r.error && r.data) shareThreadCache[id] = r.data;
+document.querySelectorAll('.sh-thread[data-sht="' + id + '"]').forEach(function (b) {
+b.outerHTML = (!r.error && r.data) ? shareThreadHtml(id)
+: '<span class="sh sh-gone">That thread is no longer there.</span>';
+});
+}
+function shareUserHtml(uid) {
+var nm = (people[uid] && people[uid].name) || (friends[uid] && friends[uid].name) ||
+(recentPeopleEntries()[uid] && recentPeopleEntries()[uid].name) || null;
+if (!nm) return '<span class="sh sh-gone">That person is no longer around.</span>';
+return '<button type="button" class="sh sh-user" data-shu="' + esc(uid) + '" data-shn="' + esc(nm) + '">' +
+avatarHtml(uid, nm, 'ava-menu') +
+'<span class="sh-body"><span class="sh-kind">Person</span>' +
+'<span class="sh-op' + (isAdminId(uid) ? ' admin' : '') + '">' + esc(nm) + '</span>' +
+(levelTextFor(uid) ? '<span class="sh-meta">' + esc(levelTextFor(uid)) + '</span>' : '') + '</span></button>';
+}
+/* userStats already holds the computed level -- the server keeps it, the client never derives it.
+   An account nobody has reacted to yet has no row at all, which is not the same as level zero, so
+   say nothing rather than inventing a number. */
+function levelTextFor(uid) {
+var st = userStats && userStats[uid];
+return st && st.level ? 'Level ' + st.level : '';
+}
+document.addEventListener('click', function (e) {
+var t = e.target.closest && e.target.closest('.sh-thread');
+if (t && t.dataset.sht) { openThreadFromShare(Number(t.dataset.sht)); return; }
+var u = e.target.closest && e.target.closest('.sh-user');
+if (u && u.dataset.shu) { e.preventDefault(); openMenu(u.dataset.shu, u, u.dataset.shn); }
+});
+/* Opening a shared thread has to get you onto the right board first, or the board switch that
+   follows would drop you somewhere the thread is not. */
+async function openThreadFromShare(id) {
+var t = threadsCache[id] || shareThreadCache[id];
+if (!t) { addSys('That thread is no longer there.'); return; }
+if (!gcRoot.classList.contains('mobile-threads-open') && threadToggleBtn) threadToggleBtn.click();
+if ((t.board || 'gen') !== curBoard) await switchBoard(t.board || 'gen');
+if (!threadsCache[id]) { threadsCache[id] = t; if (threadsOrder.indexOf(id) === -1) threadsOrder.push(id); }
+openThread(id);
+}
+
 /* ---------- voice notes (v149) ----------
    Hold nothing, tap twice: 🎤 starts, ⏹ stops and sends, ✕ throws it away. Press-and-hold is what
    the phone apps do, but it is miserable with a mouse and it makes a sixty-second note impossible
@@ -2778,6 +2927,9 @@ items.push(['Get Info', function () { showInfo(id, name); }]);
    offered a friend request instead, unless that person has opened their whispers to everyone. */
 if (reachable && !blocked[id]) items.push(['Whisper', function () { tryWhisper(id, name, true); }]);
 if (reachable && !blocked[id]) items.push(['Tag in Chat', function () { tagInChat(name); }]);
+/* Sharing someone's card does not require them to be reachable -- you are sending a pointer to a
+   person, not a message to them, and the card resolves from whoever the reader can see. */
+if (id !== me.id) items.push(['Send Their Card To\u2026', function () { shareUserWith(id, name); }]);
 /* Admins can't be blocked -- by anyone, admins included (the blocks insert policy enforces it too). */
 if (blocked[id]) items.push(['Unblock', function () { unblock(id); }]); else if (!isAdminId(id)) items.push(['Block', function () { block(id, name); }]);
 items.push(['Report', async function () { var rr = await showPromptModal('Report ' + name, { placeholder: 'e.g. spam, harassment', maxLength: 300 }); if (rr) report(id, name, rr); }]);
@@ -5555,6 +5707,7 @@ var img = e.target.closest('.tp-thumb'); if (img) { e.stopPropagation(); openLig
 var b = e.target.closest('.tp-item'); if (!b) return; openThread(Number(b.dataset.id));
 };
 tpBack.onclick = closeThread;
+if ($('tpShare')) $('tpShare').onclick = function () { if (openThreadId) shareThreadWith(openThreadId); };
 if (tpPages) tpPages.onclick = function (e) {
 var b = e.target.closest('.tp-page'); if (!b) return;
 threadsPage = Number(b.dataset.page); renderThreadList();
