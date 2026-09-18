@@ -84,6 +84,7 @@ Deno.serve(async (req) => {
   const note = JSON.stringify({ title, body, tag, url: './' });
   let sent = 0;
   const dead: string[] = [];
+  const failed: number[] = [];
 
   // Sent in parallel: a slow or unreachable push service for one person must not delay everyone
   // else, and there is no ordering between recipients to preserve.
@@ -92,6 +93,16 @@ Deno.serve(async (req) => {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
         note,
+        // 18 Sept 2026: this was missing, and it is why no board notification ever showed up.
+        // Without an explicit urgency the push service is free to treat the message as low
+        // priority and hold it until the device next wakes for some other reason -- FCM, which
+        // carries every Chrome and Android push, does exactly that. send-push learned this long
+        // ago (see the comment there) and passes the same two options; this function was written
+        // later, from scratch, and left them out. "sent" below only ever meant "the push service
+        // accepted it", which it always did, so the function reported success throughout.
+        // TTL: how long an undeliverable push waits for an offline device -- 12 hours, as in
+        // send-push, so a phone that was off all day does not wake to a pile of stale posts.
+        { urgency: 'high', TTL: 43200 },
       );
       sent++;
     } catch (e) {
@@ -100,10 +111,13 @@ Deno.serve(async (req) => {
       // tail of endpoints that can never receive anything again.
       const code = (e as { statusCode?: number })?.statusCode;
       if (code === 404 || code === 410) dead.push(s.endpoint);
+      else failed.push(code ?? 0);
     }
   }));
 
   if (dead.length) await admin.from('push_subscriptions').delete().in('endpoint', dead);
 
-  return json({ sent, followers: ids.length, pruned: dead.length });
+  // One line per call in the function's Logs tab: counts and status codes only, never who.
+  console.log(JSON.stringify({ board, followers: ids.length, devices: (subs ?? []).length, sent, pruned: dead.length, failed }));
+  return json({ sent, followers: ids.length, devices: (subs ?? []).length, pruned: dead.length, failed });
 });
