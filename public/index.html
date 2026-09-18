@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=107">
+<link rel="stylesheet" href="./css/style.css?v=108">
 </head>
 <body>
 <div class="gc-root">
@@ -251,9 +251,25 @@
 
 <div class="threads-panel" id="threadsPanel" role="complementary" aria-label="Threads board">
 <div class="tp-list" id="tpList">
-<div class="tp-hd"><span>/gen/ — General</span></div>
+<div class="tp-hd"><span id="tpBoardName">/gen/ — General</span></div>
+<!-- Boards and the tag filter. Both are painted by renderBoards()/renderTags() in app.js from the
+     BOARDS and TAGS tables there, rather than being written out here, so the list of boards lives
+     in exactly one place and the markup cannot drift out of step with the database's check
+     constraint. The subscribe button sits on the tag row because it belongs to whichever board is
+     showing, and the board row is already the one that wraps on a narrow screen. -->
+<div class="tp-boards" id="tpBoards" role="tablist" aria-label="Boards"></div>
+<div class="tp-tagrow">
+<div class="tp-tags" id="tpTags" role="toolbar" aria-label="Filter by tag"></div>
+<button class="tp-sub" type="button" id="tpSub" aria-pressed="false">🔕 Notify me</button>
+</div>
 <div class="tp-newwrap"><button class="tp-new" type="button" id="tpNewBtn" title="Start a new thread"><span class="tp-new-gem" aria-hidden="true"></span><span class="tp-new-label">Create new post</span></button></div>
 <div class="tp-newpost hidden" id="tpNewPost">
+<div class="tp-newmeta">
+<label class="tp-newlbl" for="tpNewBoard">Board</label>
+<select id="tpNewBoard" class="sunk tp-sel"></select>
+<label class="tp-newlbl" for="tpNewTag">About</label>
+<select id="tpNewTag" class="sunk tp-sel"></select>
+</div>
 <textarea id="tpNewBody" class="sunk" maxlength="1000" placeholder="Post anything to start a thread..."></textarea>
 <div class="tp-preview-wrap hidden" id="tpNewPreviewWrap"><img class="tp-preview-img" id="tpNewPreviewImg" alt="Selected image"><button class="tp-img-remove" type="button" id="tpNewImgRemove" aria-label="Remove image">✕</button></div>
 <div class="tp-composebar">
@@ -448,6 +464,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=142"></script>
+<script src="./js/app.js?v=143"></script>
 </body>
 </html>
