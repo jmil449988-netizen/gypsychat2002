@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 164;
+var BUILD_NUMBER = 165;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -692,6 +692,25 @@ return /Android/.test(navigator.userAgent);
 function isStandaloneDisplay() {
 return window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
 }
+/* v165: Windows has its own on/off switch for each browser's notifications, separate from the
+   site permission: Settings -> System -> Notifications -> "Notifications from apps and other
+   senders". No website can read it. With the browser switched off there, the permission still
+   says "granted" and pushes still arrive, but nothing appears on screen -- which is what kept the
+   desktop silent through a morning of push testing on 18 Sept 2026 (docs/build-log.md, build 164).
+   So on Windows the bell's tooltip names the switch, and the browser as Windows lists it. */
+function isWindowsDevice() {
+var d = navigator.userAgentData;
+if (d && d.platform) return d.platform === 'Windows';
+return /Windows/.test(navigator.userAgent);
+}
+function windowsBrowserName() {
+var d = navigator.userAgentData;
+var brands = (d && d.brands ? d.brands : []).map(function (b) { return b.brand; });
+if (brands.indexOf('Microsoft Edge') !== -1 || /Edg\//.test(navigator.userAgent)) return 'Microsoft Edge';
+if (brands.indexOf('Google Chrome') !== -1) return 'Google Chrome';
+if (/Firefox\//.test(navigator.userAgent)) return 'Firefox';
+return 'your browser'; // Brave, Opera, Vivaldi...: not sure what Windows calls each, so no guess
+}
 /* Converts the VAPID public key (a URL-safe base64 string, the form the `web-push` tooling and
    appconfig.js both use) into the raw byte array pushManager.subscribe() actually wants. */
 function urlBase64ToUint8Array(base64String) {
@@ -794,7 +813,8 @@ notifBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
 notifBtn.title = iosNeedsInstall ? 'On iPhone/iPad: tap Share, then Add to Home Screen, then open Gypsy Chat from that icon to turn on notifications' :
 !supported ? 'Notifications are not supported in this browser' :
 Notification.permission === 'denied' ? (isAndroidDevice() && isStandaloneDisplay() ? 'Notifications are off — allow them in your phone’s Settings → Apps → Gypsy Chat → Notifications' : 'Notifications are blocked — allow them in your browser’s site settings to turn this on') :
-on ? 'Notifications on for whispers & mentions — click to turn off' : 'Turn on notifications for whispers & mentions';
+on ? 'Notifications on for whispers & mentions — click to turn off' + (isWindowsDevice() ? '. Nothing popping up? In Windows Settings → System → Notifications, make sure ' + windowsBrowserName() + ' is on under “Notifications from apps and other senders”.' : '') :
+'Turn on notifications for whispers & mentions';
 }
 if (notifBtn) {
 updateNotifBtn();
