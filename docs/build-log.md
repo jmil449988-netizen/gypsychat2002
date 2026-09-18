@@ -463,3 +463,50 @@ Logs tab now says what was sent to how many devices.
 Two low-priority test notifications from before the fix ("Push test from AA.Romani.world") may still
 turn up late on the phone. The test threads on /gen/ ("Push test" ×2 by Steve miller, "test 1" and
 "test" by AA) are ordinary posts and can be deleted from the board.
+
+# Build 164: every push pops up, not just the first (18 Sept 2026)
+
+## What the user saw
+
+After the phone-to-desktop post at 09:12 PDT popped up, the next three posts from Steve's phone
+(09:17:30, 09:18:06, 09:18:45) showed nothing on the desktop, although the function logged each one
+as `sent 1`, nothing failed, and the registration was the one that had just worked. The user then
+reset the site's cookies and permissions several times. Each reset killed that device's
+registration, so the sends between 09:20 and 09:24 were logged as `pruned` or `devices 0`. The bell
+at 09:25:09 made a fresh one, and Steve's post seventeen seconds later went out as `sent 1`.
+
+## The cause: same tag, no renotify
+
+Every board push carries one tag per board (`gc-board-gen`), and every whisper one per sender. On
+Windows, Chrome marks a new toast *SuppressPopup* when `renotify` is not set and a toast with the
+same tag is still in the notification centre (Chromium,
+`chrome/browser/notifications/notification_platform_bridge_win.cc`). The 09:12 notification went to
+the Windows notification centre and stayed there, so every later post on /gen/ replaced it with no
+banner and no sound. On a phone the same rule stops the sound and the heads-up banner.
+
+The 09:25 post is most likely the other, deliberate rule: the desktop Gypsy Chat window had focus
+(the bell had been clicked there seventeen seconds before), and the service worker never pops a
+system notification over a focused Gypsy Chat window. The in-app 📜 pop-up is meant to cover that
+case.
+
+Checked on the desktop after the deploy: permission granted, one service worker (cache
+gc2000-v195), the browser's subscription is the one stored in the database, and no notifications
+from the site are currently displayed.
+
+## The fix
+
+`sw.js` passes `renotify: true` to `showNotification` (the tag always falls back to `gc-push`,
+which renotify requires). The tag still keeps one entry per board or person in the notification
+centre; each new one now alerts. Cache gc2000-v195, app.js v164.
+
+`notifyDesktop()` in the page deliberately does **not** get renotify. A page notification and a
+service-worker notification never replace each other in Chrome, even with the same tag, so with
+the tab open in the background a whisper can show both. A renotify on the page one would make that
+happen for every whisper, not just the first.
+
+## Still open
+
+- With Gypsy Chat open in a background tab and the bell on, a whisper probably shows two desktop
+  notifications (the page's and the push's). Untested; the fix is for the page to leave it to the
+  push when this device has one.
+- A notification click only brings the tab forward; it does not open the whisper or thread.
