@@ -445,8 +445,9 @@ showed. Why a registration only twelve hours old had gone dead is not known.
 
 **Both directions now verified live:** desktop to phone, and phone to desktop.
 
-**If a tester says notifications never come:** first make sure the receiving device does not have
-Gypsy Chat open in front. Then check the function's Logs tab for their device count; 0 means the bell
+**If a tester says notifications never come:** on Windows, first check Settings → System →
+Notifications → Notifications from apps and other senders → Google Chrome is on (see build 164).
+Then make sure the receiving device does not have Gypsy Chat open in front. Then check the function's Logs tab for their device count; 0 means the bell
 was never turned on on that device. Then have them turn the bell off and on, which replaces a dead
 registration. On desktop Chrome, chrome://gcm-internals → Start Recording shows whether a
 `wp:` message arrives at all. On iPhone, only the Home Screen app can receive notifications.
@@ -510,3 +511,15 @@ happen for every whisper, not just the first.
   notifications (the page's and the push's). Untested; the fix is for the page to leave it to the
   push when this device has one.
 - A notification click only brings the tab forward; it does not open the whisper or thread.
+
+## Update: Windows had Chrome's notifications switched off
+
+The user found Google Chrome switched off under Windows Settings → System → Notifications →
+Notifications from apps and other senders. They had turned it off when the PC was new because
+notifications were annoying. With it switched on, phone to desktop works perfectly.
+
+A website cannot see this switch. The site permission still reads "granted" and pushes still
+arrive, so every check from the page side looked healthy while Windows showed nothing. The 09:12
+notification did appear, so it is not certain which of the later posts this switch hid and which
+the same-tag rule hid. The renotify fix stands on its own: the Chromium code quoted above suppresses
+the banner for a same-tag notification whenever renotify is off.
