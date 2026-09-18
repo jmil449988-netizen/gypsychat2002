@@ -2062,3 +2062,14 @@ color:var(--ash);border:1px solid #3a3026;border-radius:999px;padding:1px 5px}
    the inbox rows stay on the same grid as the whispers above and below them. */
 .im-group .wava,.im-tab .tava{line-height:1}
 .im-group .bar .gmembers{font-size:14px}
+/* A group's composer has no games or mic button yet -- they are hidden, not removed, because the
+   rest of ensureWin wires them up by selector and a missing node throws. display:none takes them
+   out of the grid, but the named-area template still reserves their columns, so the group case
+   gets its own template rather than two empty gaps beside the emoji button. */
+.im.im-group .icomp{grid-template-columns:auto auto 1fr auto}
+@media (min-width:501px){
+  .im.im-group .icomp{grid-template-columns:auto auto 1fr;grid-template-areas:"ta ta send" "emo media ."}
+}
+@media (max-width:500px){
+  .im.im-group .icomp{grid-template-columns:auto 1fr auto}
+}
