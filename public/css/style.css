@@ -1218,6 +1218,17 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
    left/right, which wins over this). */
 @media (min-width:501px){
   .gc-root.dm-open .roulette-toggle-fab{right:calc(clamp(260px,calc(50vw - 396px),340px) + 20px)}
+  /* v117 (build 168): an open conversation -- a whisper or a group -- is bigger than the inbox list:
+     up to 400px wide (from 340; never under 280) and up to 760px tall (from 480), so a game card
+     fits without scrolling. At 480 a Battleship card in play overflowed the log by up to 194px.
+     The inbox list keeps the old size. The price, on screens wide enough for the Ballot Box gutter:
+     while a conversation is open the dock covers the lower part of the Ballot Box, which comes back
+     the moment the dock goes back to the list or is collapsed. */
+  .dm-dock.thread{width:clamp(280px,calc(50vw - 396px),400px);height:min(760px,calc(100vh - 16px))}
+  .gc-root.dm-open.dm-thread .roulette-toggle-fab{right:calc(clamp(280px,calc(50vw - 396px),400px) + 20px)}
+  /* and on a short screen (a 1536x864 laptop at 125% leaves ~730px) the sea gives up a few pixels so the
+     whole card still fits: the card is the grid plus ~262px, the log is the dock minus ~159px */
+  .dm-dock .bs-grid{max-width:min(340px,100%,max(200px,calc(100vh - 440px)))}
 }
 
 /* ==================== the Ballot Box (v69) ====================
