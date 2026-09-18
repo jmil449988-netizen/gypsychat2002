@@ -536,3 +536,41 @@ app.js v165.
 
 Checked on the user's desktop with the live code: the tooltip names Google Chrome. The service
 worker updated to v196 and the push registration was kept.
+
+# Build 166: the readings come back after a reload or a log out (18 Sept 2026)
+
+**Reported:** after logging out and back in, the Bible verses were gone from the chat.
+
+**Why:** a reading (the scripture card at each of the hours) is drawn in the page only and never
+written to the database, which is on purpose (no row, no realtime traffic, none of the room's
+100-message budget). The room log itself is never emptied inside a page. Logging out hides it, and
+logging back in in the same page shows it again. But anything that builds the chat afresh from the
+database — a refresh, the update banner's reload, reopening the app and signing in — came back
+without a single reading. Not even the reading for the hour we were in came back, because the one
+key the device kept (`gc_hour_shown`) said it had already been shown.
+
+**Fix:** each device keeps a short list of the readings it has shown in `localStorage`
+(`gc_hours_seen`: hour, passage index, when it was drawn; a week's worth, at most 60). The history
+replay at sign-on merges them back among the messages by time, each where it stood, with the day
+dividers still right. Readings older than the oldest room message in the backlog left with those
+messages and stay gone. The reading for the hour we are in is always on screen once the room is.
+If it didn't come back with the history, it is drawn at the bottom, quietly. Restoring never rings
+the bell. Only readings this device showed come back, so "a bell you missed is a bell you missed"
+still holds. `bellTick()` now waits for the history (`roomHistoryIn`, cleared by `leaveRoom`), so a
+reading can no longer land above a backlog that is still arriving. The old `gc_hour_shown` key is
+removed on load.
+
+**Tested** in a jsdom harness that runs the real functions and the real replay snippet from
+app.js across simulated page loads, 21 checks:
+- the bell and reading at the strike
+- a reload putting the reading back in place, quietly and with the same passage
+- a whisper not deciding where the backlog starts
+- a second hour striking
+- an old reading leaving with its messages
+- the current hour redrawn at the bottom when the backlog has moved past it
+- the day divider across midnight, an empty room, and the week's pruning
+- migration from the old key, and a corrupt list
+
+**Live:** app.js and sw.js on the site match the repo byte for byte (SHA-256), and the desktop's
+service worker is on gc2000-v197. Readings shown before this build were never recorded, so they
+cannot come back. Recording starts with the first reading each device shows on build 166.
