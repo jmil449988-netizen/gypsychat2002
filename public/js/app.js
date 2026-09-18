@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 150;
+var BUILD_NUMBER = 151;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -2536,6 +2536,7 @@ var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id
 d.innerHTML = replyStubHtml(m.reply_to) + '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + '<span class="nmt">' + esc(m.sender_name) + '</span>:</b> ' + (m.voice_path ? voiceHtml(m) : m.share_thread ? shareThreadHtml(m.share_thread) : m.share_user ? shareUserHtml(m.share_user) : bodyHtml(m.body));
 if (m.reply_to) fillReplyStub(m.reply_to);
 if (m.share_thread) fillShareThread(m.share_thread);
+if (m.share_user) fillShareUser(m.share_user);
 dayDivider(w.log, 'im:' + otherId, m.created_at);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
 /* Inbox row: last line as its snippet, and newest activity floats to the top of the list.
@@ -2696,10 +2697,31 @@ b.outerHTML = (!r.error && r.data) ? shareThreadHtml(id)
 : '<span class="sh sh-gone">That thread is no longer there.</span>';
 });
 }
+/* The name is looked up from profiles when the live sets do not have it. Those sets -- who is in
+   the room, your own friends, who was seen in the last half hour -- are all "visible right now"
+   sets, and a shared card is precisely the case where the person usually is not: you send somebody
+   a card so they can find a person they have not met. The first version resolved from those three
+   alone and rendered "no longer around" for anybody else, which was wrong about real accounts.
+   profiles is the durable record, so it is what the card falls back to, the same way a shared
+   thread is fetched rather than assumed to be in the catalog you happen to be looking at. */
+var shareUserCache = {};
+function shareUserName(uid) {
+return (people[uid] && people[uid].name) || (friends[uid] && friends[uid].name) ||
+(recentPeopleEntries()[uid] && recentPeopleEntries()[uid].name) || shareUserCache[uid] || null;
+}
+async function fillShareUser(uid) {
+if (!uid || shareUserName(uid) || !sb) return;
+var r = await sb.from('profiles').select('user_id, name').eq('user_id', uid).maybeSingle();
+if (!r.error && r.data && r.data.name) shareUserCache[uid] = r.data.name;
+document.querySelectorAll('.sh-user[data-shu="' + uid + '"], .sh-pending[data-shu="' + uid + '"]').forEach(function (b) {
+b.outerHTML = shareUserHtml(uid);
+});
+}
 function shareUserHtml(uid) {
-var nm = (people[uid] && people[uid].name) || (friends[uid] && friends[uid].name) ||
-(recentPeopleEntries()[uid] && recentPeopleEntries()[uid].name) || null;
-if (!nm) return '<span class="sh sh-gone">That person is no longer around.</span>';
+var nm = shareUserName(uid);
+/* Not "gone" -- not looked up yet. The distinction matters: the first version declared a real
+   account missing before it had asked anybody. */
+if (!nm) return '<span class="sh sh-pending" data-shu="' + esc(uid) + '"><span class="sh-load">\u2026</span></span>';
 return '<button type="button" class="sh sh-user" data-shu="' + esc(uid) + '" data-shn="' + esc(nm) + '">' +
 avatarHtml(uid, nm, 'ava-menu') +
 '<span class="sh-body"><span class="sh-kind">Person</span>' +
