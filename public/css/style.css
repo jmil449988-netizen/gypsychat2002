@@ -1921,3 +1921,37 @@ border:1px solid var(--gold-lo);border-radius:3px;margin-bottom:2px}
 .rpicker .rp-reply:hover,.rpicker .rp-reply:focus-visible{color:var(--gold-hi);border-color:var(--gold);
 box-shadow:0 0 8px rgba(201,162,74,.5);outline:none}
 @media (max-width:500px){.rq{font-size:12px;margin-left:10px}.reply-bar{font-size:12px}}
+
+/* ==================== v110: the reading at each hour ====================
+   Parchment, not the room's dark stone. Red type on a near-black background is genuinely hard to
+   read -- the contrast ratio is poor at every shade of red worth calling red -- and the request
+   was for a well-contrasting highlight, so the panel inverts instead of tinting. It also happens
+   to be what a red-letter Bible actually looks like, which is the right association for the thing
+   it is. Eight times a day is rare enough that a bright panel reads as an event rather than
+   noise. */
+.m.scripture{display:block;margin:10px 4px;padding:9px 12px 7px;
+background:linear-gradient(180deg,#f3e7cd,#e6d6b4);color:#2a2118;
+border:2px double #8a6b32;outline:1px solid #000;border-radius:3px;
+box-shadow:0 0 0 1px #000,0 3px 12px #000,inset 0 0 24px rgba(138,107,50,.18)}
+.m.scripture .sc-hd{font:700 10px Cinzel,Georgia,serif;letter-spacing:2px;text-transform:uppercase;
+color:#6b4a18;margin-bottom:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sc-bell{font-size:12px}
+/* The hour's own commemoration, in the header but stepped back from the hour's name: it is the
+   reason this passage and not another, so it belongs on screen, but it is a gloss, not a title. */
+.sc-theme{font:italic 10px "IM Fell English",Georgia,serif;letter-spacing:.5px;text-transform:none;
+color:#7d6236;opacity:.9}
+.m.scripture .sc-body{font:15px/1.62 "IM Fell English",Georgia,serif;color:#2a2118}
+/* The words of Christ. Deep red on parchment, the way a red-letter edition sets them -- and only
+   these: the evangelist's "Then Jesus said" stays black, because it is not Him speaking. */
+.sc-red{color:#9c1c14}
+.m.scripture .sc-ref{margin-top:6px;font:700 9px Cinzel,Georgia,serif;letter-spacing:1.5px;
+color:#6b4a18;text-align:right;opacity:.85}
+@media (max-width:500px){
+  .m.scripture{margin:8px 2px;padding:8px 10px 6px}
+  .m.scripture .sc-body{font-size:15px;line-height:1.6}
+}
+/* The NKJV permission notice. Required to appear wherever the text is quoted, so it lives in the
+   ⋯ menu under the version number rather than in the room, where it would be chrome competing
+   with the readings themselves. */
+.popover-nkjv{padding:4px 10px 8px;font:9px Georgia,serif;line-height:1.45;color:var(--ash);
+opacity:.6;max-width:260px}
