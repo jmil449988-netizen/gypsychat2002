@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 153;
+var BUILD_NUMBER = 154;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -189,6 +189,8 @@ if (!(dmRead[id] >= t)) { dmRead[id] = t; saveDmRead(); syncReadReceipt(id, t); 
    the app depends on it. */
 function syncReadReceipt(id, t) {
 if (!sb || !me) return;
+/* dm_reads is keyed by a peer uuid; a group's read marker lives on my own membership row. */
+if (isGroupKey(id)) { sb.rpc('gc_mark_group_read', { p_conversation: groupIdOf(id) }).then(function () {}, function () {}); return; }
 sb.from('dm_reads').upsert({ owner_id: me.id, peer_id: id, last_read_at: new Date(t).toISOString() })
 .then(function (r) { if (r.error) console.warn('read receipt not saved:', r.error.message); });
 }
@@ -203,6 +205,7 @@ var dmSeenBy = {};
    any message I send is rendered, and again whenever a fresher dm_reads row for that person comes
    in, so it moves to the new last message or appears/disappears as appropriate. */
 function updateSeenMark(id) {
+if (isGroupKey(id)) return; // "Seen" means one other person read it; in a group it would be a lie
 var w = wins[id]; if (!w) return;
 var old = w.log.querySelector('.dm-seen'); if (old) old.remove();
 var mineEls = w.log.querySelectorAll('.m.me'); if (!mineEls.length) return;
@@ -2264,9 +2267,218 @@ dmBar.addEventListener('pointerup', end);
 dmBar.addEventListener('pointercancel', end);
 })();
 var lastBuzz = {};
-function ensureWin(id, name) {
+/* ==================== group chats (v154) ====================
+   Groups are a PARALLEL path to whispers, not a replacement. A message carries either a
+   recipient_id (a whisper, exactly as before) or a conversation_id (a group), never both, so
+   none of the pairwise machinery below -- can_whisper, has_blocked, dm_reads, the pair-named
+   voice-note folders -- had to be touched or migrated.
+
+   The one piece of shared plumbing is wins{}: a group's window lives there under the key
+   'g<id>' instead of a peer's uuid, so the dock, the inbox rows, unread counting and the
+   day dividers all work on a group without knowing what a group is. Anything that genuinely
+   needs to tell them apart asks isGroupKey(). */
+var GROUP_MAX = 8;
+var myGroups = {};            // conversation id -> { id, title, members: [{ user_id, member_name }] }
+function isGroupKey(k) { return typeof k === 'string' && k.charAt(0) === 'g' && /^g\d+$/.test(k); }
+function groupKey(cid) { return 'g' + cid; }
+function groupIdOf(key) { return isGroupKey(key) ? Number(key.slice(1)) : null; }
+function liveMembers(g) { return (g && g.members || []).filter(function (m) { return !m.left_at; }); }
+/* A group with no name of its own is called after the people in it -- the same thing every
+   messenger does, and better than "Group 14" because the useful information is who is in it. */
+function groupTitleFor(cid) {
+var g = myGroups[cid]; if (!g) return 'Group';
+if (g.title) return g.title;
+var others = liveMembers(g).filter(function (m) { return m.user_id !== me.id; })
+.map(function (m) { return (people[m.user_id] && people[m.user_id].name) || m.member_name || 'someone'; });
+if (!others.length) return 'Group';
+if (others.length <= 3) return others.join(', ');
+return others.slice(0, 2).join(', ') + ' and ' + (others.length - 2) + ' more';
+}
+async function loadMyGroups() {
+if (!sb || !me) return;
+var r = await sb.from('conversation_members').select('conversation_id, user_id, member_name, left_at, conversations(id, title, closed_at)');
+if (r.error) { return; }
+myGroups = {};
+(r.data || []).forEach(function (row) {
+var c = row.conversations; if (!c || c.closed_at) return;
+if (!myGroups[c.id]) myGroups[c.id] = { id: c.id, title: c.title, members: [] };
+myGroups[c.id].members.push({ user_id: row.user_id, member_name: row.member_name, left_at: row.left_at });
+});
+/* Only groups I am still in. A row for a group I left comes back too (my own row is still
+   there, with left_at set) and must not turn into a window. */
+Object.keys(myGroups).forEach(function (cid) {
+var mine = myGroups[cid].members.filter(function (m) { return m.user_id === me.id && !m.left_at; });
+if (!mine.length) delete myGroups[cid];
+});
+Object.keys(myGroups).forEach(function (cid) { ensureWin(groupKey(cid), groupTitleFor(cid), true); });
+Object.keys(myGroups).forEach(function (cid) { updateTab(groupKey(cid)); });
+}
+/* ---- creating one ---------------------------------------------------------------------- */
+/* pickPeople is pickPerson's multiple-choice sibling: same list, same rows, but tapping a row
+   toggles it and the modal stays open until Done. */
+var multiPickOverlay = null;
+function pickPeople(title, max) {
+return new Promise(function (resolve) {
+var list = shareableTargets(), chosen = {};
+if (!multiPickOverlay) {
+multiPickOverlay = document.createElement('div');
+multiPickOverlay.className = 'modal-overlay hidden';
+multiPickOverlay.innerHTML = '<div class="modal pick-modal" role="dialog" aria-modal="true">' +
+'<div class="modal-hd"></div><div class="pick-list"></div>' +
+'<div class="pick-actions"><button class="btn pick-cancel" type="button">Cancel</button>' +
+'<button class="btn pick-done" type="button">Done</button></div></div>';
+document.body.appendChild(multiPickOverlay);
+}
+var hd = multiPickOverlay.querySelector('.modal-hd');
+var box = multiPickOverlay.querySelector('.pick-list');
+var done = multiPickOverlay.querySelector('.pick-done');
+function count() { return Object.keys(chosen).length; }
+function paint() {
+done.textContent = count() ? 'Done (' + count() + ')' : 'Done';
+done.disabled = !count();
+[].forEach.call(box.querySelectorAll('.pick-row'), function (row) {
+row.classList.toggle('picked', !!chosen[row.dataset.id]);
+});
+}
+hd.textContent = title;
+if (!list.length) {
+box.innerHTML = '<div class="pick-empty">Nobody to add yet. Make a friend first.</div>';
+} else {
+box.innerHTML = list.map(function (p) {
+return '<button type="button" class="pick-row" data-id="' + esc(p.id) + '">' +
+avatarHtml(p.id, p.name) +
+'<span class="pick-nm' + (isAdminId(p.id) ? ' admin' : '') + '">' + esc(p.name) + '</span>' +
+(p.friend ? '<span class="pick-tag">friend</span>' : '') +
+(p.online ? '<span class="pick-dot" title="online"></span>' : '') +
+'<span class="pick-check" aria-hidden="true">✓</span></button>';
+}).join('');
+}
+function close(v) { multiPickOverlay.classList.add('hidden'); resolve(v); }
+box.onclick = function (e) {
+var row = e.target.closest('.pick-row'); if (!row) return;
+var id = row.dataset.id;
+if (chosen[id]) delete chosen[id];
+else {
+if (count() >= (max || GROUP_MAX - 1)) { return; }
+chosen[id] = 1;
+}
+paint();
+};
+multiPickOverlay.querySelector('.pick-cancel').onclick = function () { close(null); };
+done.onclick = function () { close(Object.keys(chosen)); };
+multiPickOverlay.classList.remove('hidden');
+paint();
+});
+}
+async function startGroup(seedId) {
+if (!me) return;
+var picked = await pickPeople('Start a group with…', GROUP_MAX - 1);
+if (!picked || !picked.length) return;
+if (seedId && picked.indexOf(seedId) < 0 && picked.length < GROUP_MAX - 1) picked.push(seedId);
+var r = await sb.rpc('gc_create_group', { p_title: null, p_members: picked });
+if (r.error) { addSys(groupErrorText(r.error)); return; }
+var cid = r.data;
+await loadMyGroups();
+openIM(groupKey(cid), groupTitleFor(cid), true);
+imSys(groupKey(cid), 'You started this group. Anyone in it can add someone else, up to ' + GROUP_MAX + '.');
+}
+/* The database speaks in its own words when it refuses; these are the ones worth translating. */
+function groupErrorText(err) {
+var m = (err && err.message) || '';
+if (/holds 8 people/.test(m)) return 'A group holds ' + GROUP_MAX + ' people.';
+if (/could only add people you could whisper|only add people you could whisper/.test(m)) return 'You can only add people you could whisper.';
+if (/character name/.test(m)) return 'You need a character name before you can start a group.';
+if (/at least one person/.test(m)) return 'Pick at least one person.';
+return m || 'That did not work.';
+}
+/* ---- the member sheet: who is in it, add, leave ----------------------------------------- */
+/* Reuses the same .nmenu element the name menu uses, so a group's menu looks and behaves like
+   every other menu in the app rather than becoming a second kind of popup. */
+function showListMenu(anchor, headerText, items) {
+menu.innerHTML = '<div class="hd"><span class="hd-name">' + esc(headerText) + '</span></div>' +
+items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + esc(it[0]) + '</button>'; }).join('');
+menu.querySelectorAll('button').forEach(function (b) { b.onclick = function () { closeMenu(); items[+b.dataset.i][1](); }; });
+menu.classList.add('open');
+var r = anchor.getBoundingClientRect();
+menu.style.top = Math.max(4, Math.min(r.bottom + 2, window.innerHeight - menu.offsetHeight - 4)) + 'px';
+menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - menu.offsetWidth - 4)) + 'px';
+var first = menu.querySelector('button'); if (first) first.focus();
+}
+function openGroupMembers(cid, anchor) {
+var g = myGroups[cid]; if (!g) return;
+var live = liveMembers(g);
+var items = live.map(function (m) {
+var nm = (people[m.user_id] && people[m.user_id].name) || m.member_name || 'someone';
+return [nm + (m.user_id === me.id ? ' (you)' : ''), function () {
+if (m.user_id !== me.id && anchor) openMenu(m.user_id, anchor, nm);
+}];
+});
+if (live.length < GROUP_MAX) items.push(['\uff0b Add someone', function () { addToGroup(cid); }]);
+items.push(['Leave this group', function () { leaveGroup(cid); }, 'danger']);
+showListMenu(anchor, live.length + ' of ' + GROUP_MAX + ' in this group', items);
+}
+async function addToGroup(cid) {
+var g = myGroups[cid]; if (!g) return;
+if (liveMembers(g).length >= GROUP_MAX) { imSys(groupKey(cid), 'A group holds ' + GROUP_MAX + ' people.'); return; }
+var already = {};
+liveMembers(g).forEach(function (m) { already[m.user_id] = 1; });
+var picked = await pickPeople('Add to this group…', GROUP_MAX - liveMembers(g).length);
+if (!picked || !picked.length) return;
+var added = 0, failed = null;
+for (var i = 0; i < picked.length; i++) {
+if (already[picked[i]]) continue;
+var r = await sb.rpc('gc_add_to_group', { p_conversation: cid, p_user: picked[i] });
+if (r.error) { failed = r.error; break; }
+added++;
+}
+await loadMyGroups();
+renameWin(groupKey(cid), groupTitleFor(cid));
+if (failed) imSys(groupKey(cid), groupErrorText(failed));
+else if (added) imSys(groupKey(cid), added === 1 ? 'Someone new is in the group.' : added + ' people joined the group.');
+}
+async function leaveGroup(cid) {
+if (!confirm('Leave this group? You will stop seeing it, and everything in it.')) return;
+var r = await sb.rpc('gc_leave_group', { p_conversation: cid });
+if (r.error) { imSys(groupKey(cid), groupErrorText(r.error)); return; }
+var key = groupKey(cid);
+delete myGroups[cid];
+if (wins[key]) { if (wins[key].tab && wins[key].tab.parentNode) wins[key].tab.parentNode.removeChild(wins[key].tab);
+if (wins[key].el && wins[key].el.parentNode) wins[key].el.parentNode.removeChild(wins[key].el);
+delete wins[key]; }
+if (activeDm === key) showInbox();
+delete unread[key];
+syncDock();
+addSys('You left the group.');
+}
+/* ---- being added to one while you are sitting there ------------------------------------- */
+/* Without this, someone adding you to a group does nothing visible until you reload: the group's
+   messages are readable the moment the membership row lands, but the client has never heard of
+   the group so renderIM has nowhere to put them. */
+function watchGroupMembership(channel) {
+channel.on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, async function (p) {
+var row = p.new || p.old; if (!row) return;
+var mine = row.user_id === me.id;
+var known = !!myGroups[row.conversation_id];
+if (!mine && !known) return;             // a group I am not in and have never heard of
+var before = known;
+await loadMyGroups();
+var nowIn = !!myGroups[row.conversation_id];
+if (mine && nowIn && !before) {
+var key = groupKey(row.conversation_id);
+ensureWin(key, groupTitleFor(row.conversation_id), true);
+updateTab(key);
+syncDock();
+addSys('You were added to a group: ' + groupTitleFor(row.conversation_id) + '. It is in your Messages.');
+try { playSound('friend-request'); } catch (e) {}
+} else if (nowIn) {
+renameWin(groupKey(row.conversation_id), groupTitleFor(row.conversation_id));
+}
+});
+}
+
+function ensureWin(id, name, isGroup) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
-var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
+var el = document.createElement('div'); el.className = 'im hidden' + (isGroup ? ' im-group' : ''); el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', (isGroup ? 'Group: ' : 'Whisper with ') + name);
 el.dataset.peer = id; // replyKeyFor() reads this to keep each conversation's reply target its own
 el.innerHTML = '<div class="bar"><button class="back" type="button" title="Back to messages" aria-label="Back to messages">‹</button><span class="wava" aria-hidden="true"></span><span class="nmwrap"><span class="nm" tabindex="0" role="button" aria-label="' + esc(name) + ' options"></span><span class="im-sub" aria-live="polite"></span></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" title="Collapse messages" aria-label="Collapse messages">–</button></div>' +
 '<div class="ilog" aria-live="polite"></div><div class="reply-bar hidden"></div><div class="vn-bar hidden"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
@@ -2281,15 +2493,32 @@ if (isAdminId(id)) el.querySelector('.nm').classList.add('admin');
 // typingPeer/typingTimer track whether -- and until when -- the OTHER person in this whisper is
 // shown as typing; see markImTyping/clearImTyping in the typing-indicator section below.
 // snippet: the last line of the conversation, for this conversation's inbox row (see updateTab).
-var win = { el: el, log: el.querySelector('.ilog'), replyBar: el.querySelector('.reply-bar'), voiceBar: el.querySelector('.vn-bar'), micBtn: el.querySelector('.icomp .mic'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !(people[id] || recentPeopleEntries()[id]), name: name, minimized: true, tab: null, snippet: '' };
-win.ta.placeholder = 'Whisper to ' + name + '...';
+var win = { el: el, log: el.querySelector('.ilog'), replyBar: el.querySelector('.reply-bar'), voiceBar: el.querySelector('.vn-bar'), micBtn: el.querySelector('.icomp .mic'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: isGroup ? false : !(people[id] || recentPeopleEntries()[id]), name: name, minimized: true, tab: null, snippet: '', group: isGroup ? groupIdOf(id) : null };
+/* A group's header carries a 👥 that opens the member list instead of a ⚡ that buzzes one
+   person, and the buttons that are still one-to-one only -- games, voice notes -- are taken out
+   rather than left there doing nothing. They come back as each one learns to count past two. */
+if (isGroup) {
+var buzzBtn = el.querySelector('.bar .buzz');
+if (buzzBtn) {
+buzzBtn.className = 'buzz gmembers';
+buzzBtn.textContent = '\uD83D\uDC65';
+buzzBtn.title = 'Who is in this group';
+buzzBtn.setAttribute('aria-label', 'Who is in this group');
+}
+['.icomp .games', '.icomp .mic'].forEach(function (sel) {
+var b = el.querySelector(sel); if (b) b.parentNode.removeChild(b);
+});
+}
+win.ta.placeholder = isGroup ? 'Message the group...' : ('Whisper to ' + name + '...');
 win.ta.addEventListener('input', function () { sendTyping(id, !!win.ta.value); });
 el.querySelector('.back').onclick = function () { showInbox(); };
 el.querySelector('.x').onclick = function () { minimizeIM(id); };
-el.querySelector('.buzz').onclick = function () { sendBuzz(id); };
+el.querySelector('.buzz').onclick = function (e) {
+if (isGroup) openGroupMembers(groupIdOf(id), e.currentTarget); else sendBuzz(id);
+};
 el.querySelector('.icomp .btn:last-child').onclick = function () { sendIM(id); };
 var micBtnWin = el.querySelector('.icomp .mic');
-micBtnWin.onclick = function () { if (voiceRec[id]) finishVoice(id, true); else startVoice(id); };
+if (micBtnWin) micBtnWin.onclick = function () { if (voiceRec[id]) finishVoice(id, true); else startVoice(id); };
 el.querySelector('.vn-bar').onclick = function (e) {
 if (e.target.closest('.vn-cancel')) { finishVoice(id, false); return; }
 if (e.target.closest('.vn-send')) finishVoice(id, true);
@@ -2447,6 +2676,11 @@ var closeBtn = w.tab.querySelector('.tab-close'); if (closeBtn) closeBtn.setAttr
    is created and again on every presence sync (a person can change their picture mid-conversation). */
 function updateWinAvatar(id) {
 var w = wins[id]; if (!w) return;
+if (isGroupKey(id)) { // a group has no face of its own
+var gs = w.el.querySelector('.wava'); if (gs) gs.textContent = '\uD83D\uDC65';
+var gt = w.tab && w.tab.querySelector('.tava'); if (gt) gt.textContent = '\uD83D\uDC65';
+return;
+}
 var span = w.el.querySelector('.wava'); if (span) span.innerHTML = avatarHtml(id, w.name);
 var tava = w.tab && w.tab.querySelector('.tava'); if (tava) tava.innerHTML = avatarHtml(id, w.name); // the inbox row's picture too
 }
@@ -2553,13 +2787,19 @@ function renderIM(m) {
 if (seen[m.id]) return; seen[m.id] = 1;
 var mine = m.sender_id === me.id;
 msgCache[m.id] = { senderId: m.sender_id, senderName: m.sender_name, body: m.body, createdAt: m.created_at };
-var otherId = mine ? m.recipient_id : m.sender_id;
-var otherName = mine ? ((people[otherId] && people[otherId].name) || m.recipient_name || 'unknown') : m.sender_name;
+/* A group line is addressed to the conversation, not to a person, so the window it belongs in
+   is the same one for everybody in it -- including the sender, who would otherwise land in a
+   whisper window with themselves. */
+var isG = !!m.conversation_id;
+var otherId = isG ? groupKey(m.conversation_id) : (mine ? m.recipient_id : m.sender_id);
+var otherName = isG ? groupTitleFor(m.conversation_id)
+: (mine ? ((people[otherId] && people[otherId].name) || m.recipient_name || 'unknown') : m.sender_name);
+if (isG && !myGroups[m.conversation_id]) return; // a group this client has not loaded yet
 // A conversation dismissed on this device stays gone through replay unless something in it is
 // actually newer than the dismissal -- see dmDismissed above. Once a window exists, this never
 // applies again until it's dismissed afresh (the wins[otherId] check short-circuits first).
 if (!wins[otherId] && dmDismissed[otherId] && new Date(m.created_at).getTime() <= dmDismissed[otherId]) return;
-var w = ensureWin(otherId, otherName); // never pops the window open on its own — see note above
+var w = ensureWin(otherId, otherName, isG); // never pops the window open on its own — see note above
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them'); d.dataset.mid = m.id;
 if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
@@ -2602,6 +2842,14 @@ var w = wins[id]; var t = w.ta.value.trim(); if (!t) return;
 var sc = t.match(/^\/(\w+)\s*$/);
 if (sc && SFX[sc[1].toLowerCase()]) { w.ta.value = ''; sendTyping(id, false); sendSfx(sc[1].toLowerCase(), id); return; }
 if (sc && sc[1].toLowerCase() === 'sounds') { w.ta.value = ''; imSys(id, 'Sounds: ' + SFX_LIST.map(function (k) { return '/' + k; }).join(' · ')); return; }
+/* A group has no single recipient to check reachability or a whisper policy against: the
+   membership row is the permission, and the insert policy checks it server-side. */
+if (isGroupKey(id)) {
+w.ta.value = ''; sendTyping(id, false);
+await post(t, null, null, { conversation_id: groupIdOf(id) });
+w.ta.focus();
+return;
+}
 if (w.gone) { imSys(id, w.name + ' is not here to hear you.'); return; }
 /* An old conversation can outlive the friendship (or they may have closed their whispers since):
    check before sending so the text isn't thrown away on a policy refusal. */
@@ -2982,6 +3230,7 @@ if (reachable && !blocked[id]) items.push(['Tag in Chat', function () { tagInCha
 /* Sharing someone's card does not require them to be reachable -- you are sending a pointer to a
    person, not a message to them, and the card resolves from whoever the reader can see. */
 if (id !== me.id) items.push(['Send Their Card To\u2026', function () { shareUserWith(id, name); }]);
+if (id !== me.id) items.push(['Start a Group With\u2026', function () { startGroup(id); }]);
 /* Admins can't be blocked -- by anyone, admins included (the blocks insert policy enforces it too). */
 if (blocked[id]) items.push(['Unblock', function () { unblock(id); }]); else if (!isAdminId(id)) items.push(['Block', function () { block(id, name); }]);
 items.push(['Report', async function () { var rr = await showPromptModal('Report ' + name, { placeholder: 'e.g. spam, harassment', maxLength: 300 }); if (rr) report(id, name, rr); }]);
@@ -3771,7 +4020,9 @@ var row = { room: C.ROOM || 'main', sender_id: me.id, sender_name: me.name, body
 if (recipientId) { row.recipient_id = recipientId; row.recipient_name = recipientName; }
 /* The reply target is read and cleared here, at the moment the message is actually accepted for
    sending, so a reply cannot leak onto the next thing you type if this send is refused. */
-var rkey = recipientId || 'room';
+/* Each conversation keeps its own pending reply. A group line has no recipientId, so without
+   its own key here it would pick up -- and consume -- the main room's reply target. */
+var rkey = recipientId || (extra && extra.conversation_id ? 'g' + extra.conversation_id : 'room');
 if (replyTo[rkey]) { row.reply_to = replyTo[rkey]; clearReplyTarget(rkey); }
 /* extra carries columns that are not part of an ordinary line of text -- voice_path/voice_secs so
    far. It is merged after the rest, but it cannot smuggle in a different sender: sender_id and
@@ -3782,7 +4033,8 @@ var r = await sb.from('messages').insert(row).select().single();
 if (r.error) {
 /* A refused whisper gets its explanation in the whisper window it was typed in, in plain words
    (see whisperErrorText); everything else stays in the room log as before. */
-if (!recipientId) addSys('Your words were lost: ' + r.error.message);
+if (extra && extra.conversation_id) imSys('g' + extra.conversation_id, 'Your words were lost: ' + r.error.message);
+else if (!recipientId) addSys('Your words were lost: ' + r.error.message);
 else if (wins[recipientId]) imSys(recipientId, whisperErrorText(r.error, recipientName));
 else addSys(whisperErrorText(r.error, recipientName));
 return;
@@ -7064,6 +7316,7 @@ if (typeof notifEnabled !== 'undefined' && notifEnabled && 'Notification' in win
 
 await stopPeek();
 channel = sb.channel('room:' + (C.ROOM || 'main'), { config: { presence: { key: me.id } } });
+watchGroupMembership(channel); // v154
 channel.on('presence', { event: 'sync' }, function () {
 var stt = channel.presenceState(); people = {};
 Object.keys(stt).forEach(function (k) { if (stt[k][0]) people[k] = stt[k][0]; });
@@ -7248,6 +7501,7 @@ replayingHistory = false;
 renderPeople();
 Object.keys(wins).forEach(updateTab); // inbox rows: snippets and unread badges from the replay, in one pass
 if (dmDock) dmDock.classList.remove('hidden');
+await loadMyGroups(); // v154: before syncDock, so group rows are in the inbox on the first paint
 syncDock();
 bellTick(); // v153: catch up on this hour's reading now, rather than up to 30 s later or never
 startBallot(); // the ballot box in the right-hand gutter (wide layout only -- see style.css)
