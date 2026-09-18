@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 143;
+var BUILD_NUMBER = 144;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -748,13 +748,14 @@ body: JSON.stringify({ targetUserId: targetUserId, title: title, body: body, tag
    must never be able to read who follows what, and because the sender should not be firing one
    request per subscriber. The fan-out happens server-side against thread_sub_targets(), which is
    SECURITY DEFINER and executable only by the service role. Fire-and-forget for the same reason
-   as triggerPush: a push that fails must never take the post down with it. */
-/* NOTE: the send-push function does not understand `board` yet -- it only routes by targetUserId.
-   Until it does, this call is a no-op on the server and nothing is delivered; the subscription is
-   still recorded, the button still reflects it, and delivery starts working the moment the
-   function learns this shape. Shipping it this way round on purpose: the subscription data is the
-   part that has to be right, and a push nobody receives is a smaller problem than a half-patched
-   push function that nobody can read. */
+   as triggerPush: a push that fails must never take the post down with it.
+
+   It goes to send-board-push, a different function from the send-push that triggerPush uses. That
+   separation is on purpose rather than incidental: send-push carries every whisper, mention,
+   friend request and game invite, and a mistake made while extending it would take all of that
+   down at once. No `exclude` is sent -- the function takes the caller's id from the verified
+   token instead, because a client-supplied exclude would let anyone suppress somebody else's
+   notification. */
 function triggerBoardPush(board, thread) {
 if (!board || !thread || !sb || !C.SUPABASE_URL) return;
 var blurb = thread.body ? String(thread.body).slice(0, 90) : (thread.image_url ? 'Posted a picture' : 'Started a thread');
@@ -762,10 +763,10 @@ if (thread.body && String(thread.body).length > 90) blurb += '…';
 sb.auth.getSession().then(function (s) {
 var jwt = s && s.data && s.data.session && s.data.session.access_token;
 if (!jwt) return;
-return fetch(C.SUPABASE_URL + '/functions/v1/send-push', {
+return fetch(C.SUPABASE_URL + '/functions/v1/send-board-push', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt },
-body: JSON.stringify({ board: board, exclude: me.id, title: me.name + ' posted on ' + boardById(board).name, body: blurb, tag: 'gc-board-' + board })
+body: JSON.stringify({ board: board, title: me.name + ' posted on ' + boardById(board).name, body: blurb, tag: 'gc-board-' + board })
 });
 }).catch(function () {});
 }
