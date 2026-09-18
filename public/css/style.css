@@ -250,13 +250,17 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
    UNDER the field there (the field and Send get the full width); on a phone the dock is
    full-screen and everything fits on one line (the emoji button steps aside for the phone's own
    keyboard -- see the max-width:500px rule). */
-.im .icomp{display:grid;grid-template-columns:auto auto auto 1fr auto;gap:6px;padding:6px;flex:none}
+.im .icomp{display:grid;grid-template-columns:auto auto auto auto 1fr auto;gap:6px;padding:6px;flex:none}
 @media (min-width:501px){
-  .im .icomp{grid-template-columns:auto auto auto 1fr;grid-template-areas:"ta ta ta send" "emo media games ."}
+  /* v111: a fourth icon column for the mic. The named areas are why this had to change in step
+     with the markup -- a button added to .icomp without a cell to sit in silently lands in the
+     next free grid slot, which here is the one the textarea occupies. */
+  .im .icomp{grid-template-columns:auto auto auto auto 1fr;grid-template-areas:"ta ta ta ta send" "emo media games mic ."}
   .im .icomp textarea{grid-area:ta}
   .im .icomp .btn.emo{grid-area:emo;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn.media{grid-area:media;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn.games{grid-area:games;height:28px;min-width:34px;font-size:14px}
+  .im .icomp .btn.mic{grid-area:mic;height:28px;min-width:34px;font-size:14px}
   .im .icomp .btn:last-child{grid-area:send}
 }
 .im .icomp textarea{font:inherit;color:var(--bone);resize:none;height:44px;padding:5px 8px;outline:none;caret-color:#e2c4ff;
@@ -264,7 +268,7 @@ background:linear-gradient(180deg,#0f0d11,#171317);border:1px solid #4d2f6b;box-
 .im .icomp textarea:focus{box-shadow:inset 0 0 16px #000,0 0 0 1px #a67ad1}
 .im .icomp .btn{color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
 .im .icomp .btn:hover{box-shadow:inset 0 1px 0 rgba(241,217,138,.15),inset 0 -2px 4px #000,0 0 0 1px #000,0 0 10px rgba(166,122,209,.6)}
-.im .icomp .btn.media,.im .icomp .btn.games,.im .icomp .btn.emo{font-size:15px;min-width:38px;padding:0 6px}
+.im .icomp .btn.media,.im .icomp .btn.games,.im .icomp .btn.emo,.im .icomp .btn.mic{font-size:15px;min-width:38px;padding:0 6px}
 /* the dock's inbox: one .im-tab row per conversation (newest activity first -- app.js moves a row
    to the top when a message lands in it) */
 .im-tray{display:flex;flex-direction:column}
@@ -1206,7 +1210,7 @@ background:linear-gradient(180deg,#31253a,#1a1320);border-bottom:2px solid #7a4b
   .gc-root.dm-open .thread-toggle-fab,.gc-root.dm-open .roulette-toggle-fab{display:none !important}
   /* same call as the room composer (#emoBtn above): the phone keyboard already has emoji */
   .im .icomp .emo{display:none}
-  .im .icomp{grid-template-columns:auto auto 1fr auto}
+  .im .icomp{grid-template-columns:auto auto auto 1fr auto}
 }
 /* Desktop: the roulette bubble floats at the right edge, vertically centred -- right where the
    expanded dock's top-right corner lands on a typical laptop screen. While the dock is open it
@@ -1955,3 +1959,42 @@ color:#6b4a18;text-align:right;opacity:.85}
    with the readings themselves. */
 .popover-nkjv{padding:4px 10px 8px;font:9px Georgia,serif;line-height:1.45;color:var(--ash);
 opacity:.6;max-width:260px}
+
+/* ==================== v111: voice notes ====================
+   The recording bar sits where the reply bar does, above the composer, and only exists while a
+   recording is running. Deep red rather than the room's gold: recording is a state you must never
+   be in without knowing it, and gold would read as ordinary chrome. */
+.vn-bar{display:flex;align-items:center;gap:8px;padding:5px 10px;flex:none;
+background:linear-gradient(180deg,#2a1614,#1a0f0e);border-top:1px solid var(--blood);
+font-size:11px;color:#e8c8c4}
+.vn-bar.hidden{display:none}
+.vn-dot{width:9px;height:9px;flex:none;border-radius:50%;background:var(--blood);
+box-shadow:0 0 7px rgba(155,27,27,.9);animation:vn-pulse 1.1s ease-in-out infinite}
+@keyframes vn-pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.vn-dot{animation:none}}
+.vn-time{font:700 12px Cinzel,Georgia,serif;letter-spacing:1px;color:#fff;min-width:34px}
+.vn-hint{flex:1 1 auto;font-style:italic;opacity:.75;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vn-cancel,.vn-send{flex:none;font:700 10px Cinzel,Georgia,serif;letter-spacing:1px;cursor:pointer;
+background:none;border:1px solid #6b2a26;border-radius:3px;color:#e8c8c4;padding:3px 8px}
+.vn-cancel:hover,.vn-cancel:focus-visible{color:#fff;border-color:var(--blood);outline:none}
+.vn-send{border-color:var(--gold-lo);color:var(--gold)}
+.vn-send:hover,.vn-send:focus-visible{color:var(--gold-hi);border-color:var(--gold);outline:none}
+/* The mic while armed: the button itself becomes the stop control, so there is never a moment
+   where the thing that started the recording is not also the thing that ends it. */
+.icomp .mic.on{color:#fff;border-color:var(--blood);background:linear-gradient(180deg,#4a1a18,#2a0f0e);
+box-shadow:0 0 8px rgba(155,27,27,.7)}
+
+/* A sent voice note. A pill, not a full audio element: the browser's default player is 300px of
+   grey chrome that would look like a foreign object in here, and all it needs to offer is play,
+   pause and how long it runs. */
+.vn{display:inline-flex;align-items:center;gap:7px;vertical-align:middle;
+padding:3px 10px 3px 4px;border:1px solid #7a4bb0;border-radius:999px;
+background:linear-gradient(180deg,#241a2a,#160f19)}
+.vn-play{width:22px;height:22px;flex:none;padding:0;cursor:pointer;font-size:10px;line-height:1;
+color:#e2c4ff;background:#3a2550;border:1px solid #7a4bb0;border-radius:50%}
+.vn-play:hover,.vn-play:focus-visible{color:#fff;border-color:#b98cff;box-shadow:0 0 7px rgba(150,90,220,.6);outline:none}
+.vn-play:disabled{opacity:.5;cursor:default}
+.vn-len{font:700 10px Cinzel,Georgia,serif;letter-spacing:1px;color:#c6a6e8}
+.vn-gone{font-style:italic;font-size:10px;color:var(--ash);opacity:.7}
+.vn audio{display:none} /* playback is driven entirely by the pill's own button */
+@media (max-width:500px){.vn-bar{font-size:12px}.vn-play{width:26px;height:26px}}
