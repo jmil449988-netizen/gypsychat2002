@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=108">
+<link rel="stylesheet" href="./css/style.css?v=109">
 </head>
 <body>
 <div class="gc-root">
@@ -96,6 +96,12 @@
 </div>
 <div class="users sunk hidden" id="users"><span class="uz" id="usersResize" role="separator" aria-orientation="vertical" aria-label="Resize the online and friends panel" tabindex="0"></span><span class="uzv" id="usersResizeV" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the online and friends panel" tabindex="0"></span><div class="hd">Online<span class="ucount" id="ucount"></span><button type="button" class="umin" id="usersMin" aria-expanded="true" aria-label="Hide the online and friends list" title="Hide the online and friends list">▼</button></div><div class="list" id="ulist"></div><div class="hd frhd">Friends</div><div class="list" id="flist"></div><div class="hint">Tap a name for options</div></div>
 
+<!-- Shows what you are replying to, directly above the composer, with an ✕ to back out. A sibling
+     of .compose rather than a child, so it spans the composer's full width instead of becoming a
+     cell in its grid. It carries .hidden until a reply is actually armed, and arming one requires
+     being signed on, so it can never appear over the sign-on screen. Whisper windows get their own
+     copy, built in ensureWin(). -->
+<div class="reply-bar hidden" id="replyBar"></div>
 <div class="compose hidden" id="compose">
 <button class="btn emo" id="emoBtn" aria-label="Insert emoji" title="Emoji">😊</button>
 <button class="btn gif" id="gifBtn" aria-label="Search GIFs" title="GIF">GIF</button>
@@ -464,6 +470,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=144"></script>
+<script src="./js/app.js?v=145"></script>
 </body>
 </html>
