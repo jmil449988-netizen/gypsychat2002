@@ -21,6 +21,7 @@ var tpReplyPreviewWrap = $('tpReplyPreviewWrap'), tpReplyPreviewImg = $('tpReply
 var adminToggle = $('adminToggle'), adminFields = $('adminFields'), adminEmail = $('adminEmail'), adminPassword = $('adminPassword');
 var reportsBtn = $('reportsBtn'), reportsBadge = $('reportsBadge'), reportsList = $('reportsList');
 var adminPanel = $('adminPanel'), adminBack = $('adminBack'), admTabUsers = $('admTabUsers'), admTabBugs = $('admTabBugs'), admUsers = $('admUsers'), admBugs = $('admBugs'), admUsersCount = $('admUsersCount'), admBugsCount = $('admBugsCount');
+var admTabIdeas = $('admTabIdeas'), admIdeas = $('admIdeas'), admIdeasCount = $('admIdeasCount'), ideasList = $('ideasList'); // v172: the Suggestions tab
 var bugBtn = $('bugBtn'), bugFile = $('bugFile'), bugReportOverlay = $('bugReportOverlay'), bugDesc = $('bugDesc'),
     bugAttachBtn = $('bugAttachBtn'), bugAttachList = $('bugAttachList'), bugReportCancel = $('bugReportCancel'), bugReportSubmit = $('bugReportSubmit');
 var bugReportsList = $('bugReportsList');
@@ -77,14 +78,16 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 171;
-/* v171: the icons of the three page buttons (and the Game Room's own header and toasts), drawn inline so they
-   look the same on every phone and desktop, which emoji don't: a poker table for the Game Room, a purple @ for
-   Threads, and for Roulette a red Romani wagon wheel -- sixteen spokes, as on the flag -- that turns slowly
-   (.fab-ico / .ico-wheel in style.css). index.html carries the same markup for the first paint. */
-var ICON_TABLE = '<svg class="fab-ico ico-table" viewBox="0 0 32 22" aria-hidden="true" focusable="false"><rect x="1" y="1.5" width="30" height="19" rx="9.5" fill="#6b3f1d" stroke="#1d1007" stroke-width="1"/><rect x="2.3" y="2.8" width="27.4" height="16.4" rx="8.2" fill="none" stroke="#a8703a" stroke-width=".9"/><rect x="4.2" y="4.7" width="23.6" height="12.6" rx="6.3" fill="#1d7a3e" stroke="#0b2e17" stroke-width=".7"/><rect x="6.6" y="7" width="18.8" height="8" rx="4" fill="none" stroke="#e2c064" stroke-width=".55" opacity=".8"/><rect x="11.9" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(-8 13.7 10.9)"/><rect x="16.5" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(8 18.3 10.9)"/><path d="M13.7 9.9l.8 1-.8 1-.8-1z" fill="#c0392b" transform="rotate(-8 13.7 10.9)"/><path d="M18.3 9.9l.8 1-.8 1-.8-1z" fill="#1a1410" transform="rotate(8 18.3 10.9)"/></svg>';
-var ICON_AT = '<svg class="fab-ico ico-at" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="#b36bff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.9"/><path d="M15.9 8.2v5.1a2.7 2.7 0 0 0 5.4 0v-1.3a9.3 9.3 0 1 0-3.7 7.4"/></svg>';
-var ICON_WHEEL = '<svg class="fab-ico ico-wheel" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10.3" fill="none" stroke="#e3261b" stroke-width="2.1"/><circle cx="12" cy="12" r="8.1" fill="none" stroke="#e3261b" stroke-width=".8"/><path d="M12 9.1L12 3.6M13.11 9.32L15.21 4.24M14.05 9.95L17.94 6.06M14.68 10.89L19.76 8.79M14.9 12L20.4 12M14.68 13.11L19.76 15.21M14.05 14.05L17.94 17.94M13.11 14.68L15.21 19.76M12 14.9L12 20.4M10.89 14.68L8.79 19.76M9.95 14.05L6.06 17.94M9.32 13.11L4.24 15.21M9.1 12L3.6 12M9.32 10.89L4.24 8.79M9.95 9.95L6.06 6.06M10.89 9.32L8.79 4.24" stroke="#e3261b" stroke-width="1.05" stroke-linecap="round"/><circle cx="12" cy="12" r="2.9" fill="#e3261b"/><circle cx="12" cy="12" r="1" fill="#3a0d08"/></svg>';
+var BUILD_NUMBER = 172;
+/* v172: pixel-art icons (public/icons/ui-*.png, drawn at 4x their pixel grid so a browser only ever scales them
+   down): a thread spool for Threads, a poker table for the Game Room (its page header and toasts too), a red
+   Romani wagon wheel -- sixteen spokes, as on the flag -- for Roulette, which turns slowly, an envelope for
+   Messages and a light bulb for the suggestion box. index.html carries the same markup for the first paint;
+   these are for when the code redraws a button. Sizes and glows: .fab-ico / .px-ico in style.css. */
+var ICON_TABLE = '<img class="fab-ico ico-table" src="./icons/ui-table.png" alt="" width="35" height="24" draggable="false">';
+var ICON_SPOOL = '<img class="fab-ico ico-spool" src="./icons/ui-spool.png" alt="" width="30" height="30" draggable="false">';
+var ICON_WHEEL = '<img class="fab-ico ico-wheel" src="./icons/ui-wheel.png" alt="" width="30" height="30" draggable="false">';
+var ICON_ENVELOPE = '<img class="px-ico ico-env" src="./icons/ui-envelope.png" alt="" width="20" height="22" draggable="false">';
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -981,7 +984,7 @@ if (gcRoot) gcRoot.classList.toggle('no-dms', dmTabsOff && !pillActive() && !any
 function updateDmToggleBtn() {
 applyDmVisibility();
 if (!dmToggleBtn) return;
-var dmi = dmToggleBtn.querySelector('.btn-icon'); if (dmi) dmi.textContent = dmTabsOff ? '🚫' : '💬'; else dmToggleBtn.textContent = dmTabsOff ? '🚫' : '💬';
+var dmi = dmToggleBtn.querySelector('.btn-icon'); if (dmi) dmi.innerHTML = dmTabsOff ? '🚫' : ICON_ENVELOPE; else dmToggleBtn.innerHTML = dmTabsOff ? '🚫' : ICON_ENVELOPE;
 dmToggleBtn.setAttribute('aria-pressed', dmTabsOff ? 'true' : 'false');
 dmToggleBtn.title = dmTabsOff ? 'Messages hidden — click to show them again' : 'Hide messages';
 }
@@ -1432,13 +1435,14 @@ $('promptInput').addEventListener('click', function () { if (promptMentions) upd
 }
 document.addEventListener('keydown', function (e) {
 if (e.key !== 'Escape') return;
-var dialogUp = !$('warnOverlay').classList.contains('hidden') || !$('infoOverlay').classList.contains('hidden') || !!($('promptOverlay') && !$('promptOverlay').classList.contains('hidden'));
+var dialogUp = !$('warnOverlay').classList.contains('hidden') || !$('infoOverlay').classList.contains('hidden') || !!($('promptOverlay') && !$('promptOverlay').classList.contains('hidden')) || !!(ideaOverlay && !ideaOverlay.classList.contains('hidden'));
 if (!$('warnOverlay').classList.contains('hidden')) $('warnOk').click();
 if (!$('infoOverlay').classList.contains('hidden')) $('infoOk').click();
 if ($('promptOverlay') && !$('promptOverlay').classList.contains('hidden')) $('promptCancel').click();
 if ($('saveOverlay') && !$('saveOverlay').classList.contains('hidden')) $('saveOverlay').classList.add('hidden');
 if ($('imgLightbox') && !$('imgLightbox').classList.contains('hidden')) closeLightbox();
 if (bugReportOverlay && !bugReportOverlay.classList.contains('hidden')) closeBugReportModal();
+if (ideaOverlay && !ideaOverlay.classList.contains('hidden')) closeIdeaModal();
 if (typeof closeAdminPanel === 'function' && gcRoot && gcRoot.classList.contains('admin-open')) closeAdminPanel();
 if (!dialogUp && typeof grOpen === 'function' && grOpen() && !(e.target && e.target.classList && (e.target.classList.contains('gr-hd-in') || (e.target.classList.contains('gr-chatin') && e.target.value)))) closeGameRoom();
 });
@@ -3650,7 +3654,7 @@ if (bugReportSubmit) bugReportSubmit.onclick = submitBugReport;
    item in the ⋯ menu, whose badge is the sum of both open counts. The counts come from HEAD
    count queries; those were seen returning a transient 503 right after sign-on (diagnostics,
    17 Sept), which used to leave the badge silently at 0 -- so each one now retries once. */
-var openCounts = { users: 0, bugs: 0 };
+var openCounts = { users: 0, bugs: 0, ideas: 0 };
 function countOpen(table, attempt) {
 return sb.from(table).select('id', { count: 'exact', head: true }).eq('status', 'open').then(function (r) {
 if (r.error && !attempt) return new Promise(function (res) { setTimeout(res, 1500); }).then(function () { return countOpen(table, 1); });
@@ -3658,10 +3662,11 @@ return r.error ? null : (r.count || 0);
 });
 }
 function paintAdminCounts() {
-var total = openCounts.users + openCounts.bugs;
+var total = openCounts.users + openCounts.bugs + openCounts.ideas;
 if (reportsBadge) { reportsBadge.textContent = String(total > 99 ? '99+' : total); reportsBadge.classList.toggle('hidden', total === 0); }
 if (admUsersCount) { admUsersCount.textContent = String(openCounts.users); admUsersCount.classList.toggle('hidden', !openCounts.users); }
 if (admBugsCount) { admBugsCount.textContent = String(openCounts.bugs); admBugsCount.classList.toggle('hidden', !openCounts.bugs); }
+if (admIdeasCount) { admIdeasCount.textContent = String(openCounts.ideas); admIdeasCount.classList.toggle('hidden', !openCounts.ideas); }
 }
 function refreshBugReportsBadge() {
 if (!isAdmin || !sb) return;
@@ -3669,12 +3674,14 @@ countOpen('bug_reports').then(function (n) { if (n !== null) { openCounts.bugs =
 }
 function adminOpen() { return !!(gcRoot && gcRoot.classList.contains('admin-open')); }
 function showAdminTab(which) {
-var users = which === 'users';
-if (admTabUsers) { admTabUsers.classList.toggle('active', users); admTabUsers.setAttribute('aria-selected', users ? 'true' : 'false'); }
-if (admTabBugs) { admTabBugs.classList.toggle('active', !users); admTabBugs.setAttribute('aria-selected', users ? 'false' : 'true'); }
-if (admUsers) admUsers.classList.toggle('hidden', !users);
-if (admBugs) admBugs.classList.toggle('hidden', users);
-if (users) loadReports(); else loadBugReports();
+var tabs = { users: [admTabUsers, admUsers], bugs: [admTabBugs, admBugs], ideas: [admTabIdeas, admIdeas] };
+if (!tabs[which]) which = 'users';
+Object.keys(tabs).forEach(function (k) {
+var tab = tabs[k][0], pane = tabs[k][1], on = k === which;
+if (tab) { tab.classList.toggle('active', on); tab.setAttribute('aria-selected', on ? 'true' : 'false'); }
+if (pane) pane.classList.toggle('hidden', !on);
+});
+if (which === 'users') loadReports(); else if (which === 'bugs') loadBugReports(); else loadIdeas();
 }
 function openAdminPanel(which) {
 if (!isAdmin || !adminPanel) return;
@@ -3686,7 +3693,7 @@ if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
 rememberChatScroll();
 gcRoot.classList.add('admin-open');
 if (adminWatermark) adminWatermark.textContent = WATERMARK_TEXT;
-showAdminTab(which || (openCounts.users === 0 && openCounts.bugs > 0 ? 'bugs' : 'users'));
+showAdminTab(which || (openCounts.users ? 'users' : openCounts.bugs ? 'bugs' : openCounts.ideas ? 'ideas' : 'users'));
 }
 function closeAdminPanel() {
 if (!adminOpen()) return;
@@ -3697,6 +3704,7 @@ var adminWatermark = $('adminWatermark');
 if (adminBack) adminBack.onclick = closeAdminPanel;
 if (admTabUsers) admTabUsers.onclick = function () { showAdminTab('users'); };
 if (admTabBugs) admTabBugs.onclick = function () { showAdminTab('bugs'); };
+if (admTabIdeas) admTabIdeas.onclick = function () { showAdminTab('ideas'); };
 function renderBugReports(rows) {
 if (!bugReportsList) return;
 if (!rows.length) { bugReportsList.innerHTML = '<div class="empty">No open bug reports.</div>'; return; }
@@ -3776,6 +3784,190 @@ bugReportsChannel.subscribe();
 }
 function unsubscribeBugReports() {
 if (bugReportsChannel) { bugReportsChannel.unsubscribe(); bugReportsChannel = null; }
+}
+
+/* ---------- the suggestion box (v172) ----------
+   The light-bulb Suggestions button (first in the Help group, beside Report a bug) opens a box for ideas:
+   words, plus up to five pictures or videos. Each file goes up the moment it is picked, into the private
+   'suggestions' bucket (your own folder); Send writes one row to public.suggestions. The server takes the
+   author's name from their profile, starts every suggestion open, checks every attachment is the author's
+   own upload, and allows 5 in 10 minutes / 20 a day (supabase/suggestions_feature.sql). Admins read them on
+   the Reports page, in the Suggestions tab below, with pictures and videos shown right in the list.
+   Problems are shown inside the box itself, not in the chat behind it. */
+var ideaBtn = $('ideaBtn'), ideaOverlay = $('ideaOverlay'), ideaText = $('ideaText'), ideaFile = $('ideaFile'), ideaAttachBtn = $('ideaAttachBtn'),
+    ideaAttachHint = $('ideaAttachHint'), ideaAttachList = $('ideaAttachList'), ideaErr = $('ideaErr'), ideaCancel = $('ideaCancel'), ideaSubmit = $('ideaSubmit');
+var MAX_IDEA_ATTACHMENTS = 5, MAX_IDEA_VIDEO_BYTES = 50 * 1024 * 1024;
+var IDEA_VIDEO_TYPES = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
+var ideaAttachments = [], ideaUploading = 0, ideaChannel = null;
+function ideaSay(text) { if (!ideaErr) { if (text) addSys(text); return; } ideaErr.textContent = text || ''; ideaErr.classList.toggle('hidden', !text); }
+function ideaKindFor(file) { return /^video\//.test(file.type || '') || /\.(mp4|m4v|mov|webm|3gp|mkv|avi)$/i.test(file.name || '') ? 'video' : 'image'; }
+async function uploadIdeaAttachment(file) {
+var kind = ideaKindFor(file), contentType, ext;
+if (kind === 'image') {
+try { file = await normalizeImageFile(file); } catch (e) { ideaSay(e.message || 'Could not read that picture.'); return null; }
+if (file.size > MAX_IMG_BYTES) { ideaSay('Pictures must be 5 MB or smaller.'); return null; }
+contentType = ALLOWED_IMG_TYPES[file.type] ? file.type : await sniffImageType(file);
+ext = ALLOWED_IMG_TYPES[contentType];
+if (!ext) { ideaSay('Pictures must be JPG, PNG, GIF or WEBP.'); return null; }
+} else {
+var nameExt = ((file.name || '').match(/\.(mp4|m4v|mov|webm)$/i) || [])[1];
+ext = IDEA_VIDEO_TYPES[file.type] || (nameExt ? (nameExt.toLowerCase() === 'm4v' ? 'mp4' : nameExt.toLowerCase()) : '');
+if (!ext) { ideaSay('Videos must be MP4, MOV or WEBM.'); return null; }
+if (file.size > MAX_IDEA_VIDEO_BYTES) { ideaSay('Videos must be 50 MB or smaller (' + Math.round(file.size / 1048576) + ' MB).'); return null; }
+contentType = ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4';
+}
+var path = me.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 10) + '.' + ext;
+var up = await sb.storage.from('suggestions').upload(path, file, { contentType: contentType, upsert: false });
+if (up.error) { ideaSay('Upload failed: ' + up.error.message); return null; }
+return { path: path, type: kind, name: (file.name || ('attachment.' + ext)).slice(0, 120), preview: kind === 'image' ? URL.createObjectURL(file) : '' };
+}
+function renderIdeaAttachList() {
+if (ideaAttachList) ideaAttachList.innerHTML = ideaAttachments.map(function (a, i) {
+var thumb = a.type === 'image' ? '<img src="' + esc(a.preview) + '" alt="">' : '<span class="bug-attach-video">🎥</span>';
+return '<div class="bug-attach-chip" data-i="' + i + '">' + thumb + '<span class="bug-attach-name">' + esc(a.name) + '</span>' +
+'<button type="button" class="bug-attach-remove" data-i="' + i + '" aria-label="Remove attachment">✕</button></div>';
+}).join('');
+var busy = ideaUploading > 0;
+if (ideaAttachBtn) { ideaAttachBtn.disabled = busy; ideaAttachBtn.textContent = busy ? 'Uploading…' : '📎 Attach files'; }
+if (ideaSubmit) ideaSubmit.disabled = busy;
+if (ideaAttachHint) ideaAttachHint.textContent = busy ? 'Big videos take a moment' : 'Pictures or videos, up to ' + MAX_IDEA_ATTACHMENTS;
+}
+function resetIdeaForm() {
+if (ideaText) ideaText.value = '';
+ideaAttachments.forEach(function (a) { if (a.preview) { try { URL.revokeObjectURL(a.preview); } catch (e) {} } });
+ideaAttachments = [];
+if (ideaFile) ideaFile.value = '';
+ideaSay('');
+renderIdeaAttachList();
+}
+function openIdeaModal() {
+if (!ideaOverlay || !me) return;
+if (!ideaUploading) resetIdeaForm();
+ideaOverlay.classList.remove('hidden');
+autoFocus(ideaText);
+}
+function closeIdeaModal() { if (ideaOverlay) ideaOverlay.classList.add('hidden'); }
+if (ideaBtn) ideaBtn.onclick = openIdeaModal; // (a click inside the ⋯ popover already closes it)
+if (ideaCancel) ideaCancel.onclick = closeIdeaModal;
+if (ideaOverlay) ideaOverlay.onclick = function (e) { if (e.target === ideaOverlay) closeIdeaModal(); };
+if (ideaAttachBtn) ideaAttachBtn.onclick = function () {
+if (ideaAttachments.length >= MAX_IDEA_ATTACHMENTS) { ideaSay('You can attach up to ' + MAX_IDEA_ATTACHMENTS + ' files.'); return; }
+ideaFile.click();
+};
+if (ideaFile) ideaFile.onchange = async function () {
+var files = Array.prototype.slice.call(ideaFile.files || []);
+ideaFile.value = '';
+if (!files.length) return;
+ideaSay('');
+var room = MAX_IDEA_ATTACHMENTS - ideaAttachments.length;
+if (room <= 0) { ideaSay('You can attach up to ' + MAX_IDEA_ATTACHMENTS + ' files.'); return; }
+if (files.length > room) { ideaSay('Only the first ' + room + ' were added: ' + MAX_IDEA_ATTACHMENTS + ' at most.'); files = files.slice(0, room); }
+ideaUploading++; renderIdeaAttachList();
+try {
+for (var i = 0; i < files.length; i++) {
+var att = await uploadIdeaAttachment(files[i]);
+if (att) { ideaAttachments.push(att); renderIdeaAttachList(); }
+}
+} finally { ideaUploading--; renderIdeaAttachList(); }
+};
+if (ideaAttachList) ideaAttachList.addEventListener('click', function (e) {
+var rBtn = e.target.closest('.bug-attach-remove'); if (!rBtn) return;
+var gone = ideaAttachments.splice(Number(rBtn.dataset.i), 1)[0];
+if (gone && gone.preview) { try { URL.revokeObjectURL(gone.preview); } catch (e2) {} }
+renderIdeaAttachList();
+});
+async function submitIdea() {
+if (ideaUploading) { ideaSay('Hang on: a file is still uploading.'); return; }
+var body = sanitizeInput(ideaText ? ideaText.value.trim() : '').slice(0, 2000);
+if (!body) { ideaSay('Write your idea before sending.'); if (ideaText) ideaText.focus(); return; }
+if (ideaSubmit) ideaSubmit.disabled = true;
+try {
+var context = (navigator.userAgent + ' — ' + window.innerWidth + 'x' + window.innerHeight).slice(0, 400);
+var stored = ideaAttachments.map(function (a) { return { path: a.path, type: a.type, name: a.name }; });
+var r = await sb.from('suggestions').insert({ author_id: me.id, body: body, attachments: stored, context: context });
+if (r.error) { ideaSay('Could not send it: ' + r.error.message); return; }
+closeIdeaModal();
+resetIdeaForm();
+addSys('Suggestion sent to the admins. Thank you!');
+} finally {
+if (ideaSubmit) ideaSubmit.disabled = ideaUploading > 0;
+}
+}
+if (ideaSubmit) ideaSubmit.onclick = submitIdea;
+
+/* ----- the Suggestions tab (admins) ----- */
+function refreshIdeasBadge() {
+if (!isAdmin || !sb) return;
+countOpen('suggestions').then(function (n) { if (n !== null) { openCounts.ideas = n; paintAdminCounts(); } });
+}
+function renderIdeas(rows) {
+if (!ideasList) return;
+if (!rows.length) { ideasList.innerHTML = '<div class="empty">No open suggestions.</div>'; return; }
+ideasList.innerHTML = rows.map(function (r) {
+var atts = Array.isArray(r.attachments) ? r.attachments : [];
+/* the bucket is private: each file is drawn with its object path, and signed right after (signIdeaMedia) */
+var media = atts.length ? '<div class="rr-attachments rr-media">' + atts.map(function (a) {
+var p = esc(a.path || '');
+return a.type === 'video'
+? '<video class="rr-video" data-path="' + p + '" controls playsinline preload="metadata" title="' + esc(a.name || 'video') + '"></video>'
+: '<a href="#" data-path="' + p + '" target="_blank" rel="noopener" class="rr-att"><img data-path="' + p + '" alt="' + esc(a.name || 'picture') + '"></a>';
+}).join('') + '</div>' : '';
+return '<div class="report-row" data-id="' + r.id + '">' +
+'<div class="rr-hd">' + esc(fmtDateTime(r.created_at)) + ' — <b>' + esc(r.author_name || '?') + '</b></div>' +
+'<div class="rr-reason">' + esc(r.body) + '</div>' + media +
+(r.context ? '<div class="rr-context">' + esc(r.context) + '</div>' : '') +
+'<div class="rr-actions"><button type="button" class="btn rr-dismiss" data-id="' + r.id + '">Dismiss</button>' +
+'<button type="button" class="btn rr-resolve" data-id="' + r.id + '">Done</button></div>' +
+'</div>';
+}).join('');
+signIdeaMedia();
+}
+async function signIdeaMedia() {
+if (!ideasList) return;
+var els = Array.prototype.slice.call(ideasList.querySelectorAll('[data-path]'));
+var paths = []; els.forEach(function (el) { var p = el.dataset.path; if (p && paths.indexOf(p) < 0) paths.push(p); });
+if (!paths.length) return;
+var r = await sb.storage.from('suggestions').createSignedUrls(paths, 3600);
+if (r.error || !r.data) return;
+var byPath = {}; r.data.forEach(function (x) { if (x.signedUrl && x.path) byPath[x.path] = x.signedUrl; });
+els.forEach(function (el) {
+var u = byPath[el.dataset.path]; if (!u) return;
+if (el.tagName === 'A') el.href = u; else el.src = u;
+});
+}
+async function loadIdeas() {
+if (!isAdmin || !ideasList) return;
+var r = await sb.from('suggestions').select('*').eq('status', 'open').order('created_at', { ascending: false }).limit(100);
+if (r.error) { ideasList.innerHTML = '<div class="empty">Could not load suggestions: ' + esc(r.error.message) + '</div>'; return; }
+renderIdeas(r.data || []);
+}
+async function resolveIdea(id, status) {
+var r = await sb.from('suggestions').update({ status: status, resolved_by: me.id, resolved_at: new Date().toISOString() }).eq('id', id);
+if (r.error) { addSys('Could not update the suggestion: ' + r.error.message); return; }
+var row = ideasList && ideasList.querySelector('.report-row[data-id="' + id + '"]');
+if (row) row.remove();
+if (ideasList && !ideasList.querySelector('.report-row')) ideasList.innerHTML = '<div class="empty">No open suggestions.</div>';
+refreshIdeasBadge();
+}
+if (ideasList) {
+ideasList.addEventListener('click', function (e) {
+var dBtn = e.target.closest('.rr-dismiss');
+if (dBtn) { resolveIdea(dBtn.dataset.id, 'dismissed'); return; }
+var rBtn = e.target.closest('.rr-resolve');
+if (rBtn) resolveIdea(rBtn.dataset.id, 'done');
+});
+}
+function subscribeIdeas() {
+if (ideaChannel || !isAdmin) return;
+ideaChannel = sb.channel('suggestions-queue');
+ideaChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'suggestions' }, function () {
+refreshIdeasBadge();
+if (adminOpen() && admIdeas && !admIdeas.classList.contains('hidden')) loadIdeas();
+});
+ideaChannel.subscribe();
+}
+function unsubscribeIdeas() {
+if (ideaChannel) { ideaChannel.unsubscribe(); ideaChannel = null; }
 }
 
 /* ---------- reports queue (admins only) ----------
@@ -4094,6 +4286,8 @@ refreshReportsBadge();
 subscribeReports();
 refreshBugReportsBadge();
 subscribeBugReports();
+refreshIdeasBadge(); // v172
+subscribeIdeas();
 }
 }
 async function loadMyModeration() {
@@ -4163,14 +4357,17 @@ unsubscribeReports();
 if (reportsBtn) reportsBtn.classList.add('hidden');
 if (reportsBadge) reportsBadge.classList.add('hidden');
 unsubscribeBugReports();
+unsubscribeIdeas();
 unsubscribeFriendRequests();
 closeFriendReqPanel();
 incomingRequests = {}; outgoingPending = {};
 if (bugBtn) bugBtn.classList.add('hidden');
 if (bugReportOverlay) bugReportOverlay.classList.add('hidden');
+if (ideaBtn) ideaBtn.classList.add('hidden');
+if (ideaOverlay) ideaOverlay.classList.add('hidden');
 if (gcRoot) gcRoot.classList.remove('admin-open');
 if (threadsPanel) { threadsPanel.classList.remove('ready'); }
-if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.innerHTML = ICON_AT; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
+if (threadToggleBtn) { threadToggleBtn.classList.remove('ready', 'open'); threadToggleBtn.innerHTML = ICON_SPOOL; threadToggleBtn.setAttribute('aria-label', 'Open threads board'); }
 if (gcRoot) { gcRoot.classList.remove('thread-open'); gcRoot.classList.remove('mobile-threads-open'); gcRoot.classList.remove('mobile-roulette-open'); gcRoot.classList.remove('leaderboard-open'); gcRoot.classList.remove('signed-on'); }
 openThreadId = null;
 placeThreadBtn(); // signed off: the threads takeover is gone, so the button belongs to .title again
@@ -8039,7 +8236,7 @@ var opening = !gcRoot.classList.contains('mobile-threads-open');
 if (opening) rememberChatScroll();
 var open = gcRoot.classList.toggle('mobile-threads-open');
 threadToggleBtn.classList.toggle('open', open);
-threadToggleBtn.innerHTML = open ? '💬' : ICON_AT;
+threadToggleBtn.innerHTML = open ? '💬' : ICON_SPOOL;
 threadToggleBtn.setAttribute('aria-label', open ? 'Back to chat' : 'Open threads board');
 if (open) { renderThreadList(); if (!openThreadId) tpList.classList.remove('hidden'); }
 else returnToChat();
@@ -9260,6 +9457,7 @@ updateUsersStacked(); // the panel only has a size now that it is no longer hidd
 if ($('statusBtn')) { $('statusBtn').classList.remove('hidden'); updateStatusBtn(); }
 if ($('avaBtn')) { $('avaBtn').classList.remove('hidden'); updateAvaBtn(); }
 if (bugBtn) bugBtn.classList.remove('hidden');
+if (ideaBtn) ideaBtn.classList.remove('hidden'); // v172: the suggestion box
 if ($('moreBtn')) $('moreBtn').classList.remove('hidden');
 /* Anonymous accounts live in this browser's storage and nowhere else, so the 🔑 (and the nudge
    below) are only offered to them -- an account with an email attached is already portable. */
@@ -9289,8 +9487,8 @@ placeThreadBtn(); // desktop: into the title bar beside the name, rather than fl
 /* The desktop half of this tip used to say the board was "to the right", from back when it was
    a side panel in the gutter, and the phone half said "in the corner" -- neither is true on a
    desktop any more now that the board is a full-screen takeover opened from the title bar. */
-if (window.matchMedia('(min-width:501px)').matches) addSys('Tip: the purple @ up in the title bar opens the Threads board — general chat, no topics, post anything.');
-else addSys('Tip: tap the purple @ bubble to open the Threads board.');
+if (window.matchMedia('(min-width:501px)').matches) addSys('Tip: the thread spool up in the title bar opens the Threads board — general chat, no topics, post anything.');
+else addSys('Tip: tap the thread-spool bubble to open the Threads board.');
 }
 pinLogBottom();
 loadGames(); // Tic-Tac-Toe cards into their whisper windows (open games + results from the last hour)
