@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 157;
+var BUILD_NUMBER = 158;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -2525,7 +2525,9 @@ win.ta.addEventListener('input', function () { sendTyping(id, !!win.ta.value); }
 el.querySelector('.back').onclick = function () { showInbox(); };
 el.querySelector('.x').onclick = function () { minimizeIM(id); };
 el.querySelector('.buzz').onclick = function (e) {
-if (isGroup) openGroupMembers(groupIdOf(id), e.currentTarget); else sendBuzz(id);
+if (!isGroup) { sendBuzz(id); return; }
+e.stopPropagation(); // else the document handler closes the menu on the same click that opened it
+openGroupMembers(groupIdOf(id), e.currentTarget);
 };
 el.querySelector('.icomp .btn:last-child').onclick = function () { sendIM(id); };
 var micBtnWin = el.querySelector('.icomp .mic');
