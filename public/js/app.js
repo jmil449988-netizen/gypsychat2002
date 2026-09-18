@@ -75,7 +75,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 138;
+var BUILD_NUMBER = 139;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -5386,12 +5386,25 @@ showLeaderboardTab(activeLeaderboardTab()); // reopen on whichever ladder was sh
 if (leaderboardBack) leaderboardBack.onclick = closeLeaderboard;
 
 /* ---------- v121: first-run orientation ----------
-   Three tips, once per device, a moment after the first sign-on: where the name menu is, what
-   "/" does in the composer, and where XP comes from. Each is a small bubble beside the thing it
-   describes with that thing outlined; Skip or Got it ends it and it never shows again. */
+   Four tips, once per device, a moment after the first sign-on: where the name menu is, what "/"
+   does in the composer, where the Threads board is, and where XP comes from. Each is a small
+   bubble beside the thing it describes with that thing outlined; Skip or Got it ends it and it
+   never shows again.
+
+   The order walks the room before it walks away from it -- who is here, how to talk to them, then
+   the two places that are not this screen. The Threads tip (v139) was the gap: the board is the
+   single biggest thing in here that a new arrival could miss entirely, because the only way in is
+   one small button, and nothing in the chat itself hints that a second room exists. The chat log
+   does print a line about it on arrival, but a line in a log scrolls away; this doesn't.
+
+   #threadToggleBtn is the right anchor at both widths even though it is a different-looking
+   control in each -- a bare glyph in the title bar on a desktop, a floating bubble on a phone --
+   because it is the same element either way, wherever placeThreadBtn() has just put it, and
+   showTourStep() measures the anchor live rather than trusting a remembered position. */
 var TOUR = [
 { sel: '#users', text: 'Tap any name — in this list or in the chat — to whisper them, add them as a friend, or challenge them to a game.' },
 { sel: '#msg', text: 'Type / in the box for sounds and commands: /slap, /kiss, /fart, /help and more. Type @ to mention someone.' },
+{ sel: '#threadToggleBtn', text: 'This opens the Threads board: posts and pictures that stay put on a page of their own, instead of scrolling away like the chat does. The same button brings you back here.' },
 { sel: '#leaderboardBtn', text: 'You earn XP when people react to what you say and when you win games in whispers. Tap a level badge for the details; the Popularity Contest shows every ladder.' }
 ];
 var tourEl = null, tourStep = 0;
