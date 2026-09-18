@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 144;
+var BUILD_NUMBER = 145;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -1559,9 +1559,11 @@ if (seen[m.id]) return; seen[m.id] = 1;
 var mine = m.sender_id === me.id;
 msgCache[m.id] = { senderId: m.sender_id, senderName: m.sender_name, body: m.body, createdAt: m.created_at };
 var mentionsMe = !mine && bodyMentionsMe(m.body);
+var stub = replyStubHtml(m.reply_to);
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them') + (mentionsMe ? ' mention-me' : ''); d.dataset.mid = m.id;
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0"><span class="nmt">' + esc(m.sender_name) + '</span>' + levelBadgeHtml(m.sender_id) + ':</b> ' + bodyHtml(m.body) + reactionsHtml('message', m.id);
+d.innerHTML = stub + '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0"><span class="nmt">' + esc(m.sender_name) + '</span>' + levelBadgeHtml(m.sender_id) + ':</b> ' + bodyHtml(m.body) + reactionsHtml('message', m.id);
+if (m.reply_to) fillReplyStub(m.reply_to);
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 dayDivider(log, 'room', m.created_at);
 log.appendChild(d);
@@ -1687,17 +1689,99 @@ else if (!/duplicate|unique/i.test(ins.error.message || '')) addSys('Could not r
    rather than the full compose-box EMOJI list, since a reaction is a much quicker, lower-stakes
    pick than composing a message. */
 var reactPicker = document.createElement('div'); reactPicker.className = 'rpicker'; document.body.appendChild(reactPicker);
-var reactPickerTarget = null;
+var reactPickerTarget = null, replyAnchorEl = null;
+/* Reply shares the long-press that already opens this picker, rather than getting a gesture of
+   its own. One hold, then either react or reply -- a second gesture to learn (a swipe, say) for
+   something this adjacent would be a worse trade than one extra button. It is styled apart from
+   the emoji so it does not read as a tenth reaction. */
+var replyBtn = document.createElement('button');
+replyBtn.type = 'button'; replyBtn.className = 'rp-reply'; replyBtn.textContent = '\u21A9 Reply';
+replyBtn.onclick = function () {
+var t = reactPickerTarget, anchor = replyAnchorEl;
+closeReactPicker();
+if (!t || t.type !== 'message') return; // thread posts keep the column but have no UI yet
+setReplyTarget(t.id, replyKeyFor(anchor));
+};
+reactPicker.appendChild(replyBtn);
 REACTION_SET.forEach(function (e) {
 var b = document.createElement('button'); b.type = 'button'; b.textContent = e;
 b.onclick = function () { var t = reactPickerTarget; closeReactPicker(); if (t) toggleReaction(t.type, t.id, e); };
 reactPicker.appendChild(b);
 });
 function closeReactPicker() { reactPicker.classList.remove('open'); reactPickerTarget = null; }
+
+/* ---------- replying to a specific message (v145) ----------
+   A reply is an ordinary message carrying the id of the one it answers -- never a copy of its
+   text, so nobody can put words in somebody else's mouth by lying about what they replied to (see
+   supabase/message_replies_feature.sql). The quote you see is always looked up from the real
+   message, and whether you are allowed to see it at all is the select policy's decision, not this
+   code's.
+
+   replyTo is per conversation rather than global: the room has one, and every whisper window has
+   its own, keyed by the other person's id. Picking a reply in one place must not quietly arm a
+   reply in another -- that is how you answer the wrong person. */
+var replyTo = {}; // 'room' or a peer id -> the message id being answered
+function replyKeyFor(el) {
+var win = el && el.closest && el.closest('.im');
+return win && win.dataset.peer ? win.dataset.peer : 'room';
+}
+/* The stub drawn above a reply. Resolved from msgCache when the original is already on screen;
+   otherwise left as a placeholder and filled in by fillReplyStub() once the fetch lands, so a
+   reply to something scrolled far up does not block the message it belongs to from rendering. */
+function replyStubHtml(rid) {
+if (!rid) return '';
+var m = msgCache[rid];
+var inner = m
+? '<b>' + esc(m.senderName) + '</b> ' + esc(String(m.body || '').slice(0, 90))
+: '<span class="rq-load">…</span>';
+return '<button type="button" class="rq" data-rq="' + rid + '">' + inner + '</button>';
+}
+var replyFetching = {};
+async function fillReplyStub(rid) {
+if (!rid || msgCache[rid] || replyFetching[rid] || !sb) return;
+replyFetching[rid] = 1;
+var r = await sb.from('messages').select('id, sender_id, sender_name, body, created_at').eq('id', rid).maybeSingle();
+var m = (!r.error && r.data) ? r.data : null;
+if (m) msgCache[m.id] = { senderId: m.sender_id, senderName: m.sender_name, body: m.body, createdAt: m.created_at };
+document.querySelectorAll('.rq[data-rq="' + rid + '"]').forEach(function (b) {
+b.innerHTML = m ? '<b>' + esc(m.sender_name) + '</b> ' + esc(String(m.body || '').slice(0, 90))
+: '<span class="rq-gone">message removed</span>';
+});
+}
+/* Jump to the message a stub quotes, and mark it so the eye can find it. If it is not on screen at
+   all -- older than the loaded history, or in a conversation that is not open -- say so rather than
+   doing nothing, because a button that silently ignores you reads as broken. */
+function jumpToMessage(rid, from) {
+var scope = (from && from.closest && from.closest('.log')) || null;
+var el = (scope && scope.querySelector('.m[data-mid="' + rid + '"]')) || document.querySelector('.m[data-mid="' + rid + '"]');
+if (!el) { addSys('That message is further back than this window goes.'); return; }
+el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+el.classList.remove('rq-flash'); void el.offsetWidth; el.classList.add('rq-flash');
+setTimeout(function () { el.classList.remove('rq-flash'); }, 1600);
+}
+function setReplyTarget(rid, key) {
+replyTo[key] = rid;
+renderReplyBar(key);
+var box = key === 'room' ? msg : (wins[key] && wins[key].ta);
+if (box) box.focus();
+}
+function clearReplyTarget(key) { delete replyTo[key]; renderReplyBar(key); }
+function renderReplyBar(key) {
+var host = key === 'room' ? $('replyBar') : (wins[key] && wins[key].replyBar);
+if (!host) return;
+var rid = replyTo[key];
+if (!rid) { host.classList.add('hidden'); host.innerHTML = ''; return; }
+var m = msgCache[rid];
+host.classList.remove('hidden');
+host.innerHTML = '<span class="rb-icon" aria-hidden="true">\u21A9</span><span class="rb-txt">Replying to <b>' +
+esc(m ? m.senderName : 'someone') + '</b>' + (m ? ' \u00B7 ' + esc(String(m.body || '').slice(0, 60)) : '') +
+'</span><button type="button" class="rb-x" aria-label="Cancel reply">\u2715</button>';
+}
 function openReactPicker(type, id, anchorEl) {
 var opening = !reactPicker.classList.contains('open') || !reactPickerTarget || reactPickerTarget.type !== type || reactPickerTarget.id !== id;
 if (!opening) { closeReactPicker(); return; }
 reactPickerTarget = { type: type, id: id };
+replyAnchorEl = anchorEl;
 reactPicker.classList.add('open');
 positionPicker(reactPicker, anchorEl);
 }
@@ -1709,6 +1793,23 @@ positionPicker(reactPicker, anchorEl);
 var suppressClickUntil = 0;
 document.addEventListener('click', function (e) { if (Date.now() < suppressClickUntil || reactPicker.contains(e.target)) return; closeReactPicker(); });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeReactPicker(); });
+/* One delegated listener rather than a handler per message: the room repaints constantly and
+   whisper windows come and go, and re-binding on every render is how you end up with a hundred
+   stale listeners on the same log. */
+document.addEventListener('click', function (e) {
+var x = e.target.closest && e.target.closest('.rb-x');
+if (x) { var bar = x.closest('.reply-bar'); clearReplyTarget(bar && bar.id === 'replyBar' ? 'room' : replyKeyFor(bar)); return; }
+var q = e.target.closest && e.target.closest('.rq');
+if (q) { e.preventDefault(); e.stopPropagation(); jumpToMessage(Number(q.dataset.rq), q); }
+});
+/* Escape backs out of a reply as well as closing the picker -- the composer is where your hands
+   already are, so reaching for the ✕ to undo a mis-tap is a detour. */
+document.addEventListener('keydown', function (e) {
+if (e.key !== 'Escape') return;
+var el = document.activeElement;
+var key = (el && el.id === 'msg') ? 'room' : replyKeyFor(el);
+if (replyTo[key]) clearReplyTarget(key);
+});
 
 /* ---------- long-press (or right-click) a message to react ----------
    Replaces a permanent "+" control on every single message with the gesture chat apps actually use:
@@ -2117,8 +2218,9 @@ var lastBuzz = {};
 function ensureWin(id, name) {
 if (wins[id]) { if (name) renameWin(id, name); return wins[id]; }
 var el = document.createElement('div'); el.className = 'im hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Whisper with ' + name);
+el.dataset.peer = id; // replyKeyFor() reads this to keep each conversation's reply target its own
 el.innerHTML = '<div class="bar"><button class="back" type="button" title="Back to messages" aria-label="Back to messages">‹</button><span class="wava" aria-hidden="true"></span><span class="nmwrap"><span class="nm" tabindex="0" role="button" aria-label="' + esc(name) + ' options"></span><span class="im-sub" aria-live="polite"></span></span><button class="buzz" type="button" title="Buzz" aria-label="Buzz ' + esc(name) + '">⚡</button><button class="x" type="button" title="Collapse messages" aria-label="Collapse messages">–</button></div>' +
-'<div class="ilog" aria-live="polite"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
+'<div class="ilog" aria-live="polite"></div><div class="reply-bar hidden"></div><div class="icomp"><div class="typing-indicator hidden" aria-live="polite"></div>' +
 '<button class="btn emo" type="button" title="Insert emoji" aria-label="Insert emoji">😊</button>' +
 '<button class="btn media" type="button" title="Send a photo or GIF" aria-label="Send a photo or GIF" aria-haspopup="menu">📎</button>' +
 '<button class="btn games" type="button" title="Play a game" aria-label="Challenge ' + esc(name) + ' to a game" aria-haspopup="menu">🎲</button>' +
@@ -2129,7 +2231,7 @@ if (isAdminId(id)) el.querySelector('.nm').classList.add('admin');
 // typingPeer/typingTimer track whether -- and until when -- the OTHER person in this whisper is
 // shown as typing; see markImTyping/clearImTyping in the typing-indicator section below.
 // snippet: the last line of the conversation, for this conversation's inbox row (see updateTab).
-var win = { el: el, log: el.querySelector('.ilog'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !(people[id] || recentPeopleEntries()[id]), name: name, minimized: true, tab: null, snippet: '' };
+var win = { el: el, log: el.querySelector('.ilog'), replyBar: el.querySelector('.reply-bar'), ta: el.querySelector('textarea'), typingEl: el.querySelector('.icomp .typing-indicator'), typingPeer: false, typingTimer: null, gone: !(people[id] || recentPeopleEntries()[id]), name: name, minimized: true, tab: null, snippet: '' };
 win.ta.placeholder = 'Whisper to ' + name + '...';
 win.ta.addEventListener('input', function () { sendTyping(id, !!win.ta.value); });
 el.querySelector('.back').onclick = function () { showInbox(); };
@@ -2405,7 +2507,8 @@ var w = ensureWin(otherId, otherName); // never pops the window open on its own 
 var d = document.createElement('div'); d.className = 'm ' + (mine ? 'me' : 'them'); d.dataset.mid = m.id;
 if (mine) d.dataset.at = new Date(m.created_at).getTime(); // read receipts compare against this — see updateSeenMark
 var flag = mine ? '' : '<button type="button" class="rpt-msg" data-mid="' + m.id + '" title="Report this message" aria-label="Report this message from ' + esc(m.sender_name) + '">🚩</button>';
-d.innerHTML = '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + '<span class="nmt">' + esc(m.sender_name) + '</span>:</b> ' + bodyHtml(m.body);
+d.innerHTML = replyStubHtml(m.reply_to) + '<span class="t">' + fmt(m.created_at) + '</span>' + flag + avatarHtml(m.sender_id, m.sender_name) + '<b class="who' + (isAdminId(m.sender_id) ? ' admin' : '') + '" data-id="' + esc(m.sender_id) + '" data-name="' + esc(m.sender_name) + '" tabindex="0">' + presenceDotHtml(m.sender_id) + '<span class="nmt">' + esc(m.sender_name) + '</span>:</b> ' + bodyHtml(m.body);
+if (m.reply_to) fillReplyStub(m.reply_to);
 dayDivider(w.log, 'im:' + otherId, m.created_at);
 w.log.appendChild(d); w.log.scrollTop = w.log.scrollHeight; stickImages(w.log, d);
 /* Inbox row: last line as its snippet, and newest activity floats to the top of the list.
@@ -3293,6 +3396,10 @@ return;
 var cap = recipientId ? 500 : 140; // main room chat is capped at 140; whispers keep the old 500
 var row = { room: C.ROOM || 'main', sender_id: me.id, sender_name: me.name, body: sanitizeInput(body).slice(0, cap) };
 if (recipientId) { row.recipient_id = recipientId; row.recipient_name = recipientName; }
+/* The reply target is read and cleared here, at the moment the message is actually accepted for
+   sending, so a reply cannot leak onto the next thing you type if this send is refused. */
+var rkey = recipientId || 'room';
+if (replyTo[rkey]) { row.reply_to = replyTo[rkey]; clearReplyTarget(rkey); }
 var r = await sb.from('messages').insert(row).select().single();
 if (r.error) {
 /* A refused whisper gets its explanation in the whisper window it was typed in, in plain words
