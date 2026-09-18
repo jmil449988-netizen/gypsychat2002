@@ -77,7 +77,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 167;
+var BUILD_NUMBER = 168;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -2197,6 +2197,7 @@ var inThread = dockOpen && !!activeDm;
 dmDock.classList.toggle('collapsed', !dockOpen);
 dmDock.classList.toggle('thread', inThread);
 if (gcRoot) gcRoot.classList.toggle('dm-open', dockOpen); // style.css moves/hides the floating bubbles out of the expanded panel's way
+if (gcRoot) gcRoot.classList.toggle('dm-thread', inThread); // v168: an open conversation is a bigger panel (style.css), so the bubble steps further left
 var total = 0;
 ids.forEach(function (id) {
 var w = wins[id], shown = inThread && id === activeDm;
