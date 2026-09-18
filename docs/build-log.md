@@ -679,3 +679,99 @@ Measured after the change, the placing and in-play cards fit without scrolling a
 **Trade-off:** on screens wide enough for the Ballot Box gutter (1340 px+), a conversation that is
 open now covers the lower part of the Ballot Box panel. It comes back as soon as the dock returns
 to the list or is collapsed.
+
+# Step 0 of the 4-player tables: game helpers locked down, Hold'em uncapped (18 Sept 2026)
+
+Database only; no client change. Files: `supabase/game_helpers_lockdown.sql` (applied) and
+`supabase/game_helpers_lockdown_dryrun.sql` (its rolled-back tests).
+
+**Security fix.** The sixteen internal helpers of the older games are no longer executable from a
+browser (EXECUTE revoked from `public, anon, authenticated`, kept for `service_role`):
+
+`game_apply, game_award, hd_credit, hd_deal, hd_finish, hd_next_street, hd_settle, hd_showdown,
+hd_touch, hd_xp, hm_apply, hm_award, pr_showdown, uno_award, uno_draw_cards, uno_sync`
+
+(Two more than the fourteen listed under build 167: `hd_next_street` and `uno_draw_cards` turned up
+when every security-definer function was re-audited.) The games' public functions are security
+definer, so they still reach the helpers as their owner.
+
+**Hold'em is a pure transfer** (the user's decision: "remove the cap"). Chips only change hands, so
+nothing new is created that a daily cap would have to limit, and trimming a winner's cash-out to the
+cap only ever deleted chips the loser had already paid. `hd_finish` now pays both stacks back in
+full, and `game_points_today` no longer counts Hold'em, the same as Prasta. Hold'em winnings no
+longer use up the day's 500 XP from the other games.
+
+**Tested in production inside a rolled-back transaction:**
+- 16 of 16 helpers refused to a signed-in browser.
+- Tic-Tac-Toe, Hangman, UNO, Hold'em and Prasta still play through their own public functions.
+- Hold'em XP conserved (444 before, 444 after) with both players already at the daily cap; the old
+  code would have trimmed the winner's cash-out to nothing.
+- The cap total no longer includes Hold'em.
+
+Checked after applying: `still_callable 0, service_ok 16, client_rpcs_ok true,
+cap_counts_holdem false, hd_finish_capped false`.
+
+**Still to do:** the level text "(game XP caps at 500 a day)" should say that Hold'em and Prasta
+chips just change hands. Planned for the Step 1 client build.
+
+# Build 169: the Game Room, and UNO for 2-4 players (Step 1 of the 4-player games) (18 Sept 2026)
+
+Current state: **app.js 169, style.css 118, cache `gc2000-v200`.** Database: `supabase/game_tables_feature.sql`
+(tested by `supabase/game_tables_dryrun.sql`).
+
+**Asked for:** 4-player UNO and Hold'em with 4 spectator seats. Decided with the user:
+- A **Game Room** page. Desktop: 🎴 in the title bar beside Roulette. Phone: a 🎴 bubble above the other two.
+- Each table: **4 player seats and 4 spectator seats**. Spectators watch and chat only; to play they take a free
+  player seat between games. One table at a time per person.
+- The host deals once **2-4 players** are seated. Anyone can sit down; the host can **invite friends** (with a push).
+- A new table is **announced in the main chat** with a Join button.
+- **Two missed turns in a row** and you're out of the round and off the table.
+- UNO is played until one player is left holding cards. **XP by the order players get rid of their cards: 1st 10,
+  2nd 5, 3rd 2**; whoever is left holding cards gets nothing. It counts toward the 500-a-day game cap.
+- Hold'em comes next (Step 2), on the same tables; its button is there but disabled ("coming soon").
+
+**How it works**
+- Tables, seats, table chat, invites and the UNO round live in their own tables (see the migration's header for
+  who may read what). Every change goes through security-definer functions; browsers can't write any of these
+  tables, and the internal helpers can't be called from a browser.
+- XP is paid only for playing out your hand, so a round "won" because everyone else left or timed out pays
+  nothing: no start-a-table-and-leave farming. Leavers and timed-out players take the lowest places.
+- UNO rules on top of the 2-player ones: direction and Reverse (with two players left it works like Skip); Skip,
+  Draw Two and Wild Draw Four hit the next player still holding cards; a player who plays out leaves the round
+  and play goes on. A player on one card who didn't call UNO can be caught by anyone still in the round, until
+  the next move is made. UNO! stays on offer while a wild waits for its colour.
+- The client listens on channels of its own (`gameroom`, and `gtable:<id>` while seated), not the room channel,
+  so nothing here can stop the room's own realtime (the build 154 lesson). Every table it listens to is in the
+  `supabase_realtime` publication.
+- While seated, the browser says "still here" once a minute. A seat not heard from for five minutes is freed
+  (except a player holding cards in a running round: the turn clock handles those). A round nobody has touched
+  for ten minutes closes its table. Closed tables are deleted after a day; their results stay (the cap reads them).
+- Table chat: 300 characters, the same spam cooldown as the room, 5 lines per 5 seconds, the last 100 kept,
+  blocked people hidden. Admins can close a table from the list.
+- Signing off, being removed or timing out of the room gives up your seat at once. A page reload while seated
+  finds the table again and says so.
+- The level explainer now says XP also comes from the Game Room tables, and that Hold'em and Prasta chips just
+  change hands.
+
+**Tested**
+- Local Postgres, rolled back: 62 checks (seats, dealing, hand privacy, helpers refused to browsers, spectators,
+  chat privacy and limits, every card effect, UNO calls and catching, places and XP for 3 and 4 players, the
+  clock and the idle rule, leaving, the sweep, invites, the daily cap).
+- Concurrency: 8 simulated players hammering 1,500 random moves each in parallel with clocks and seats being
+  aged underneath them: no deadlocks, every deck still exactly 108 cards, places always 1..n with no gaps.
+- Integration: five simulated browsers running the real Game Room code against the real migration, clicking the
+  real buttons: two full rounds, invites, announcements, chat, a forfeit, the idle rule, a reload, host handover,
+  closing. 53 checks; random play, so it was run repeatedly: every run passed (three on the final code).
+- Rendered with the real CSS in Chromium at 1366x768 and 390x844; the title bar stays centred with three glyphs.
+- The whole app loads in jsdom with no errors.
+- Production, inside a rolled-back transaction with five throwaway accounts: the same 62 checks, 0 failed, and
+  nothing left behind. Then applied. Checked after applying: 8 tables with RLS, 7 policies, the 5 listened-to
+  tables in the publication, browsers can call exactly the 15 verbs and none of the 11 helpers, anon nothing,
+  the deck unreadable, no direct inserts, and the daily cap counts table XP.
+- Live: app.js, style.css, sw.js and index.html match the repo byte for byte (SHA-256).
+
+**Not tested yet:** real phones and real realtime with people at a table. That is the user's UNO test, before
+Step 2 (4-player Hold'em) is built on these tables.
+
+**Release plan note:** `game_tables`, `table_seats`, `table_messages`, `table_invites`, `uno_tables`,
+`uno_table_hands`, `uno_table_decks` and `table_results` join the release reset list.
