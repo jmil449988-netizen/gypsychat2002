@@ -77,7 +77,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 169;
+var BUILD_NUMBER = 170;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -361,7 +361,9 @@ miniMenu.querySelectorAll('button').forEach(function (b) { b.onclick = function 
 miniMenu.classList.add('open');
 var r = anchor.getBoundingClientRect();
 miniMenu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - miniMenu.offsetWidth - 4)) + 'px';
-miniMenu.style.top = Math.max(4, r.top - miniMenu.offsetHeight - 4) + 'px';
+var top = r.top - miniMenu.offsetHeight - 4;
+if (top < 4) top = r.bottom + 4 + miniMenu.offsetHeight <= window.innerHeight ? r.bottom + 4 : 4; // v170: no room above the anchor
+miniMenu.style.top = top + 'px';
 miniMenu.querySelector('button').focus();
 }
 document.addEventListener('click', function (e) { if (!miniMenu.contains(e.target)) closeMiniMenu(); });
@@ -1423,6 +1425,7 @@ $('promptInput').addEventListener('click', function () { if (promptMentions) upd
 }
 document.addEventListener('keydown', function (e) {
 if (e.key !== 'Escape') return;
+var dialogUp = !$('warnOverlay').classList.contains('hidden') || !$('infoOverlay').classList.contains('hidden') || !!($('promptOverlay') && !$('promptOverlay').classList.contains('hidden'));
 if (!$('warnOverlay').classList.contains('hidden')) $('warnOk').click();
 if (!$('infoOverlay').classList.contains('hidden')) $('infoOk').click();
 if ($('promptOverlay') && !$('promptOverlay').classList.contains('hidden')) $('promptCancel').click();
@@ -1430,7 +1433,7 @@ if ($('saveOverlay') && !$('saveOverlay').classList.contains('hidden')) $('saveO
 if ($('imgLightbox') && !$('imgLightbox').classList.contains('hidden')) closeLightbox();
 if (bugReportOverlay && !bugReportOverlay.classList.contains('hidden')) closeBugReportModal();
 if (typeof closeAdminPanel === 'function' && gcRoot && gcRoot.classList.contains('admin-open')) closeAdminPanel();
-if (typeof grOpen === 'function' && grOpen() && !(e.target && e.target.classList && e.target.classList.contains('gr-chatin') && e.target.value)) closeGameRoom();
+if (!dialogUp && typeof grOpen === 'function' && grOpen() && !(e.target && e.target.classList && (e.target.classList.contains('gr-hd-in') || (e.target.classList.contains('gr-chatin') && e.target.value)))) closeGameRoom();
 });
 
 /* ---------- image lightbox: click any posted picture (room, whispers, threads) to see it full
@@ -5610,9 +5613,9 @@ r.data.forEach(function (g) { if (gameShowsCard(g)) renderBsCard(g, { scroll: fa
    A page of its own -- the same full-screen takeover as the Popularity Contest -- opened from 🎴 in
    the title bar on a desktop, or the 🎴 bubble on a phone. It lists the open tables. Each table has
    four player seats and four spectator seats, a chat of its own, and a game: UNO for 2-4 players
-   for now (Hold'em comes next, on the same tables). supabase/game_tables_feature.sql holds the rules
-   and the security; every move here is an rpc, and this client repaints from what comes back and
-   from realtime.
+   (v169), or no-limit Hold'em for 2-4 betting real XP (v170). supabase/game_tables_feature.sql and
+   holdem_tables_feature.sql hold the rules and the security; every move here is an rpc, and this
+   client repaints from what comes back and from realtime.
 
    Realtime lives on channels of its own, NOT the room channel: 'gameroom' (the table list, and my
    invites) for as long as I am signed on, and 'gtable:<id>' (the round, my hand, the table chat)
@@ -5630,6 +5633,7 @@ var GR_GAMES = { uno: { name: 'UNO', icon: '🃏' }, holdem: { name: 'Hold’em'
 var GR_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
 var grTables = {}, grSeats = {}, grInvites = {}, grMySeat = null;
 var grUno = null, grHand = [], grHandRound = 0, grLog = [], grPick = null, grNote = '';
+var grHd = null, grHdHand = [], grHdHandNo = 0, grHdTimer = null, grHdNextAt = {}, grHdResultSeen = {}, grHdSelfMove = false, grHdIdleOut = null, grHdLastStack = null;
 var grChannel = null, grTableChannel = null, grTableChannelId = null, grHeartbeatTimer = null, grSeatTimers = {}, grUnoTimer = null;
 var grFirstLoad = false, grSeatGen = 0, grBusy = false, grLeaveArmed = false, grLeaveTimer = null, grUnread = 0, grAnnounced = {}, grTimeoutFired = {}, grLastTick = '';
 
@@ -5640,6 +5644,24 @@ function grSeatsOf(tid, role) { return (grSeats[tid] || []).filter(function (s) 
 function grOrdinal(n) { return n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th'); }
 function grRoundOf(tid) { var t = grTables[tid]; return grUno && t && grUno.table_id === tid && grUno.round === t.round ? grUno : null; }
 function grMyTurn() { var u = grUno, i = grMyIndex(); return !!(u && u.status === 'playing' && i >= 0 && u.turn === i + 1 && u.place[i] === 0); }
+/* Hold'em: the table state is laid out by player seat -- index 0-3 here is seat 1-4 */
+function grIsHd(tid) { var t = grTables[tid]; return !!(t && t.game === 'holdem'); }
+function grHdOf(tid) { return grHd && grHd.table_id === tid ? grHd : null; }
+function grHdSeat() { return grHd && me ? grHd.seat_user.indexOf(me.id) : -1; }
+function grHdLive(h) { return !!h && ['preflop', 'flop', 'turn', 'river'].indexOf(h.street) >= 0; }
+function grHdMaxBet(h) { var m = 0; for (var k = 0; k < 4; k++) if (h.in_hand[k] && !h.folded[k] && h.bet[k] > m) m = h.bet[k]; return m; }
+function grHdPotTotal(h) { return h.pot + h.bet[0] + h.bet[1] + h.bet[2] + h.bet[3]; }
+function grHdMyTurn() { var h = grHd, i = grHdSeat(); return !!(h && grHdLive(h) && i >= 0 && h.turn === i + 1); }
+function grHdInHand() { var h = grHd, i = grHdSeat(); return !!(h && grHdLive(h) && i >= 0 && h.in_hand[i] && !h.folded[i]); }
+function grStakesText(t) { var st = HD_STAKES[t && t.stakes] || HD_STAKES.low; return st.label + ' · blinds ' + st.sb + '/' + st.bb; }
+function grStakesLong(t) { var st = HD_STAKES[t && t.stakes] || HD_STAKES.low; return grStakesText(t) + ' · sit with ' + st.min + '–' + st.max + ' XP'; }
+function grHdFunded(h) { var n = 0; for (var k = 0; k < 4; k++) if (h.seat_user[k] && h.stack[k] > 0) n++; return n; }
+function grHdActors(h, except) { var n = 0; for (var k = 0; k < 4; k++) if (k !== except && h.in_hand[k] && !h.folded[k] && h.stack[k] > 0) n++; return n; }
+/* the pause after a hand before the browsers ask for the next one: longer after a showdown, so the
+   cards can be read (the server deals no sooner than 4 s) */
+function grHdPause(h) { return h.shown.some(Boolean) ? 8 : 5; }
+function grHdSince(h) { return (Date.now() - serverSkew - new Date(h.hand_ended_at || h.updated_at).getTime()) / 1000; }
+function grHdNextText(h) { var s = Math.ceil(grHdPause(h) - grHdSince(h)); return s > 0 ? 'Next hand in ' + s + 's…' : 'Dealing…'; }
 
 /* ----- the page ----- */
 function openGameRoom() {
@@ -5714,12 +5736,17 @@ function grWhyGone(tid) {
 var t = grTables[tid], mi = grMyIndex();
 if (!t || t.status === 'closed') return 'The table closed.';
 if (grUno && grUno.table_id === tid && mi >= 0 && grUno.outcome[mi] === 'idle') return 'You missed two turns in a row, so you were taken off the table.';
+if (grHdIdleOut === tid || (grHd && grHd.table_id === tid && grHd.last_action && grHd.last_action.indexOf(me.name + ' missed two turns') === 0)) return 'You missed two turns in a row, so you were taken off the table. Your chips went back to your XP.';
+if (grIsHd(tid) && grHdLastStack === 0) return 'You ran out of chips, and every watcher’s seat was taken, so you left the table.';
+if (grIsHd(tid)) return 'You were taken off the table: this device went quiet for a few minutes. Your chips went back to your XP.';
 return 'You were taken off the table: this device went quiet for a few minutes.';
 }
 /* My seat is gone without my asking (two missed turns, a quiet device, the table closed). */
 function grMySeatGone(why) {
 if (!grMySeat) return;
+var wasHd = !!grHd || grIsHd(grMySeat.table_id);
 grSetMySeat(null);
+if (wasHd && typeof refreshMyStats === 'function') refreshMyStats(); // my stack went back to my XP
 grNote = why || 'You’re no longer at that table.';
 renderGameRoom(); grMarkBtn();
 if (!grOpen()) showToast({ peer: 'gtable', kind: 'seat', icon: '🎴', text: grNote, sub: 'Tap to open the Game Room', ttl: 9000, onClick: openGameRoom });
@@ -5753,25 +5780,39 @@ function grWatchTable(tid) {
 if (grTableChannel) { try { sb.removeChannel(grTableChannel); } catch (e) {} grTableChannel = null; }
 grTableChannelId = tid || null;
 grUno = null; grHand = []; grHandRound = 0; grLog = []; grPick = null; grLeaveArmed = false;
+grHd = null; grHdHand = []; grHdHandNo = 0; grHdIdleOut = null; grHdLastStack = null;
 if (!tid || !sb || !me) return;
-grTableChannel = sb.channel('gtable:' + tid)
-.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_tables', filter: 'table_id=eq.' + tid }, function (p) { grUnoArrived(p.new); })
+var ch = sb.channel('gtable:' + tid);
+if (grIsHd(tid)) {
+ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'holdem_tables', filter: 'table_id=eq.' + tid }, function (p) { grHdArrived(p.new); })
+.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'holdem_tables', filter: 'table_id=eq.' + tid }, function (p) { grHdArrived(p.new); grRefetchHd(tid); })
+.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'holdem_table_hands', filter: 'user_id=eq.' + me.id }, function (p) { grHdHandArrived(p.new); })
+.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'holdem_table_hands', filter: 'user_id=eq.' + me.id }, function (p) { grHdHandArrived(p.new); });
+} else {
+ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_tables', filter: 'table_id=eq.' + tid }, function (p) { grUnoArrived(p.new); })
 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_tables', filter: 'table_id=eq.' + tid }, function (p) { grUnoArrived(p.new); grRefetchUno(tid); })
-.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'table_messages', filter: 'table_id=eq.' + tid }, function (p) { grMsgArrived(p.new); })
 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'uno_table_hands', filter: 'user_id=eq.' + me.id }, function (p) { grHandArrived(p.new); })
-.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_table_hands', filter: 'user_id=eq.' + me.id }, function (p) { grHandArrived(p.new); })
+.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'uno_table_hands', filter: 'user_id=eq.' + me.id }, function (p) { grHandArrived(p.new); });
+}
+grTableChannel = ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'table_messages', filter: 'table_id=eq.' + tid }, function (p) { grMsgArrived(p.new); })
 .subscribe(function (status) { if (status === 'SUBSCRIBED') grLoadTable(tid); });
 }
 /* The round, my hand and the chat for the table I sit at. The chat keeps the seat-change lines
    this device wrote itself, merged back in by time. */
 async function grLoadTable(tid) {
 if (!sb || !me) return;
-var u = await sb.from('uno_tables').select('*').eq('table_id', tid).maybeSingle();
-var h = await sb.from('uno_table_hands').select('*').eq('table_id', tid).eq('user_id', me.id).maybeSingle();
+var hd = grIsHd(tid);
+var u = await sb.from(hd ? 'holdem_tables' : 'uno_tables').select('*').eq('table_id', tid).maybeSingle();
+var h = await sb.from(hd ? 'holdem_table_hands' : 'uno_table_hands').select('*').eq('table_id', tid).eq('user_id', me.id).maybeSingle();
 var m = await sb.from('table_messages').select('*').eq('table_id', tid).order('id', { ascending: false }).limit(60);
 if (grTableChannelId !== tid) return; // moved on meanwhile
+if (hd) {
+if (!u.error && u.data) { if (!grHd || new Date(u.data.updated_at) >= new Date(grHd.updated_at)) { grHd = u.data; if (grHd.street === 'between') grHdResultSeen[tid + ':' + grHd.hand_no] = true; } } // a result already up is old news
+if (!h.error) { grHdHand = h.data ? (h.data.cards || []) : []; grHdHandNo = h.data ? h.data.hand_no : 0; }
+} else {
 if (!u.error) { var prev = grUno; grUno = u.data || null; if (grUno && prev && prev.round === grUno.round && new Date(prev.updated_at) > new Date(grUno.updated_at)) grUno = prev; }
 if (!h.error) { grHand = h.data ? (h.data.cards || []) : []; grHandRound = h.data ? h.data.round : 0; }
+}
 if (!m.error) {
 var sys = grLog.filter(function (x) { return x.sys; });
 var msgs = (m.data || []).filter(function (x) { return !blocked[x.sender_id]; }).map(function (x) { return { row: x, at: Date.parse(x.created_at) }; });
@@ -5793,6 +5834,62 @@ var r = await sb.from('uno_table_hands').select('*').eq('table_id', tid).eq('use
 if (r.error || grTableChannelId !== tid) return;
 grHand = r.data ? (r.data.cards || []) : []; grHandRound = r.data ? r.data.round : 0;
 renderGameRoom();
+}
+function grRefetchHd(tid) {
+clearTimeout(grHdTimer);
+grHdTimer = setTimeout(function () {
+sb.from('holdem_tables').select('*').eq('table_id', tid).maybeSingle().then(function (r) { if (!r.error && r.data) grHdArrived(r.data); });
+}, 300);
+}
+async function grHdFetchHand() {
+if (!grMySeat || !sb) return;
+var tid = grMySeat.table_id;
+var r = await sb.from('holdem_table_hands').select('*').eq('table_id', tid).eq('user_id', me.id).maybeSingle();
+if (r.error || grTableChannelId !== tid) return;
+grHdHand = r.data ? (r.data.cards || []) : []; grHdHandNo = r.data ? r.data.hand_no : 0;
+renderGameRoom();
+}
+function grHdHandArrived(row) {
+if (!row || row.user_id !== me.id || row.table_id !== grTableChannelId) return;
+if (grHdHandNo && row.hand_no < grHdHandNo) return;
+grHdHand = row.cards || []; grHdHandNo = row.hand_no;
+renderGameRoom();
+}
+function grHdArrived(row) {
+if (!row || row.table_id !== grTableChannelId) return;
+var prev = grHd;
+if (prev && prev.updated_at && row.updated_at && new Date(row.updated_at) < new Date(prev.updated_at)) return; // an older, half-way row
+/* gone from my seat while my clock ran, with a turn already missed: that was the second miss */
+var pi = prev ? prev.seat_user.indexOf(me.id) : -1;
+if (pi >= 0 && row.seat_user.indexOf(me.id) < 0 && grHdLive(prev) && prev.turn === pi + 1 && prev.missed[pi] >= 1) grHdIdleOut = row.table_id;
+if (row.seat_user.indexOf(me.id) >= 0) grHdLastStack = row.stack[row.seat_user.indexOf(me.id)];
+grHd = row;
+if ((!prev || prev.hand_no !== row.hand_no) && row.seat_user.indexOf(me.id) >= 0) grHdFetchHand();
+grHdEvents(prev, row);
+renderGameRoom(); grMarkBtn();
+}
+/* Hold'em: sounds, toasts and the hand history, for what just happened at my table. */
+function grHdEvents(prev, h) {
+var i = h.seat_user.indexOf(me.id), key = 'gh' + h.table_id;
+var newHand = !prev || prev.hand_no !== h.hand_no;
+if (grHdLive(h) && (newHand || prev.street !== h.street)) gameSfx(key, 'card');
+else if (prev && grHdLive(h) && grHdPotTotal(h) > grHdPotTotal(prev)) gameSfx(key, 'chips');
+var myTurn = grHdLive(h) && i >= 0 && h.turn === i + 1;
+if (myTurn && (newHand || prev.turn !== h.turn || prev.street !== h.street || prev.turn_started_at !== h.turn_started_at)) {
+playSound('turn');
+if (!grOpen() || document.hidden) {
+var secs = Math.ceil(turnSecondsLeft(h)), toCall = Math.max(0, grHdMaxBet(h) - h.bet[i]);
+showToast({ peer: 'gtable', kind: 'turn', icon: '♠', text: 'Hold’em: your move' + (toCall ? ' — ' + toCall + ' to call' : ''), sub: secs + 's left — tap to play', countdown: secs, ttl: Math.max(3000, secs * 1000), onClick: openGameRoom });
+}
+if (document.hidden) bumpTitle();
+}
+/* a hand just finished: its result goes into the table chat, once */
+var rk = h.table_id + ':' + h.hand_no;
+if (h.street === 'between' && h.hand_result && !grHdResultSeen[rk]) {
+grHdResultSeen[rk] = true;
+grSys('Hand ' + h.hand_no + ': ' + h.hand_result);
+if (i >= 0 && h.won[i] > 0) playSound('win');
+}
 }
 function grHandArrived(row) {
 if (!row || row.user_id !== me.id || row.table_id !== grTableChannelId) return;
@@ -5827,6 +5924,10 @@ if (grMySeat && grMySeat.table_id === tid && gen === grSeatGen) {
 var mine = grSeats[tid].filter(function (s) { return s.user_id === me.id; })[0];
 if (old) grDiffSeats(old, grSeats[tid]);
 if (!mine) { grMySeatGone(grWhyGone(tid)); return; }
+if (grIsHd(tid) && grMySeat.role === 'player' && mine.role === 'spectator' && !grHdSelfMove) {
+grSys('You’re out of chips, so you’re watching now. Take a seat again to buy back in.');
+if (typeof refreshMyStats === 'function') refreshMyStats();
+}
 grMySeat = mine;
 }
 renderGameRoom();
@@ -5839,7 +5940,7 @@ now.forEach(function (s) {
 if (s.user_id === me.id) return;
 var p = o[s.user_id], nm = s.name || 'Someone';
 if (!p) grSys(nm + (s.role === 'player' ? ' sat down.' : ' is watching.'));
-else if (p.role !== s.role) grSys(nm + (s.role === 'player' ? ' took a seat for the next round.' : ' moved to watching.'));
+else if (p.role !== s.role) grSys(nm + (s.role === 'player' ? (grHd ? ' sat down to play.' : ' took a seat for the next round.') : ' moved to watching.'));
 });
 old.forEach(function (s) { if (!n[s.user_id] && s.user_id !== me.id) grSys((s.name || 'Someone') + ' left the table.'); });
 }
@@ -5904,7 +6005,7 @@ if (!row || grAnnounced[row.id] || row.host_id === me.id || blocked[row.host_id]
 grAnnounced[row.id] = true;
 var g = grGame(row), now = Date.now();
 var d = document.createElement('div'); d.className = 'm sys gr-announce';
-d.innerHTML = '<span class="t">' + fmt(now) + '</span>' + g.icon + ' <b class="gr-an-who">' + esc(row.host_name || 'Someone') + '</b> opened ' + (/^[AEIOU]/.test(g.name) ? 'an ' : 'a ') + esc(g.name) + ' table in the Game Room. <button type="button" class="gr-announce-join">Join</button>';
+d.innerHTML = '<span class="t">' + fmt(now) + '</span>' + g.icon + ' <b class="gr-an-who">' + esc(row.host_name || 'Someone') + '</b> opened ' + (/^[AEIOU]/.test(g.name) ? 'an ' : 'a ') + esc(g.name) + ' table' + (row.game === 'holdem' ? ' (' + esc(grStakesText(row).toLowerCase()) + ')' : '') + ' in the Game Room. <button type="button" class="gr-announce-join">Join</button>';
 d.querySelector('button').onclick = function () { grJoin(row.id); };
 var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
 dayDivider(log, 'room', now);
@@ -5913,10 +6014,11 @@ if (atBottom) log.scrollTop = log.scrollHeight; else bumpNewPill();
 }
 function grMarkBtn() {
 if (!gameRoomBtn) return;
-var news = Object.keys(grInvites).length > 0 || (!grOpen() && (grUnread > 0 || grMyTurn()));
+var turn = grMyTurn() || grHdMyTurn();
+var news = Object.keys(grInvites).length > 0 || (!grOpen() && (grUnread > 0 || turn));
 gameRoomBtn.classList.toggle('news', news);
 gameRoomBtn.classList.toggle('seated', !!grMySeat);
-gameRoomBtn.setAttribute('aria-label', 'Game Room' + (grMyTurn() ? ' — your turn' : (Object.keys(grInvites).length ? ' — you have an invite' : '')));
+gameRoomBtn.setAttribute('aria-label', 'Game Room' + (turn ? ' — your turn' : (Object.keys(grInvites).length ? ' — you have an invite' : '')));
 }
 
 /* ----- heartbeat ----- */
@@ -5942,6 +6044,8 @@ grSys('Your table is open, and it has been announced in the main chat. Deal once
 async function grSit(tid, role) {
 if (grBusy || !me) return;
 grBusy = true;
+var cashing = grIsHd(tid) && grMySeat && grMySeat.table_id === tid && grMySeat.role === 'player';
+if (cashing) grHdSelfMove = true;
 try {
 var r = await sb.rpc('table_sit', { p_table: tid, p_role: role });
 if (r.error) { grNotice(r.error.message); return; }
@@ -5949,6 +6053,58 @@ grTables[tid] = r.data; delete grInvites[tid]; grNote = ''; dismissToasts('gtabl
 var s = await sb.from('table_seats').select('*').eq('user_id', me.id).maybeSingle();
 grSetMySeat(s.data || null);
 await grFetchSeats(tid);
+if (cashing) { grSys('You cashed out: your chips went back to your XP.'); if (typeof refreshMyStats === 'function') refreshMyStats(); }
+} finally { grBusy = false; grHdSelfMove = false; renderGameRoom(); grMarkBtn(); }
+}
+/* Hold'em: pick the stakes when opening a table, and a buy-in whenever you take a player seat. */
+function grHdStakesMenu(anchor) {
+showMiniMenu(anchor, 'Open a Hold’em table', [
+['♠ Low stakes — blinds 1/2, sit with 5–10 XP', function () { grHdOpen('low'); }],
+['♠ High stakes — blinds 2/5, sit with 10–50 XP', function () { grHdOpen('high'); }]
+]);
+}
+async function grHdAskBuyIn(stakes, title) {
+var st = HD_STAKES[stakes] || HD_STAKES.low, have = myXp();
+if (have < st.min) { grNotice('You need at least ' + st.min + ' XP to sit down at a ' + st.label.toLowerCase() + ' table (you have ' + have + '). XP comes from reactions and from winning games.'); return null; }
+var top = Math.min(st.max, have);
+var v = await showPromptModal(title, { value: String(top), placeholder: st.min + '–' + top, maxLength: 3, okLabel: 'Sit down',
+hint: st.label + ': blinds ' + st.sb + '/' + st.bb + '. Sit down with ' + st.min + ' to ' + top + ' XP. It leaves your XP now and comes back, plus or minus, when you get up.' });
+if (v === null) return null;
+var amt = parseInt(v, 10);
+if (!(amt >= st.min && amt <= st.max)) { grNotice('Sit down with ' + st.min + ' to ' + st.max + ' XP at this table.'); return null; }
+if (amt > have) { grNotice('You only have ' + have + ' XP.'); return null; }
+return amt;
+}
+async function grHdOpen(stakes) {
+if (grBusy || !me) return;
+var amt = await grHdAskBuyIn(stakes, 'Open a Hold’em table');
+if (amt == null) return;
+grBusy = true;
+try {
+var r = await sb.rpc('holdem_table_open', { p_stakes: stakes, p_buy_in: amt });
+if (r.error) { grNotice(r.error.message); return; }
+grTables[r.data.id] = r.data; grAnnounced[r.data.id] = true; grNote = '';
+var s = await sb.from('table_seats').select('*').eq('user_id', me.id).maybeSingle();
+grSetMySeat(s.data || null);
+await grFetchSeats(r.data.id);
+grSys('Your table is open, and it has been announced in the main chat. Deal once at least one more player sits down, or invite a friend.');
+if (typeof refreshMyStats === 'function') refreshMyStats();
+} finally { grBusy = false; renderGameRoom(); grMarkBtn(); }
+}
+async function grHdSit(tid) {
+if (grBusy || !me) return;
+var t = grTables[tid]; if (!t) return;
+var amt = await grHdAskBuyIn(t.stakes || 'low', 'Sit down at ' + (t.host_name || 'this') + (t.host_name ? '’s' : '') + ' table');
+if (amt == null) return;
+grBusy = true;
+try {
+var r = await sb.rpc('holdem_table_sit', { p_table: tid, p_buy_in: amt });
+if (r.error) { grNotice(r.error.message); return; }
+grTables[tid] = r.data; delete grInvites[tid]; grNote = ''; dismissToasts('gtable-' + tid);
+var s = await sb.from('table_seats').select('*').eq('user_id', me.id).maybeSingle();
+grSetMySeat(s.data || null);
+await grFetchSeats(tid);
+if (typeof refreshMyStats === 'function') refreshMyStats();
 } finally { grBusy = false; renderGameRoom(); grMarkBtn(); }
 }
 /* From an announcement, an invite toast or the list: sit down if a player seat is free and no game
@@ -5961,6 +6117,13 @@ if (!grTables[tid]) await loadGameRoom();
 var t = grTables[tid];
 if (!t) { grNotice('That table has closed.'); return; }
 var players = grSeatsOf(tid, 'player').length;
+if (t.game === 'holdem') {
+var st = HD_STAKES[t.stakes] || HD_STAKES.low;
+if (players < 4 && myXp() >= st.min) { await grHdSit(tid); return; }
+await grSit(tid, 'spectator');
+if (grMySeat && grMySeat.table_id === tid) grSys(players >= 4 ? 'All four player seats are taken, so you’re watching.' : 'You need at least ' + st.min + ' XP to play here (you have ' + myXp() + '), so you’re watching.');
+return;
+}
 await grSit(tid, t.status === 'open' && players < 4 ? 'player' : 'spectator');
 }
 async function grDismissInvite(tid) {
@@ -5973,30 +6136,35 @@ try { await sb.rpc('table_invite_dismiss', { p_table: tid }); } catch (e) {}
 async function grLeave() {
 if (!grMySeat) return;
 var u = grRoundOf(grMySeat.table_id), mi = grMyIndex();
-if (u && u.status === 'playing' && mi >= 0 && u.place[mi] === 0 && !grLeaveArmed) {
+if (((u && u.status === 'playing' && mi >= 0 && u.place[mi] === 0) || grHdInHand()) && !grLeaveArmed) {
 grLeaveArmed = true; renderGameRoom();
 clearTimeout(grLeaveTimer); grLeaveTimer = setTimeout(function () { grLeaveArmed = false; renderGameRoom(); }, 4000);
 return;
 }
 grLeaveArmed = false; clearTimeout(grLeaveTimer);
-var tid = grMySeat.table_id;
+var tid = grMySeat.table_id, wasHd = grIsHd(tid), hadChips = wasHd && grMySeat.role === 'player';
 grSetMySeat(null); grNote = '';
 renderGameRoom(); grMarkBtn();
 var r = await sb.rpc('table_leave', { p_table: tid });
 if (r.error) grNotice(r.error.message);
+else if (wasHd) {
+if (hadChips) grNote = 'You left the table, and your chips went back to your XP.';
+if (typeof refreshMyStats === 'function') refreshMyStats();
+}
 await loadGameRoom();
 }
 /* Every game move: one rpc, then repaint from the row it returns (and re-read my hand). */
 async function grMove(fn, args) {
 if (grBusy || !grMySeat) return;
 grBusy = true;
+var hd = grIsHd(grMySeat.table_id);
 try {
 var r = await sb.rpc(fn, Object.assign({ p_table: grMySeat.table_id }, args || {}));
 if (r.error) grSys(r.error.message);
-else if (r.data) { noteServerTime(r.data); grUnoArrived(r.data); }
+else if (r.data) { noteServerTime(r.data); if (hd) grHdArrived(r.data); else grUnoArrived(r.data); }
 } finally {
 grBusy = false;
-if (grMySeat) grFetchHand();
+if (grMySeat && !hd) grFetchHand(); // Hold'em cards only change on a deal, which re-reads them itself
 renderGameRoom(); grMarkBtn();
 }
 }
@@ -6056,7 +6224,7 @@ return '<div class="gr-invite"><span>✉ <b>' + esc(v.from_name || 'A friend') +
 }).join('') + '</div>';
 html += '<div class="gr-open"><div class="gr-open-hd">Start a table</div><div class="gr-open-row">'
 + '<button type="button" class="gr-newtable" data-game="uno"><span class="gr-nt-i">🃏</span><span class="gr-nt-n">UNO</span><span class="gr-nt-s">2–4 players · watchers welcome</span></button>'
-+ '<button type="button" class="gr-newtable" data-game="holdem" disabled><span class="gr-nt-i">♠</span><span class="gr-nt-n">Hold’em</span><span class="gr-nt-s">coming soon</span></button>'
++ '<button type="button" class="gr-newtable" data-game="holdem"><span class="gr-nt-i">♠</span><span class="gr-nt-n">Hold’em</span><span class="gr-nt-s">2–4 players · bet your XP · watchers welcome</span></button>'
 + '</div></div>';
 var list = Object.keys(grTables).map(function (k) { return grTables[k]; })
 .filter(function (t) { return t.status !== 'closed' && !blocked[t.host_id]; })
@@ -6066,15 +6234,16 @@ html += list.length ? list.map(grTableRowHtml).join('') : '<div class="gr-empty"
 grBody.innerHTML = html;
 }
 function grTableRowHtml(t) {
-var players = grSeatsOf(t.id, 'player'), watchers = grSeatsOf(t.id, 'spectator'), g = grGame(t);
-var state = t.status === 'playing' ? 'Round ' + t.round + ' in play' : (players.length >= 2 ? 'Waiting to deal' : 'Waiting for players');
-var canPlay = t.status === 'open' && players.length < 4, canWatch = watchers.length < 4;
+var players = grSeatsOf(t.id, 'player'), watchers = grSeatsOf(t.id, 'spectator'), g = grGame(t), hd = t.game === 'holdem';
+var state = t.status === 'playing' ? (hd ? 'Hand ' + t.round + ' in play' : 'Round ' + t.round + ' in play') : (players.length >= 2 && !(hd && t.round) ? 'Waiting to deal' : 'Waiting for players');
+/* Hold'em: a free player seat can be taken at any time -- you're dealt in at the next hand */
+var canPlay = players.length < 4 && (hd || t.status === 'open'), canWatch = watchers.length < 4;
 var names = function (list, none) { return list.map(function (s) { return '<span class="gr-nm">' + esc(s.name || '?') + '</span>'; }).join(', ') || '<i>' + none + '</i>'; };
 return '<div class="gr-row' + (grInvites[t.id] ? ' invited' : '') + '">'
-+ '<div class="gr-row-hd"><span class="gr-row-g">' + g.icon + ' ' + esc(g.name) + '</span><span class="gr-row-host">' + esc((t.host_name || 'Someone') + '’s table') + '</span><span class="gr-row-st' + (t.status === 'playing' ? ' live' : '') + '">' + esc(state) + '</span></div>'
++ '<div class="gr-row-hd"><span class="gr-row-g">' + g.icon + ' ' + esc(g.name) + '</span>' + (hd ? '<span class="gr-row-stakes">' + esc(grStakesLong(t)) + '</span>' : '') + '<span class="gr-row-host">' + esc((t.host_name || 'Someone') + '’s table') + '</span><span class="gr-row-st' + (t.status === 'playing' ? ' live' : '') + '">' + esc(state) + '</span></div>'
 + '<div class="gr-row-who"><span class="gr-row-lbl">Players ' + players.length + '/4</span> ' + names(players, 'none yet') + '<br><span class="gr-row-lbl">Watching ' + watchers.length + '/4</span> ' + names(watchers, 'nobody') + '</div>'
 + '<div class="gr-btns">' + (isAdmin ? '<button type="button" class="btn gr-close" data-t="' + t.id + '">Close</button>' : '')
-+ (canPlay ? '<button type="button" class="btn gr-sit" data-t="' + t.id + '" data-role="player">Sit down</button>' : '')
++ (canPlay ? '<button type="button" class="btn ' + (hd ? 'gr-hdsit' : 'gr-sit') + '" data-t="' + t.id + '" data-role="player">Sit down</button>' : '')
 + (canWatch ? '<button type="button" class="btn gr-sit" data-t="' + t.id + '" data-role="spectator">Watch</button>' : '')
 + (!canPlay && !canWatch ? '<span class="gr-full">Full</span>' : '') + '</div></div>';
 }
@@ -6092,12 +6261,14 @@ grPaintTop(tid); grPaintSeats(tid); grPaintFelt(tid); grPaintMine(tid); grPaintW
 }
 function grPaintTop(tid) {
 var el = grBody.querySelector('.gr-thd'); if (!el) return;
-var t = grTables[tid], g = grGame(t);
-el.innerHTML = '<span class="gr-thd-t">' + g.icon + ' ' + esc((t.host_name || 'Someone') + '’s ' + g.name + ' table') + (t.round ? '<span class="gr-thd-r"> · round ' + t.round + '</span>' : '') + '</span>'
+var t = grTables[tid], g = grGame(t), hd = grIsHd(tid), h = grHdOf(tid);
+var sub = hd ? ' · ' + grStakesText(t) + (h && h.hand_no ? ' · hand ' + h.hand_no : '') : (t.round ? ' · round ' + t.round : '');
+el.innerHTML = '<span class="gr-thd-t">' + g.icon + ' ' + esc((t.host_name || 'Someone') + '’s ' + g.name + ' table') + (sub ? '<span class="gr-thd-r">' + esc(sub) + '</span>' : '') + '</span>'
 + '<span class="gr-btns">' + (t.host_id === me.id ? '<button type="button" class="btn gr-invbtn">Invite</button>' : '')
-+ '<button type="button" class="btn gr-leave' + (grLeaveArmed ? ' armed' : '') + '">' + (grLeaveArmed ? 'Forfeit and leave?' : 'Leave') + '</button></span>';
++ '<button type="button" class="btn gr-leave' + (grLeaveArmed ? ' armed' : '') + '">' + (grLeaveArmed ? (hd ? 'Fold and leave?' : 'Forfeit and leave?') : 'Leave') + '</button></span>';
 }
 function grPaintSeats(tid) {
+if (grIsHd(tid)) { grHdPaintSeats(tid); return; }
 var el = grBody.querySelector('.gr-seats'); if (!el) return;
 var t = grTables[tid], u = grRoundOf(tid), live = !!(u && u.status === 'playing'), bySeat = {};
 grSeatsOf(tid, 'player').forEach(function (s) { bySeat[s.seat] = s; });
@@ -6127,6 +6298,7 @@ if (o === 'out') return '<span class="gr-medal">' + (GR_MEDAL[p] || grOrdinal(p)
 return '';
 }
 function grPaintFelt(tid) {
+if (grIsHd(tid)) { grHdPaintFelt(tid); return; }
 var el = grBody.querySelector('.gr-felt'); if (!el) return;
 var t = grTables[tid], u = grRoundOf(tid), n = grSeatsOf(tid, 'player').length, html = '';
 if (u && u.status === 'playing') {
@@ -6160,6 +6332,7 @@ return '<div class="gr-res' + (u.players[i] === me.id ? ' me' : '') + '"><span c
 }).join('') + (u.last_action ? '<div class="uno-last">' + esc(u.last_action) + '</div>' : '') + '</div>';
 }
 function grPaintMine(tid) {
+if (grIsHd(tid)) { grHdPaintMine(tid); return; }
 var el = grBody.querySelector('.gr-mine'); if (!el) return;
 var u = grRoundOf(tid), mi = grMyIndex();
 if (!u || u.status !== 'playing' || mi < 0) { el.innerHTML = ''; el.classList.add('hidden'); return; }
@@ -6186,6 +6359,7 @@ if (acts) html += '<div class="gr-acts">' + acts + '</div>';
 el.innerHTML = html;
 }
 function grPaintWatch(tid) {
+if (grIsHd(tid)) { grHdPaintWatch(tid); return; }
 var el = grBody.querySelector('.gr-watch'); if (!el) return;
 var t = grTables[tid], watchers = grSeatsOf(tid, 'spectator'), players = grSeatsOf(tid, 'player');
 var u = grRoundOf(tid), mi = grMyIndex(), activeMe = !!(u && u.status === 'playing' && mi >= 0 && u.place[mi] === 0);
@@ -6196,6 +6370,133 @@ if (t.status === 'open' && players.length < 4) btn = '<button type="button" clas
 else if (t.status === 'playing') btn = '<span class="gr-hint">Free seats open up when this round ends.</span>';
 } else if (!activeMe && watchers.length < 4) btn = '<button type="button" class="btn gr-sit" data-t="' + tid + '" data-role="spectator">Just watch</button>';
 el.innerHTML = '<div class="gr-watch-l"><span class="gr-row-lbl">Watching ' + watchers.length + '/4</span> ' + who + '</div>' + (btn ? '<div class="gr-watch-b">' + btn + '</div>' : '');
+}
+/* ----- drawing: a Hold'em table (v170) -----
+   Everything comes from holdem_tables (grHd), laid out by player seat, plus my own two cards
+   (grHdHand, from holdem_table_hands -- nobody else can read that row). */
+var HD_STREET = { preflop: 'pre-flop', flop: 'the flop', turn: 'the turn', river: 'the river' };
+function grHdCardsOf(txt) { return txt && txt.length === 4 ? [txt.slice(0, 2), txt.slice(2, 4)] : []; }
+function grHdPaintSeats(tid) {
+var el = grBody.querySelector('.gr-seats'); if (!el) return;
+var t = grTables[tid], h = grHdOf(tid), live = grHdLive(h), bySeat = {};
+grSeatsOf(tid, 'player').forEach(function (s) { bySeat[s.seat] = s; });
+var canSit = grMySeat.role === 'spectator';
+el.innerHTML = [1, 2, 3, 4].map(function (n) {
+var k = n - 1, uid = h ? h.seat_user[k] : (bySeat[n] ? bySeat[n].user_id : null);
+if (!uid) return '<div class="gr-seat empty"><span class="gr-seat-n">Seat ' + n + '</span>' + (canSit ? '<button type="button" class="btn gr-hdsit" data-t="' + tid + '">Sit down</button>' : '<span class="gr-seat-e">empty</span>') + '</div>';
+var mine = uid === me.id, nm = (h && h.seat_name[k]) || (bySeat[n] && bySeat[n].name) || '?';
+var head = (t.host_id === uid ? '<span class="gr-host" title="Host">👑</span>' : '') + '<b class="gr-seat-nm">' + esc(nm) + '</b>' + (mine ? '<span class="gr-you">you</span>' : '');
+if (!h) return '<div class="gr-seat hd' + (mine ? ' me' : '') + '"><div class="gr-seat-hd">' + head + '</div></div>';
+var inHand = live && h.in_hand[k], folded = inHand && h.folded[k], allIn = inHand && !folded && h.stack[k] === 0;
+var html = '<div class="gr-seat hd' + (mine ? ' me' : '') + (live && h.turn === n ? ' turn' : '') + (folded || (live && !inHand) ? ' folded' : '') + '">'
++ '<div class="gr-seat-hd">' + (h.hand_no && h.button === n ? '<span class="hd-btn" title="Dealer button">D</span>' : '') + head + '</div>'
++ '<div class="gr-hd-line"><span class="hd-stack" title="Chips on the table">' + h.stack[k] + ' XP</span>'
++ (live && h.sb_seat === n ? '<span class="gr-hd-pos" title="Small blind">SB</span>' : '')
++ (live && h.bb_seat === n ? '<span class="gr-hd-pos" title="Big blind">BB</span>' : '')
++ (h.bet[k] > 0 ? '<span class="hd-bet" title="Bet this round">' + h.bet[k] + '</span>' : '') + '</div>';
+/* cards: shown at a showdown; my own face up; a live player's face down */
+var shown = grHdCardsOf(h.shown[k]), cards = '';
+if (shown.length) cards = pcHtml(shown[0], 'sm') + pcHtml(shown[1], 'sm');
+else if (mine && h.in_hand[k] && (live || h.street === 'between') && grHdHandNo === h.hand_no && grHdHand.length === 2) cards = pcHtml(grHdHand[0], 'sm' + (h.folded[k] ? ' dim' : '')) + pcHtml(grHdHand[1], 'sm' + (h.folded[k] ? ' dim' : ''));
+else if (inHand && !folded) cards = pcHtml(null, 'sm') + pcHtml(null, 'sm');
+var note = '';
+if (live && !h.in_hand[k]) note = '<span class="gr-hd-note">plays next hand</span>';
+else if (folded) note = '<span class="gr-hd-note">folded</span>';
+else if (allIn) note = '<span class="gr-hd-note allin">all-in</span>';
+else if (h.street === 'between' && h.won[k] > 0) note = '<span class="gr-hd-note won">won ' + h.won[k] + '</span>';
+else if (!live && h.stack[k] === 0) note = '<span class="gr-hd-note">out of chips</span>';
+html += '<div class="gr-hd-cards">' + cards + note + '</div>';
+if (inHand && !folded && h.missed[k] > 0) html += '<div class="gr-seat-warn">⏰ missed a turn</div>';
+return html + '</div>';
+}).join('');
+}
+function grHdPaintFelt(tid) {
+var el = grBody.querySelector('.gr-felt'); if (!el) return;
+var t = grTables[tid], h = grHdOf(tid), html = '';
+if (!h) { el.innerHTML = '<div class="gr-wait">Setting out the chips…</div>'; el.classList.remove('live'); return; }
+var live = grHdLive(h), i = grHdSeat();
+if (live || h.street === 'between') {
+var board = h.board || [];
+html += '<div class="hd-board" role="group" aria-label="The board">' + [0, 1, 2, 3, 4].map(function (k) { return board[k] ? pcHtml(board[k]) : '<span class="pc slot" aria-hidden="true"></span>'; }).join('') + '</div>';
+}
+if (live) {
+var left = turnSecondsLeft(h), toCall = i >= 0 ? Math.min(Math.max(0, grHdMaxBet(h) - h.bet[i]), h.stack[i]) : 0;
+html += '<div class="gr-hd-pot">Pot ' + grHdPotTotal(h) + ' XP · ' + HD_STREET[h.street] + '</div>';
+if (h.turn) {
+html += '<div class="gr-turn">' + (grHdMyTurn() ? '<b>Your move</b>' + (toCall ? ': ' + toCall + ' to call' : '') : esc(h.seat_name[h.turn - 1] || 'Someone') + '’s move') + '</div>';
+html += '<div class="turn-clock gr-clock' + (left <= 15 ? ' low' : '') + '" aria-label="Turn clock"><span class="tc-bar" style="width:' + Math.round(100 * left / TURN_SECONDS) + '%"></span><span class="tc-num">' + Math.ceil(left) + '</span></div>';
+}
+if (h.last_action) html += '<div class="uno-last">' + esc(h.last_action) + '</div>';
+} else if (h.street === 'between') {
+html += '<div class="gr-hd-result">' + (h.hand_result ? '<div class="gr-hd-res-t">' + esc(h.hand_result) + '</div>' : '')
++ '<div class="gr-hd-cd">' + (grHdFunded(h) >= 2 ? esc(grHdNextText(h)) : 'Waiting for another player with chips…') + '</div></div>';
+} else {
+var n = grHdFunded(h);
+if (t.host_id === me.id) html += '<div class="gr-dealrow">' + (n >= 2 ? '<button type="button" class="btn gr-deal">' + (h.hand_no ? 'Deal' : 'Deal the first hand') + '</button>' : '<span class="gr-wait">Waiting for at least one more player with chips…</span>') + '</div>';
+else html += '<div class="gr-wait">' + (n >= 2 ? 'Waiting for ' + esc(t.host_name || 'the host') + ' to deal…' : 'Waiting for players…') + '</div>';
+if (!h.hand_no) html += '<div class="gr-rules">No-limit Texas Hold’em for 2–4 players, for real XP (' + esc(grStakesLong(t).toLowerCase()) + '). Your buy-in leaves your XP when you sit down, and your whole stack comes back when you get up. The host deals the first hand; after that they come by themselves. Miss two turns in a row and you’re out, but your chips still come back to you.</div>';
+}
+el.innerHTML = html;
+el.classList.toggle('live', live);
+}
+function grHdPaintMine(tid) {
+var el = grBody.querySelector('.gr-mine'); if (!el) return;
+var h = grHdOf(tid), i = grHdSeat(), html = '';
+if (h && i >= 0) {
+var live = grHdLive(h), dealt = h.in_hand[i] && (live || h.street === 'between');
+var cards = dealt && grHdHandNo === h.hand_no && grHdHand.length === 2 ? grHdHand : [];
+var acts = '';
+if (grHdMyTurn()) {
+var m = grHdMaxBet(h), toCall = Math.max(0, m - h.bet[i]), stack = h.stack[i], allIn = h.bet[i] + stack;
+acts += (toCall > 0 ? '<button type="button" class="btn gr-hd-fold">Fold</button>' : '')
++ '<button type="button" class="btn gr-hd-call">' + (toCall === 0 ? 'Check' : toCall >= stack ? 'Call all-in ' + stack : 'Call ' + toCall) + '</button>';
+/* a bet or raise needs chips past the call, and someone left who can answer it */
+if (stack > toCall && grHdActors(h, i) > 0) {
+var minTo = Math.min(m + Math.max(h.min_raise, h.bb), allIn);
+var potTo = Math.min(allIn, m + toCall + grHdPotTotal(h));
+if (allIn <= minTo) acts += '<button type="button" class="btn gr-hd-raise-btn" data-amt="' + allIn + '">All-in ' + allIn + '</button>';
+else acts += '<span class="gr-hd-raise"><span class="gr-hd-presets">'
++ '<button type="button" class="btn gr-hd-amt" data-amt="' + minTo + '">Min</button>'
++ (potTo > minTo && potTo < allIn ? '<button type="button" class="btn gr-hd-amt" data-amt="' + potTo + '">Pot</button>' : '')
++ '<button type="button" class="btn gr-hd-amt" data-amt="' + allIn + '">All-in</button></span>'
++ '<input type="number" class="gr-hd-in" inputmode="numeric" min="' + minTo + '" max="' + allIn + '" step="1" value="' + minTo + '" aria-label="' + (m ? 'Raise to' : 'Bet') + '">'
++ '<button type="button" class="btn gr-hd-raise-btn">' + (m ? 'Raise to' : 'Bet') + '</button></span>';
+}
+} else if (live && h.in_hand[i] && h.folded[i]) acts = '<span class="gr-hint">You folded. You’re dealt in again next hand.</span>';
+else if (live && !h.in_hand[i]) acts = '<span class="gr-hint">You’re dealt in at the next hand.</span>';
+if (cards.length || acts) html = '<div class="gr-hd-me">' + (cards.length ? '<div class="gr-hd-hole' + (h.folded[i] ? ' folded' : '') + '" role="group" aria-label="Your cards">' + pcHtml(cards[0]) + pcHtml(cards[1]) + '</div>' : '')
++ (acts ? '<div class="gr-hd-acts">' + acts + '</div>' : '') + '</div>';
+}
+if (!html) { el.innerHTML = ''; el._hd = ''; el.classList.add('hidden'); return; }
+el.classList.remove('hidden');
+if (el._hd === html) return; // nothing changed: leave a half-typed raise alone
+var key = h.hand_no + ':' + h.street + ':' + h.turn + ':' + h.turn_started_at, old = el.querySelector('.gr-hd-in');
+var keep = old && el._key === key ? { v: old.value, f: document.activeElement === old } : null;
+el._hd = html; el._key = key; el.innerHTML = html;
+var inp = el.querySelector('.gr-hd-in');
+if (inp && keep) { inp.value = keep.v; if (keep.f) inp.focus(); }
+}
+function grHdPaintWatch(tid) {
+var el = grBody.querySelector('.gr-watch'); if (!el) return;
+var h = grHdOf(tid), watchers = grSeatsOf(tid, 'spectator');
+var players = h ? h.seat_user.filter(Boolean).length : grSeatsOf(tid, 'player').length;
+var who = watchers.map(function (s) { return '<span class="gr-nm' + (s.user_id === me.id ? ' me' : '') + '">' + esc(s.name || '?') + '</span>'; }).join(', ') || '<i>nobody</i>';
+var btn = '';
+if (grMySeat.role === 'spectator') btn = players < 4 ? '<button type="button" class="btn gr-hdsit" data-t="' + tid + '">Take a seat</button>' : '<span class="gr-hint">All four player seats are taken.</span>';
+else if (grHdInHand()) btn = '<span class="gr-hint">Fold or finish this hand to cash out.</span>';
+else if (watchers.length < 4) btn = '<button type="button" class="btn gr-sit" data-t="' + tid + '" data-role="spectator" title="Your chips go back to your XP">Cash out &amp; watch</button>';
+el.innerHTML = '<div class="gr-watch-l"><span class="gr-row-lbl">Watching ' + watchers.length + '/4</span> ' + who + '</div>' + (btn ? '<div class="gr-watch-b">' + btn + '</div>' : '');
+}
+/* Bet / raise to what's in the box (or a button's own amount, for an all-in that is also the minimum). */
+function grHdRaise(b) {
+var h = grHd, i = grHdSeat(); if (!h || i < 0 || !grHdMyTurn()) return;
+var inp = grBody.querySelector('.gr-hd-in');
+var amt = parseInt(b.dataset.amt || (inp && inp.value), 10);
+var m = grHdMaxBet(h), allIn = h.bet[i] + h.stack[i], minTo = Math.min(m + Math.max(h.min_raise, h.bb), allIn);
+if (!(amt > 0)) { grSys('Type how much to ' + (m ? 'raise to' : 'bet') + '.'); return; }
+if (amt > allIn) amt = allIn;
+if (amt < minTo) { grSys('The least you can ' + (m ? 'raise to' : 'bet') + ' is ' + minTo + ' (or go all-in).'); if (inp) inp.value = minTo; return; }
+grMove('holdem_table_act', { p_action: 'raise', p_amount: amt });
 }
 function grChatLineHtml(it) {
 if (it.sys) return '<div class="gr-line sys"><span class="t">' + fmt(it.at) + '</span>' + esc(it.text) + '</div>';
@@ -6219,6 +6520,7 @@ function grSys(text) { grPushLog({ sys: true, text: text, at: Date.now() }); }
 
 /* ----- the turn clock (driven by clockTick, four times a second) ----- */
 function grClockTick() {
+if (grHd && grMySeat && grHd.table_id === grMySeat.table_id) { grHdClockTick(grHd); return; }
 var u = grUno;
 if (!u || u.status !== 'playing' || !grMySeat || u.table_id !== grMySeat.table_id) return;
 var left = turnSecondsLeft(u), sec = Math.ceil(left);
@@ -6241,6 +6543,45 @@ sb.rpc('uno_table_timeout', { p_table: u.table_id }).then(function (r) { if (!r.
 }
 }
 
+/* Hold'em: the same 30-second clock (at zero anyone seated asks the server to move it on -- a check if
+   the player can, otherwise a fold; the server checks its own clock, and the call is repeated every few
+   seconds until the turn has moved), and between hands a short pause before asking for the next deal.
+   Players ask first; watchers a few seconds later, in case every player's tab is asleep. */
+/* The server's clock, learned only from a row that call itself just changed: an early or duplicate
+   call hands back the row as it was, and its old updated_at would teach the clock a wrong skew. */
+function grHdNoteTime(row) { if (!grHd || row.updated_at !== grHd.updated_at) noteServerTime(row); }
+function grHdClockTick(h) {
+if (grHdLive(h) && h.turn) {
+var left = turnSecondsLeft(h), sec = Math.ceil(left);
+var el = grBody && grBody.querySelector('.gr-clock');
+if (el) {
+el.classList.toggle('low', left <= 15);
+el.querySelector('.tc-bar').style.width = Math.round(100 * left / TURN_SECONDS) + '%';
+el.querySelector('.tc-num').textContent = sec;
+}
+var key = 'h' + h.table_id + ':' + h.hand_no + ':' + h.street + ':' + h.turn + ':' + h.turn_started_at, mine = grHdMyTurn();
+if (left > 0 && left <= 15 && grLastTick !== key + ':' + sec) {
+grLastTick = key + ':' + sec;
+if (mine || (grOpen() && !document.hidden)) tickSound(sec % 2 === 0);
+}
+var fired = grTimeoutFired[key] || 0;
+if (left <= 0 && Date.now() - fired > 4000 && (grTimeoutFired[key + ':n'] || 0) < 6) {
+grTimeoutFired[key] = Date.now(); grTimeoutFired[key + ':n'] = (grTimeoutFired[key + ':n'] || 0) + 1;
+sb.rpc('holdem_table_timeout', { p_table: h.table_id }).then(function (r) { if (!r.error && r.data) { grHdNoteTime(r.data); grHdArrived(r.data); } });
+}
+return;
+}
+if (h.street !== 'between') return;
+var since = grHdSince(h), funded = grHdFunded(h);
+var cd = grBody && grBody.querySelector('.gr-hd-cd');
+if (cd && funded >= 2) { var txt = grHdNextText(h); if (cd.textContent !== txt) cd.textContent = txt; }
+var k2 = h.table_id + ':' + h.hand_no, now = Date.now();
+if (since >= grHdPause(h) + (grHdSeat() >= 0 ? 0 : 4) && (!grHdNextAt[k2] || now - grHdNextAt[k2] > 4000)) {
+grHdNextAt[k2] = now;
+sb.rpc('holdem_table_next', { p_table: h.table_id }).then(function (r) { if (!r.error && r.data) { grHdNoteTime(r.data); grHdArrived(r.data); } });
+}
+}
+
 /* ----- wiring ----- */
 if (grBody) {
 grBody.addEventListener('click', function (e) {
@@ -6249,14 +6590,19 @@ if (!b || !grBody.contains(b)) return;
 if (b.classList.contains('who')) { if (b.dataset.id && b.dataset.id !== me.id) { e.stopPropagation(); openMenu(b.dataset.id, b, b.dataset.name); } return; }
 if (b.disabled) return;
 var cl = b.classList;
-if (cl.contains('gr-newtable')) grOpenTable(b.dataset.game);
+if (cl.contains('gr-newtable')) { if (b.dataset.game === 'holdem') { e.stopPropagation(); grHdStakesMenu(b); } else grOpenTable(b.dataset.game); }
+else if (cl.contains('gr-hdsit')) grHdSit(Number(b.dataset.t));
 else if (cl.contains('gr-sit')) grSit(Number(b.dataset.t), b.dataset.role);
 else if (cl.contains('gr-join')) grJoin(Number(b.dataset.t));
 else if (cl.contains('gr-noinv')) grDismissInvite(Number(b.dataset.t));
 else if (cl.contains('gr-close')) grAdminClose(Number(b.dataset.t));
 else if (cl.contains('gr-leave')) grLeave();
 else if (cl.contains('gr-invbtn')) { e.stopPropagation(); grInviteMenu(b); }
-else if (cl.contains('gr-deal')) grMove('table_start');
+else if (cl.contains('gr-deal')) grMove(grMySeat && grIsHd(grMySeat.table_id) ? 'holdem_table_start' : 'table_start');
+else if (cl.contains('gr-hd-fold')) grMove('holdem_table_act', { p_action: 'fold' });
+else if (cl.contains('gr-hd-call')) grMove('holdem_table_act', { p_action: 'call' });
+else if (cl.contains('gr-hd-amt')) { var hin = grBody.querySelector('.gr-hd-in'); if (hin) { hin.value = b.dataset.amt; if (!isTouchDevice()) hin.focus(); } }
+else if (cl.contains('gr-hd-raise-btn')) grHdRaise(b);
 else if (cl.contains('gr-draw')) grMove('uno_table_draw');
 else if (cl.contains('gr-pass')) grMove('uno_table_pass');
 else if (cl.contains('gr-uno')) grMove('uno_table_call');
@@ -6270,6 +6616,7 @@ else grPlay(b.dataset.card);
 });
 grBody.addEventListener('submit', function (e) { e.preventDefault(); grSay(); });
 grBody.addEventListener('keydown', function (e) {
+if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('gr-hd-in')) { e.preventDefault(); var rb = grBody.querySelector('.gr-hd-raise-btn'); if (rb) rb.click(); return; }
 var w = e.target.closest && e.target.closest('.who');
 if (w && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); w.click(); }
 });
