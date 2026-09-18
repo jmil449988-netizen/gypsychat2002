@@ -2346,3 +2346,28 @@ background:linear-gradient(180deg,#0f0d0b,#1a1612);border:1px solid var(--gold-l
 .gr-hd-in:focus{border-color:var(--gold)}
 @media (max-width:560px){.gr-felt .hd-board .pc{width:36px;height:52px;font-size:16px}.gr-felt .hd-board .pc .pc-s{font-size:14px}.gr-hd-hole .pc{width:42px;height:58px}}
 @media (hover:none) and (pointer:coarse){.gr-hd-acts .btn{height:36px}.gr-hd-acts .gr-hd-presets .btn{height:32px;padding:0 10px}.gr-hd-in{height:36px;width:72px;font-size:16px}}
+/* v171: the three page buttons draw their own icons (inline SVG): the Game Room is a poker table, Threads a
+   purple @, Roulette a red Romani wagon wheel (sixteen spokes, as on the flag) that turns slowly. Each wears a
+   glow in its own colour instead of the gold one the old text glyphs had. */
+.fab-ico{display:block;flex:none;pointer-events:none;overflow:visible}
+.thread-toggle-fab .ico-at{width:26px;height:26px}
+.roulette-toggle-fab .ico-wheel{width:30px;height:30px}
+.gameroom-toggle-fab .ico-table{width:34px;height:24px}
+.thread-toggle-fab:not(.in-header) .ico-at{filter:drop-shadow(0 0 4px rgba(179,107,255,.6))}
+.roulette-toggle-fab:not(.in-header) .ico-wheel{filter:drop-shadow(0 0 4px rgba(227,38,27,.6))}
+.gameroom-toggle-fab:not(.in-header) .ico-table{filter:drop-shadow(0 1px 2px #000)}
+@media (prefers-reduced-motion:no-preference){.ico-wheel{animation:ico-spin 9s linear infinite}}
+@keyframes ico-spin{to{transform:rotate(360deg)}}
+@media (min-width:501px){
+  .thread-toggle-fab.in-header .ico-at{width:20px;height:20px}
+  .roulette-toggle-fab.in-header .ico-wheel{width:21px;height:21px}
+  .gameroom-toggle-fab.in-header .ico-table{width:25px;height:18px}
+  .thread-toggle-fab.in-header{filter:drop-shadow(0 0 5px rgba(179,107,255,.55))}
+  .thread-toggle-fab.in-header:hover,.thread-toggle-fab.in-header:focus-visible{filter:drop-shadow(0 0 9px rgba(179,107,255,.95))}
+  .thread-toggle-fab.in-header.open{filter:drop-shadow(0 0 10px rgba(201,162,74,.9))}
+  .roulette-toggle-fab.in-header{filter:drop-shadow(0 0 5px rgba(227,38,27,.5))}
+  .roulette-toggle-fab.in-header:hover,.roulette-toggle-fab.in-header:focus-visible,.roulette-toggle-fab.in-header.open{filter:drop-shadow(0 0 9px rgba(227,38,27,.9))}
+  .gameroom-toggle-fab.in-header{filter:drop-shadow(0 0 5px rgba(201,162,74,.4))}
+}
+.tp-hd .ico-table{display:inline-block;width:25px;height:18px;vertical-align:-3px;margin-right:6px}
+.toast-i .ico-table{width:26px;height:18px;margin-top:2px}
