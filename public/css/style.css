@@ -2073,3 +2073,54 @@ color:var(--ash);border:1px solid #3a3026;border-radius:999px;padding:1px 5px}
 @media (max-width:500px){
   .im.im-group .icomp{grid-template-columns:auto 1fr auto}
 }
+
+/* ---------- v116: Battleship (build 167) ----------
+   Two grids in one whisper card: the enemy's waters full width (tap a square to fire when the
+   frame glows gold) and your own fleet as a small chart beside the ships-left rows. Cells are
+   plain divs in a 10x10 CSS grid, square by aspect-ratio. A ship is drawn from its cells: a
+   rounded hull whose inner ends go flat and reach 1px into the gap, so it reads as one piece. */
+.bs-card{margin:8px 4px;padding:8px 10px;border:1px solid #7a4bb0;background:linear-gradient(180deg,#221a26,#160f19);box-shadow:0 0 0 1px #000,inset 0 0 18px #000}
+.bs-label{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;font:700 10px Cinzel,Georgia,serif;letter-spacing:1px;color:#9fb6c9;text-transform:uppercase;margin:2px 0 4px;text-shadow:0 1px 0 #000}
+.bs-grid{display:grid;grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(10,1fr);gap:1px;width:100%;max-width:min(340px,100%);aspect-ratio:1;margin:0 auto 6px;padding:1px;
+  background:#1b2b38;border:1px solid #3b5569;border-radius:4px;box-shadow:inset 0 0 12px #000,0 0 0 1px #000;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.bs-cell{position:relative;background:#0a1620;min-width:0;min-height:0}
+.bs-cell.bs-sh{background:linear-gradient(180deg,#8994a0,#5d6773);border-radius:40%}
+.bs-cell.bs-sh.bs-l{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px}
+.bs-cell.bs-sh.bs-r{border-top-right-radius:0;border-bottom-right-radius:0}
+.bs-cell.bs-sh.bs-u{border-top-left-radius:0;border-top-right-radius:0;margin-top:-1px}
+.bs-cell.bs-sh.bs-d{border-bottom-left-radius:0;border-bottom-right-radius:0}
+.bs-cell.bs-sh.bs-sunk{background:linear-gradient(180deg,#6b2019,#3d0f0b)}
+.bs-cell.bs-sh.bs-ghost{background:rgba(137,148,160,.3)}
+.bs-cell.bs-hit::after{content:'';position:absolute;inset:16%;border-radius:50%;background:radial-gradient(circle,#ffe39a 0,#f07a2c 45%,#b3261e 72%,transparent 74%);box-shadow:0 0 6px rgba(240,122,44,.75)}
+.bs-cell.bs-hit.bs-sunk::after{inset:28%;background:radial-gradient(circle,#ff9a7a 0,#b3261e 62%,transparent 64%);box-shadow:none;opacity:.85}
+.bs-cell.bs-miss::after{content:'';position:absolute;inset:36%;border-radius:50%;background:#7f99b0;opacity:.8}
+.bs-cell.bs-last{box-shadow:inset 0 0 0 2px var(--gold-hi);z-index:1}
+.bs-enemy.bs-myturn{border-color:var(--gold);box-shadow:inset 0 0 12px #000,0 0 0 1px #000,0 0 10px rgba(201,162,74,.45)}
+.bs-cell.bs-open{cursor:crosshair}
+@media (hover:hover){.bs-cell.bs-open:hover{background:#18364d;box-shadow:inset 0 0 0 1px var(--gold)}}
+.bs-cell.bs-aim{background:#2a1d0a;animation:bs-aim .45s ease-in-out infinite alternate}
+@keyframes bs-aim{from{box-shadow:inset 0 0 0 1px var(--gold)}to{box-shadow:inset 0 0 0 3px var(--gold-hi)}}
+.bs-place{touch-action:none;cursor:grab}
+.bs-place .bs-cell.bs-from{opacity:.3}
+.bs-place .bs-cell.bs-pv{background:linear-gradient(180deg,#9cc79c,#4f7a4f);border-radius:3px;margin:0}
+.bs-place .bs-cell.bs-pv.bs-bad{background:linear-gradient(180deg,#d4786b,#7a1f17)}
+.bs-place.bs-nope{animation:bs-nope .3s}
+@keyframes bs-nope{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.bs-tools{display:flex;justify-content:center;gap:6px;margin:0 0 6px}
+.bs-tools .btn{min-width:0;height:26px;padding:0 12px;font-size:11px;color:#e2c4ff;border-color:#7a4bb0;background:linear-gradient(180deg,#3a2a48,#1a1320)}
+.bs-tools .btn.bs-ready{color:#cdeecd;border-color:var(--leaf)}
+.bs-sub{display:flex;gap:10px;align-items:flex-start;margin:0 0 4px}
+.bs-sub .bs-mini{flex:none;width:34%;max-width:120px;min-width:84px;margin:0}
+.bs-side{flex:1;min-width:0}
+.bs-side .uno-last{text-align:left;margin:4px 0 0}
+.bs-hulls{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}
+.bs-hull{position:relative;display:inline-flex;gap:1px}
+.bs-hull i{display:block;width:5px;height:6px;background:#8994a0;border-radius:1px}
+.bs-hull.bs-sunk i{background:#6b2019}
+.bs-hull.bs-sunk::after{content:'';position:absolute;left:-1px;right:-1px;top:50%;height:1px;background:#e0402f}
+.ttt-actions .btn.bs-resign,.ttt-actions .btn.bs-decline,.ttt-actions .btn.bs-cancel{color:var(--ash);border-color:#3d2a4d}
+.ttt-actions .btn.bs-accept{color:#cdeecd;border-color:var(--leaf)}
+.ttt-actions .btn.bs-resign.armed{color:#fff;border-color:var(--blood);background:linear-gradient(180deg,#b3261e,#5a120e)}
+@media (hover:none) and (pointer:coarse){.bs-tools .btn{height:34px}}
+@media (prefers-reduced-motion:reduce){.bs-cell.bs-aim,.bs-place.bs-nope{animation:none}}
+@media (max-width:500px){.lb-tabs .adm-tab{flex-basis:22%}} /* seven game tabs: four on the first row, three on the second */
