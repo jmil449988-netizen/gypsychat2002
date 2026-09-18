@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 160;
+var BUILD_NUMBER = 161;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -2294,13 +2294,18 @@ function isGroupKey(k) { return typeof k === 'string' && k.charAt(0) === 'g' && 
 function groupKey(cid) { return 'g' + cid; }
 function groupIdOf(key) { return isGroupKey(key) ? Number(key.slice(1)) : null; }
 function liveMembers(g) { return (g && g.members || []).filter(function (m) { return !m.left_at; }); }
+/* v161: one answer to "what is this member called", used everywhere a group shows a name. Live
+   presence first, then the name they go by NOW (profile_name, read from profiles in loadMyGroups --
+   member_name is only the name they had on the day they were added), then that old name. */
+function memberDisplayName(m) {
+return (people[m.user_id] && people[m.user_id].name) || m.profile_name || m.member_name || '(no name)';
+}
 /* A group with no name of its own is called after the people in it -- the same thing every
    messenger does, and better than "Group 14" because the useful information is who is in it. */
 function groupTitleFor(cid) {
 var g = myGroups[cid]; if (!g) return 'Group';
 if (g.title) return g.title;
-var others = liveMembers(g).filter(function (m) { return m.user_id !== me.id; })
-.map(function (m) { return (people[m.user_id] && people[m.user_id].name) || m.member_name || 'someone'; });
+var others = liveMembers(g).filter(function (m) { return m.user_id !== me.id; }).map(memberDisplayName);
 if (!others.length) return 'Group';
 if (others.length <= 3) return others.join(', ');
 return others.slice(0, 2).join(', ') + ' and ' + (others.length - 2) + ' more';
@@ -2321,6 +2326,18 @@ Object.keys(myGroups).forEach(function (cid) {
 var mine = myGroups[cid].members.filter(function (m) { return m.user_id === me.id && !m.left_at; });
 if (!mine.length) delete myGroups[cid];
 });
+/* v161: the names people go by now. member_name is frozen on the day someone was added, so a
+   member who has since changed their character name kept the old one in every title, and an
+   account with no name at all came out as "someone". */
+var memberIds = {};
+Object.keys(myGroups).forEach(function (cid) { myGroups[cid].members.forEach(function (m) { memberIds[m.user_id] = 1; }); });
+if (Object.keys(memberIds).length) {
+var pr = await sb.from('profiles').select('user_id, name').in('user_id', Object.keys(memberIds));
+if (!pr.error && pr.data) {
+var nowCalled = {}; pr.data.forEach(function (x) { nowCalled[x.user_id] = x.name; });
+Object.keys(myGroups).forEach(function (cid) { myGroups[cid].members.forEach(function (m) { m.profile_name = nowCalled[m.user_id] || null; }); });
+}
+}
 Object.keys(myGroups).forEach(function (cid) { ensureWin(groupKey(cid), groupTitleFor(cid), true); });
 Object.keys(myGroups).forEach(function (cid) { updateTab(groupKey(cid)); updateWinBanner(groupKey(cid)); });
 }
@@ -2365,6 +2382,22 @@ avatarHtml(p.id, p.name) +
 }).join('');
 }
 function close(v) { multiPickOverlay.classList.add('hidden'); resolve(v); }
+/* v161: an account with no character name -- usually an old anonymous login whose name has since
+   been claimed from another device -- cannot be added (gc_create_group and gc_add_to_group refuse
+   it), so it is not offered. The list shows at once and this thins it a moment later. The token
+   stops a slow answer for an earlier opening of the picker from pruning a later one. */
+var pickToken = {}; multiPickOverlay._token = pickToken;
+if (list.length) {
+sb.from('profiles').select('user_id').in('user_id', list.map(function (x) { return x.id; })).then(function (r) {
+if (r.error || !r.data || multiPickOverlay._token !== pickToken) return;
+var named = {}; r.data.forEach(function (x) { named[x.user_id] = 1; });
+[].forEach.call(box.querySelectorAll('.pick-row'), function (row) {
+if (!named[row.dataset.id]) { delete chosen[row.dataset.id]; row.parentNode.removeChild(row); }
+});
+if (!box.querySelector('.pick-row')) box.innerHTML = '<div class="pick-empty">Nobody to add yet. Make a friend first.</div>';
+paint();
+});
+}
 box.onclick = function (e) {
 var row = e.target.closest('.pick-row'); if (!row) return;
 var id = row.dataset.id;
@@ -2419,7 +2452,7 @@ function openGroupMembers(cid, anchor) {
 var g = myGroups[cid]; if (!g) return;
 var live = liveMembers(g);
 var items = live.map(function (m) {
-var nm = (people[m.user_id] && people[m.user_id].name) || m.member_name || 'someone';
+var nm = memberDisplayName(m);
 return [nm + (m.user_id === me.id ? ' (you)' : ''), function () {
 if (m.user_id !== me.id && anchor) openMenu(m.user_id, anchor, nm);
 }];
@@ -2472,7 +2505,18 @@ var GROUP_TITLE_MAX = 40; // conversations.title's own check constraint
 function tidyGroupTitle(s) { return sanitizeInput(s).replace(/\s+/g, ' ').trim(); }
 function groupMemberName(g, uid) {
 var m = ((g && g.members) || []).filter(function (x) { return x.user_id === uid; })[0];
-return (people[uid] && people[uid].name) || (m && m.member_name) || 'Someone';
+return m ? memberDisplayName(m) : ((people[uid] && people[uid].name) || 'Someone');
+}
+/* v161: who an @name in a group line points at -- live members only, never me, never anyone
+   outside the group. Same match as the room's mentionedUserIds. */
+function groupMentionedIds(cid, body) {
+var text = String(body || ''), ids = [];
+liveMembers(myGroups[cid]).forEach(function (m) {
+if (m.user_id === me.id) return;
+var n = memberDisplayName(m);
+if (n && n !== '(no name)' && new RegExp('@' + escRe(n) + '(?![\\w-])', 'i').test(text)) ids.push(m.user_id);
+});
+return ids;
 }
 /* The one place a group's current name is pushed onto its window and its inbox row. */
 function applyGroupTitle(cid) { var key = groupKey(cid); if (wins[key]) renameWin(key, groupTitleFor(cid)); }
@@ -4116,7 +4160,9 @@ applyModeration({ muted: d.reason === 'muted', mutedPermanent: !!d.permanent, of
 warnPopup(d.offense_count || moderation.offenseCount, d.reason === 'muted', !!d.permanent, d.cooldown_seconds || 0);
 return;
 }
-var cap = recipientId ? 500 : 140; // main room chat is capped at 140; whispers keep the old 500
+/* main room chat is capped at 140; whispers and (v161) group lines keep 500 -- a group line has no
+   recipientId, so it used to be cut to the room's 140 without a word */
+var cap = (recipientId || (extra && extra.conversation_id)) ? 500 : 140;
 var row = { room: C.ROOM || 'main', sender_id: me.id, sender_name: me.name, body: sanitizeInput(body).slice(0, cap) };
 if (recipientId) { row.recipient_id = recipientId; row.recipient_name = recipientName; }
 /* The reply target is read and cleared here, at the moment the message is actually accepted for
@@ -4150,6 +4196,15 @@ handleMessage(r.data); // show immediately; the realtime echo is de-duplicated b
    handler (see sw.js), which skips showing anything if it finds a focused window already open. */
 if (recipientId) {
 triggerPush(recipientId, me.name, notifPreview(row.body), 'gc-whisper-' + me.id);
+} else if (row.conversation_id) {
+/* v161: an @name in a group line only ever reaches someone IN the group. It used to go through the
+   room's mention matching, which pushed the line's text to anyone named, group or not. Matched
+   against the members themselves, so a member who is offline -- the one a push is for -- is found
+   too. */
+var gcid = row.conversation_id, gtitle = myGroups[gcid] && myGroups[gcid].title;
+groupMentionedIds(gcid, row.body).forEach(function (id) {
+triggerPush(id, me.name + ' mentioned you in ' + (gtitle ? '\u201C' + gtitle + '\u201D' : 'a group'), notifPreview(row.body), 'gc-group-' + gcid);
+});
 } else {
 mentionedUserIds(row.body).forEach(function (id) {
 triggerPush(id, me.name + ' mentioned you', notifPreview(row.body), 'gc-mention');
