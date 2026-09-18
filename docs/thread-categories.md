@@ -60,12 +60,11 @@ The fan-out has to happen server-side. Push today is client-triggered one recipi
 follows what. So `thread_sub_targets(board, exclude)` is security-definer and granted to
 `service_role` only; the edge function calls it and sends to what comes back.
 
-## Still open
-
-Whether posting to a board should subscribe you to it automatically. My instinct is yes, with a
-visible toggle on the posting form — the person who starts a conversation is the one most likely
-to want to hear the answer. But it is the kind of default that irritates people when it is wrong,
-so it is worth deciding on purpose rather than by omission.
+**Posting does not subscribe you.** Decided 18 September against my own instinct, and the
+decision is the better one: a subscription is a standing request to be interrupted, and nothing
+should hand one out as a side effect of doing something else. If you want to hear about a board
+you press the button that says so. This also means the posting form needs no subscribe toggle at
+all, which is one less control on a form people are already filling in.
 
 ## The advice that was not taken, kept for the record
 
