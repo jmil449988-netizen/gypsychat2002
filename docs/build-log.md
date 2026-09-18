@@ -860,3 +860,84 @@ every phone and desktop. The markup is in `index.html` for the first paint and i
 **Checked:** rendered with the real CSS in Chromium in the desktop title bar (the name stays centred), as phone
 bubbles, and on the sign-on screen. The whole app loads with no errors. The Game Room tests still pass
 (Hold'em 253 checks, UNO 53). Live files match the repo byte for byte.
+
+# Build 172: pixel-art icons, and a suggestion box (18 Sept 2026)
+
+Current state: **app.js 172, style.css 121, cache `gc2000-v203`.** Database: `supabase/suggestions_feature.sql`
+(tested by `supabase/suggestions_dryrun.sql`).
+
+**Asked for:** the user sent three pixel-art pictures (a purple thread spool, a light bulb and an envelope)
+and chose where they go:
+- the spool on the Threads button, in place of the purple @;
+- the envelope for Messages;
+- for the light bulb: "a suggestions box that leads to the user report / bug report page with its own tab",
+  taking video, pictures and text;
+- the poker table and the wheel redrawn as pixel art to match.
+
+**Icons.** `public/icons/ui-*.png`:
+- The envelope and the bulb are the user's drawings taken back to their own pixel grid (24x26 and 22x29) and
+  saved at four times that size.
+- The spool is the user's 256x256 file as it came.
+- The poker table (32x22) and the red wheel (32x32) are drawn new in the same style: 1-px black outline, flat
+  colours, a few lit pixels. The wheel has sixteen spokes, as on the Romani flag, and still turns once every
+  9 seconds (it stands still for reduced motion).
+
+Where they show:
+- **spool:** the Threads button, in the title bar and on the phone bubble;
+- **table:** the Game Room button, the Game Room page header and its toasts;
+- **wheel:** the Roulette button;
+- **envelope:** the Messages button in the bottom bar, and the Messages bar;
+- **bulb:** the new Suggestions button and the suggestion box's title.
+
+The service worker caches all five icons.
+
+**The suggestion box.**
+- **Where it is:** a Suggestions button, first in the Help group next to Report a bug. On a desktop that's the
+  bottom bar; on a phone, the ⋯ menu.
+- **What you can send:** an idea up to 2,000 characters, plus up to five pictures (5 MB each) or videos (MP4,
+  MOV or WEBM, up to 50 MB each). Each file uploads as soon as it's picked, and Send waits for uploads to
+  finish. Problems (a file too big, the wrong type, a failed upload, too many sent) show inside the box, not in
+  the chat behind it.
+- **Where the files go:** a new private bucket, `suggestions`. People upload into their own folder; only
+  admins can read.
+- **What the server does to each row:**
+  - takes the author's name from their profile, not from the browser;
+  - always starts it as open;
+  - accepts only attachments inside the author's own folder, and keeps just the file path, type and name;
+  - allows at most 5 in 10 minutes or 20 a day per person;
+  - refuses banned people.
+- **Who can see them:** people can't read suggestions, not even their own; only admins can.
+- **The admin side:** the Reports page has a third tab, Suggestions, with its own count, which is also added
+  to the Reports badge.
+  - Pictures show as thumbnails and videos play right in the list, both through one-hour signed links.
+  - Done and Dismiss close a suggestion.
+  - New ones arrive live.
+  - The page opens on whichever tab has something waiting.
+
+**Tested**
+- **Database, locally (rolled back):** 35 checks, 0 failed. They cover:
+  - name, status and trimming;
+  - the attachment rules (someone else's folder, wrong type, a path that climbs out, six files);
+  - text length limits;
+  - filing as someone else, being banned, not being signed in;
+  - both throttles;
+  - who can read, update and delete;
+  - the trigger's privileges and the publication;
+  - the bucket's settings and its upload and read rules.
+- **The box itself:** the real app.js running in jsdom against the real SQL, clicking the real buttons.
+  23 checks, 0 failed: uploads, every refusal message, sending, the removed-file case, the throttle message,
+  Escape, the admin badge and tab, signed media, Done and Dismiss, switching tabs.
+- **Nothing else broke:** the UNO and Hold'em integration tests still pass. A test-harness bug that crashed
+  the UNO test when the host was the one timed out is fixed.
+- **Screenshots and page load:** rendered in Chromium on the real page at 1280 and 390 wide (title bar,
+  bottom bar, phone bubbles, ⋯ menu, the box, the admin tab). The title stays centred, and the whole app
+  loads with no errors.
+- **Production:** the 35 checks in a rolled-back transaction, 0 failed, then applied. Checked after
+  applying: 3 policies, RLS on, the trigger, in the publication, the bucket private at 50 MB, 2 storage
+  policies, the trigger function not callable by browsers, anon can't insert, no rows.
+- **Live:** all nine changed files (app.js, style.css, index.html, sw.js and the five icons) match the
+  repo byte for byte (SHA-256).
+
+**Not tested yet:** a real upload from a phone (the storage server itself isn't part of the local tests).
+
+**Release plan note:** `suggestions` and the `suggestions` storage bucket join the release reset list.
