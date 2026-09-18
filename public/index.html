@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=119">
+<link rel="stylesheet" href="./css/style.css?v=120">
 </head>
 <body>
 <div class="gc-root">
@@ -352,13 +352,14 @@
      same .gc-root.<state>-open full-page takeover as the Popularity Contest. #grBody is painted by
      renderGameRoom() in app.js: the list of tables, or the table you sit at. -->
 <div class="gameroom-panel" id="gameRoomPanel" role="complementary" aria-label="Game Room">
-<div class="tp-hd"><button class="tp-back" type="button" id="gameRoomBack" aria-label="Back to chat">←</button><span>🎴 Game Room</span></div>
+<div class="tp-hd"><button class="tp-back" type="button" id="gameRoomBack" aria-label="Back to chat">←</button><span><svg class="fab-ico ico-table" viewBox="0 0 32 22" aria-hidden="true" focusable="false"><rect x="1" y="1.5" width="30" height="19" rx="9.5" fill="#6b3f1d" stroke="#1d1007" stroke-width="1"/><rect x="2.3" y="2.8" width="27.4" height="16.4" rx="8.2" fill="none" stroke="#a8703a" stroke-width=".9"/><rect x="4.2" y="4.7" width="23.6" height="12.6" rx="6.3" fill="#1d7a3e" stroke="#0b2e17" stroke-width=".7"/><rect x="6.6" y="7" width="18.8" height="8" rx="4" fill="none" stroke="#e2c064" stroke-width=".55" opacity=".8"/><rect x="11.9" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(-8 13.7 10.9)"/><rect x="16.5" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(8 18.3 10.9)"/><path d="M13.7 9.9l.8 1-.8 1-.8-1z" fill="#c0392b" transform="rotate(-8 13.7 10.9)"/><path d="M18.3 9.9l.8 1-.8 1-.8-1z" fill="#1a1410" transform="rotate(8 18.3 10.9)"/></svg>Game Room</span></div>
 <div class="gr-body" id="grBody"></div>
 </div>
 
-<button class="thread-toggle-fab" id="threadToggleBtn" type="button" aria-label="Open threads board">🧵</button>
-<button class="roulette-toggle-fab" id="rouletteToggleBtn" type="button" aria-label="Gypsy Roulette — coming soon">✦</button>
-<button class="gameroom-toggle-fab" id="gameRoomBtn" type="button" aria-label="Game Room" title="Game Room">🎴</button>
+<!-- v171: the three buttons draw their own icons (the same markup as ICON_AT / ICON_WHEEL / ICON_TABLE in app.js) -->
+<button class="thread-toggle-fab" id="threadToggleBtn" type="button" aria-label="Open threads board"><svg class="fab-ico ico-at" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="#b36bff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.9"/><path d="M15.9 8.2v5.1a2.7 2.7 0 0 0 5.4 0v-1.3a9.3 9.3 0 1 0-3.7 7.4"/></svg></button>
+<button class="roulette-toggle-fab" id="rouletteToggleBtn" type="button" aria-label="Gypsy Roulette — coming soon"><svg class="fab-ico ico-wheel" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10.3" fill="none" stroke="#e3261b" stroke-width="2.1"/><circle cx="12" cy="12" r="8.1" fill="none" stroke="#e3261b" stroke-width=".8"/><path d="M12 9.1L12 3.6M13.11 9.32L15.21 4.24M14.05 9.95L17.94 6.06M14.68 10.89L19.76 8.79M14.9 12L20.4 12M14.68 13.11L19.76 15.21M14.05 14.05L17.94 17.94M13.11 14.68L15.21 19.76M12 14.9L12 20.4M10.89 14.68L8.79 19.76M9.95 14.05L6.06 17.94M9.32 13.11L4.24 15.21M9.1 12L3.6 12M9.32 10.89L4.24 8.79M9.95 9.95L6.06 6.06M10.89 9.32L8.79 4.24" stroke="#e3261b" stroke-width="1.05" stroke-linecap="round"/><circle cx="12" cy="12" r="2.9" fill="#e3261b"/><circle cx="12" cy="12" r="1" fill="#3a0d08"/></svg></button>
+<button class="gameroom-toggle-fab" id="gameRoomBtn" type="button" aria-label="Game Room" title="Game Room"><svg class="fab-ico ico-table" viewBox="0 0 32 22" aria-hidden="true" focusable="false"><rect x="1" y="1.5" width="30" height="19" rx="9.5" fill="#6b3f1d" stroke="#1d1007" stroke-width="1"/><rect x="2.3" y="2.8" width="27.4" height="16.4" rx="8.2" fill="none" stroke="#a8703a" stroke-width=".9"/><rect x="4.2" y="4.7" width="23.6" height="12.6" rx="6.3" fill="#1d7a3e" stroke="#0b2e17" stroke-width=".7"/><rect x="6.6" y="7" width="18.8" height="8" rx="4" fill="none" stroke="#e2c064" stroke-width=".55" opacity=".8"/><rect x="11.9" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(-8 13.7 10.9)"/><rect x="16.5" y="8.3" width="3.6" height="5.2" rx=".6" fill="#fbf6e8" stroke="#3a2a14" stroke-width=".35" transform="rotate(8 18.3 10.9)"/><path d="M13.7 9.9l.8 1-.8 1-.8-1z" fill="#c0392b" transform="rotate(-8 13.7 10.9)"/><path d="M18.3 9.9l.8 1-.8 1-.8-1z" fill="#1a1410" transform="rotate(8 18.3 10.9)"/></svg></button>
 </div>
 
 <div class="modal-overlay hidden" id="warnOverlay">
@@ -483,6 +484,6 @@
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=170"></script>
+<script src="./js/app.js?v=171"></script>
 </body>
 </html>
