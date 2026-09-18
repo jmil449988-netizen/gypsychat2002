@@ -76,7 +76,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 154;
+var BUILD_NUMBER = 155;
 if (isIOSDevice()) document.documentElement.classList.add('ios'); // see the iOS top-tap rules in style.css
 if ($('buildTag')) $('buildTag').textContent = 'build ' + BUILD_NUMBER;
 if ($('popoverVersion')) $('popoverVersion').textContent = APP_VERSION + ' · build ' + BUILD_NUMBER;
@@ -2506,7 +2506,7 @@ buzzBtn.title = 'Who is in this group';
 buzzBtn.setAttribute('aria-label', 'Who is in this group');
 }
 ['.icomp .games', '.icomp .mic'].forEach(function (sel) {
-var b = el.querySelector(sel); if (b) b.parentNode.removeChild(b);
+var b = el.querySelector(sel); if (b) { b.classList.add('hidden'); b.disabled = true; }
 });
 }
 win.ta.placeholder = isGroup ? 'Message the group...' : ('Whisper to ' + name + '...');
