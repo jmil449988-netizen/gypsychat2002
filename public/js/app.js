@@ -32,6 +32,22 @@ var hmLeaderboardList = $('hmLeaderboardList'), lbTabHm = $('lbTabHm'), hdLeader
 var prLeaderboardList = $('prLeaderboardList'), lbTabPr = $('lbTabPr');
 var bsLeaderboardList = $('bsLeaderboardList'), lbTabBs = $('lbTabBs');
 var gateFields = $('gateFields'), accessCode = $('accessCode');
+/* v177: the release switch -- appconfig.js INVITE_KEY_REQUIRED. False = no invite key asked of a
+   new character (release); the Turnstile check and everything else stay as they are. */
+function keyRequired() { return !C || C.INVITE_KEY_REQUIRED !== false; }
+/* v177: RELEASE_EPOCH in appconfig.js -- when it changes, this device's own gc_* settings are
+   cleared once (sound, tips, dock layout, the stored invite key); the auth session is not a gc_
+   key and stays, so nobody is signed out by it. */
+(function () {
+try {
+var want = String((C && C.RELEASE_EPOCH) || 0), have = localStorage.getItem('gc_epoch');
+if (have === null && want === '0') { localStorage.setItem('gc_epoch', want); return; }
+if (have === want) return;
+var drop = []; for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('gc_') === 0 && k !== 'gc_epoch') drop.push(k); }
+drop.forEach(function (k) { localStorage.removeItem(k); });
+localStorage.setItem('gc_epoch', want);
+} catch (e) {}
+})();
 var updateBanner = $('updateBanner'), updateBannerBtn = $('updateBannerBtn');
 var frqSection = $('frqSection'), frqCount = $('frqCount'), friendReqList = $('friendReqList');
 
@@ -78,7 +94,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 173;
+var BUILD_NUMBER = 177;
 /* v172: pixel-art icons (public/icons/ui-*.png, drawn at 4x their pixel grid so a browser only ever scales them
    down): a thread spool for Threads, a poker table for the Game Room (its page header and toasts too), a red
    Romani wagon wheel -- sixteen spokes, as on the flag -- for Roulette, which turns slowly, an envelope for
@@ -308,7 +324,39 @@ var myStatusMsg = ''; // free-text line shown beside my status (profiles.status_
 function effectiveStatus() { return (manualStatus === 'online' && autoIdle) ? 'idle' : manualStatus; }
 function updateMyPresence() {
 if (!channel || !me) return;
-channel.track({ name: me.name, status: effectiveStatus(), awayMsg: manualStatus === 'away' ? myAwayMsg : '', statusMsg: myStatusMsg || '', avatarUrl: me.avatarUrl || '' });
+channel.track({ name: me.name, status: effectiveStatus(), awayMsg: manualStatus === 'away' ? myAwayMsg : '', statusMsg: myStatusMsg || '', avatarUrl: me.avatarUrl || '', region: me.region || '' });
+}
+/* ---------- v175: region ----------
+   An optional, fixed-list region on the profile (profiles.region, first_hour_feature.sql), picked on
+   the sign-on screen or later from your own name menu (the "Change name" pill). It rides along in
+   presence like the status message does, so the Online list can show it as a small muted tag
+   without a lookup, and the newcomer's "Here now" line can put people from the same region first.
+   The server holds the truth and only takes these seven values. */
+var REGIONS = [['usa', 'USA'], ['canada', 'Canada'], ['uk_ie', 'UK & Ireland'], ['europe', 'Europe'], ['latam', 'Latin America'], ['anz', 'Australia & NZ'], ['elsewhere', 'Elsewhere']];
+function regionLabel(code) { for (var i = 0; i < REGIONS.length; i++) if (REGIONS[i][0] === code) return REGIONS[i][1]; return ''; }
+function regionOf(id) { if (me && id === me.id) return me.region || ''; var p = people[id]; return (p && p.region) || ''; }
+function regionTagHtml(id) { var l = regionLabel(regionOf(id)); return l ? ' <span class="rtag" title="Region">' + esc(l) + '</span>' : ''; }
+async function setMyRegion(code) {
+if (!me || !sb) return;
+code = regionLabel(code) ? code : null;
+var r = await sb.from('profiles').update({ region: code, updated_at: new Date().toISOString() }).eq('user_id', me.id);
+if (r.error) { addSys('Could not save your region: ' + r.error.message); return; }
+me.region = code || '';
+try { if (code) localStorage.setItem('gc_region', code); else localStorage.removeItem('gc_region'); } catch (e) {}
+updateMyPresence(); renderPeople();
+addSys(code ? 'Region set: ' + regionLabel(code) + '. It shows as a small tag beside your name.' : 'Region cleared.');
+}
+/* Your own name menu, off the "Change name" pill in the bottom bar: rename, or pick a region. */
+function openSelfMenu(anchor) {
+if (!me) return;
+var items = [['✎ Change name', function () { promptRename(); }]];
+items.push(['🌍 Region: ' + (regionLabel(me.region) || 'not set') + ' ›', function () {
+setTimeout(function () {
+showMiniMenu(anchor, 'Where are you?', REGIONS.map(function (r) { return [(me.region === r[0] ? '● ' : '○ ') + esc(r[1]), function () { setMyRegion(r[0]); }]; })
+.concat(me.region ? [['✕ No region', function () { setMyRegion(null); }]] : []));
+}, 0);
+}]);
+showMiniMenu(anchor, me.name, items);
 }
 function updateStatusBtn() {
 var b = $('statusBtn'); if (!b) return;
@@ -404,8 +452,10 @@ showInfoBubble(b, 'Level ' + s.level + ' · ' + xpOf(s) + ' XP', [
 (s.reactions_received || 0) + ' XP from reactions on ' + (who === 'You' ? 'your' : 'their') + ' messages',
 (s.game_points || 0) + ' XP from winning games',
 xpToNext(s) ? xpToNext(s) + ' XP to level ' + (s.level + 1) : 'Level ' + (s.level + 1) + ' is next',
+/* v174: the starter purse -- table money that never counts towards the level */
+(s.bonus > 0 ? '+' + s.bonus + ' starter XP in ' + (who === 'You' ? 'your' : 'their') + ' purse: table money for Hold’em and Prasta. It doesn’t count towards the level; only what you win with it does.' : null),
 'XP comes from reactions to what you say and from winning games, in whispers and at the Game Room tables (game XP caps at 500 a day; Hold’em and Prasta chips just change hands).'
-]);
+].filter(Boolean));
 }, true);
 /* The 🎲 menu -- one place to add a game. */
 function gameMenuItems(id, name) {
@@ -760,6 +810,7 @@ var j = sub.toJSON();
    one actually using it got none. See supabase/push_devices_fix.sql. */
 var r = await sb.rpc('gc_save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
 if (r.error) console.warn('push: this device could not be saved:', r.error.message);
+else pushSubscribed = true; // v176: notifyDesktop leaves pushed events to the service worker from here on
 } catch (e) { /* a failed subscribe just means no closed-browser delivery this session -- the in-tab path still works */ }
 }
 /* The reverse: turning the bell off means "stop reaching me", including on other devices this
@@ -775,6 +826,7 @@ if (sb) { try { await sb.from('push_subscriptions').delete().eq('endpoint', sub.
 await sub.unsubscribe();
 }
 } catch (e) {}
+pushSubscribed = false; // v176
 }
 /* Fire-and-forget call to the send-push edge function -- never awaited by its callers below, and
    any failure (offline, function cold-start error, whatever) is swallowed here so a push hiccup can
@@ -874,13 +926,132 @@ if (notifEnabled) subscribeToPush(); else unsubscribeFromPush();
    service-worker one never replace each other, even with the same tag), so a renotify here would
    make every whisper pop twice while the tab sits in the background. The push already pops for
    each new one. */
+/* v176: one notification per event, not two. With the tab open in the background and the bell
+   on, a whisper or mention used to show twice on a desktop: this page's Notification the instant
+   the realtime row landed, and the service worker's push a second or two later (sw.js only drops
+   a push while a Gypsy Chat window has FOCUS, and a background tab has none; and a page
+   notification and a service-worker one never replace each other in Chrome, even with the same
+   tag -- see build 164). The push is the one to keep: it has renotify, it works with the tab
+   closed, and it is what a phone shows. So when this device holds a push subscription and the
+   event is one the sender also pushes (whisper, mention, group mention, friend request, game
+   challenge), the page waits PUSH_GRACE_MS and then looks for a service-worker notification
+   with the same tag (registration.getNotifications). Found: the push covered it, nothing more.
+   Not found -- a dead registration (build 163 #5), the push service slow, the sender's function
+   call failed -- the page shows its own, a few seconds late rather than never. Events nobody
+   pushes (waves) and devices with no subscription (bell on, but subscribe failed or no VAPID
+   key) show at once as before. The tags on both sides are kept identical on purpose:
+   gc-whisper-<sender>, gc-mention, gc-group-<cid>, gc-friendreq-<sender>, gc-<game>-<id>. */
+var pushSubscribed = false; // set by subscribeToPush once this device's row is saved, cleared by unsubscribeFromPush
+var PUSH_GRACE_MS = 6000;
+var PUSHED_TAG_RE = /^gc-(whisper|mention|group|friendreq|buzz|game|uno|hm|hd|pr|bs|table)(-|$)/;
+function showPageNotification(title, body, tag, onClick) {
+try {
+var n = new Notification(title, { body: body, icon: './icons/icon-192.png', tag: tag });
+n.onclick = function () { window.focus(); n.close(); if (onClick) onClick(); else routeNotification(tag); };
+} catch (e) {}
+}
 function notifyDesktop(title, body, tag, onClick) {
 if (!notifEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
 if (!(document.hidden || !document.hasFocus())) return;
+if (!pushSubscribed || !PUSHED_TAG_RE.test(tag || '')) { showPageNotification(title, body, tag, onClick); return; }
+setTimeout(function () {
+if (!(document.hidden || !document.hasFocus())) return; // they came back meanwhile and have seen it
+var check = ('serviceWorker' in navigator) ? navigator.serviceWorker.ready.then(function (reg) { return reg.getNotifications ? reg.getNotifications({ tag: tag }) : []; }) : Promise.resolve([]);
+check.then(function (list) { if (list && list.length) return; showPageNotification(title, body, tag, onClick); },
+function () { showPageNotification(title, body, tag, onClick); });
+}, PUSH_GRACE_MS);
+}
+/* ---------- v176: where a notification click lands ----------
+   Every notification, page or push, carries a tag that says what it is about, and the tag is all
+   the service worker has (send-push's payload is title, body, tag and a bare url), so the tag is
+   the address: gc-whisper-<sender> and gc-buzz-<sender> open that whisper; gc-group-<id> that
+   group; gc-game- / gc-uno- / gc-hm- / gc-hd- / gc-pr- / gc-bs-<game id> the whisper with the
+   other player, scrolled to that card; gc-table-<id> the Game Room; gc-friendreq-* the friend
+   requests; gc-mention the main room at the newest line that names you; gc-board-<board> that
+   board; anything else the main room.
+   Two ways a click reaches this: with the app open anywhere, sw.js focuses that window and posts
+   {type:'NOTIFICATION_CLICK', tag} to it (the 'message' listener at the bottom of this file);
+   with nothing open it opens ./#n=<tag>, and the hash is read at load, taken off the address, and
+   kept in pendingNotifTag until sign-on has finished replaying the history (join()), because
+   before that there is no window to open and no card to scroll to. A game not yet in its store
+   -- the loads after sign-on are not awaited -- is fetched by id; the card is looked for a few
+   times over three seconds, since the load that draws it may still be on its way. */
+var pendingNotifTag = null;
 try {
-var n = new Notification(title, { body: body, icon: './icons/icon-192.png', tag: tag });
-n.onclick = function () { window.focus(); if (onClick) onClick(); n.close(); };
+var nh = /^#n=([\w-]+)$/.exec(location.hash || '');
+if (nh) { pendingNotifTag = nh[1]; history.replaceState(null, '', location.pathname + location.search); }
 } catch (e) {}
+var NOTIF_GAME_TABLES = { game: 'games', uno: 'uno_games', hm: 'hangman_games', hd: 'holdem_games', pr: 'prasta_games', bs: 'battleship_games' };
+var NOTIF_GAME_CARDS = { game: '.ttt-card', uno: '.uno-card', hm: '.hm-card', hd: '.hd-card', pr: '.pr-card', bs: '.bs-card' };
+function notifGameStore(kind) {
+return { game: games, uno: unoGames, hm: hmGames, hd: hdGames, pr: prGames, bs: bsGames }[kind] || {};
+}
+function showMainRoom() {
+if (!gcRoot) return;
+if (gcRoot.classList.contains('mobile-threads-open') && threadToggleBtn) threadToggleBtn.click();
+if (gcRoot.classList.contains('gameroom-open')) closeGameRoom();
+if (gcRoot.classList.contains('mobile-roulette-open')) closeMobileRoulette();
+if (gcRoot.classList.contains('leaderboard-open')) closeLeaderboard();
+if (gcRoot.classList.contains('admin-open')) closeAdminPanel();
+/* On a phone the open conversation covers the room; on a desktop it sits beside it and can stay. */
+if (dockOpen && window.matchMedia && window.matchMedia('(max-width:500px)').matches) { dockOpen = false; saveDockOpen(); syncDock(); }
+}
+function scrollCardIntoView(w, sel, gid, tries) {
+var card = w && w.log && w.log.querySelector(sel + '[data-gid="' + gid + '"]');
+if (card) { w.log.scrollTop = Math.max(0, w.log.scrollTop + (card.getBoundingClientRect().top - w.log.getBoundingClientRect().top) - 8); return; } // plain scrollTop: see jumpToMessage on why scrollIntoView is a no-op here
+if (tries > 0) setTimeout(function () { scrollCardIntoView(w, sel, gid, tries - 1); }, 500);
+}
+async function nameOfUser(uid) {
+if (people[uid] && people[uid].name) return people[uid].name;
+if (wins[uid] && wins[uid].name) return wins[uid].name;
+var rp = recentPeopleEntries()[uid]; if (rp && rp.name) return rp.name;
+try { var r = await sb.from('profiles').select('name').eq('user_id', uid).maybeSingle(); if (!r.error && r.data && r.data.name) return r.data.name; } catch (e) {}
+return null;
+}
+async function routeNotification(tag) {
+if (!me || !roomHistoryIn) { pendingNotifTag = tag || null; return false; }
+var m = /^gc-([a-z]+)(?:-(.+))?$/.exec(String(tag || ''));
+if (!m) return false;
+var kind = m[1], id = m[2] || '';
+try {
+if (kind === 'whisper' || kind === 'buzz') {
+if (!id || id === me.id) return false;
+var nm = await nameOfUser(id); if (!nm) return false;
+openIM(id, nm, true); return true;
+}
+if (kind === 'group') {
+var cid = Number(id); if (!myGroups[cid]) await loadMyGroups();
+if (!myGroups[cid]) return false;
+openIM(groupKey(cid), groupTitleFor(cid), true); return true;
+}
+if (NOTIF_GAME_TABLES[kind]) {
+var g = notifGameStore(kind)[id];
+if (!g) { var gr = await sb.from(NOTIF_GAME_TABLES[kind]).select('*').eq('id', id).maybeSingle(); g = gr && !gr.error ? gr.data : null; }
+if (!g) return false;
+var peer = gamePeer(g); if (!peer || peer === me.id) return false;
+var pn = gamePeerName(g); if (pn === '?') pn = (await nameOfUser(peer)) || '?';
+var w = openIM(peer, pn, true);
+setTimeout(function () { scrollCardIntoView(w, NOTIF_GAME_CARDS[kind], id, 6); }, 60); return true; // after openIM's own frame-later scroll to the bottom
+}
+if (kind === 'table') { openGameRoom(); return true; }
+if (kind === 'friendreq') { openFriendReqPanel(); return true; }
+if (kind === 'board') {
+if (!gcRoot.classList.contains('mobile-threads-open') && threadToggleBtn) threadToggleBtn.click();
+if (id && boardById(id).id === id && id !== curBoard) await switchBoard(id);
+return true;
+}
+/* gc-mention, gc-wave-*, gc-ballot-tag and anything new: the room itself */
+showMainRoom();
+var lines = log ? log.querySelectorAll('.m.mention-me[data-mid]') : [];
+var last = lines.length ? lines[lines.length - 1] : null;
+if (kind === 'mention' && last) jumpToMessage(last.dataset.mid, last); else pinLogBottom();
+return true;
+} catch (e) { return false; }
+}
+function routePendingNotification() {
+if (!pendingNotifTag) return;
+var t = pendingNotifTag; pendingNotifTag = null;
+routeNotification(t);
 }
 function notifPreview(body) {
 var t = String(body || '').trim();
@@ -1311,7 +1482,7 @@ if (!me) return;
 var n = prompt('Change your character name:', me.name);
 if (n !== null) renameCharacter(n);
 }
-if (st) st.onclick = function () { if (me) promptRename(); };
+if (st) st.onclick = function (e) { if (me) { e.stopPropagation(); openSelfMenu(st); } }; // v175: rename, or pick a region
 function fail(t) { $('err').textContent = t; }
 
 /* ---------- spam cooldown / mute ----------
@@ -1994,10 +2165,10 @@ if (wins[id]) updateWinBanner(id);
 /* "Level 3 — 14 XP (12 reactions, 2 from games)" */
 function xpTitle(s) {
 var xp = s.xp != null ? s.xp : (s.reactions_received || 0) + (s.game_points || 0);
-return 'Level ' + s.level + ' — ' + xp + ' XP (' + (s.reactions_received || 0) + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ', ' + (s.game_points || 0) + ' from games)' + (xpToNext(s) ? ' — ' + xpToNext(s) + ' XP to level ' + (s.level + 1) : '') + '. Tap for details.';
+return 'Level ' + s.level + ' — ' + xp + ' XP (' + (s.reactions_received || 0) + ' reaction' + (s.reactions_received === 1 ? '' : 's') + ', ' + (s.game_points || 0) + ' from games)' + (s.bonus > 0 ? ' + ' + s.bonus + ' starter XP purse' : '') + (xpToNext(s) ? ' — ' + xpToNext(s) + ' XP to level ' + (s.level + 1) : '') + '. Tap for details.';
 }
 async function loadUserStats() {
-var r = await sb.from('user_stats').select('user_id, reactions_received, game_points, xp, level');
+var r = await sb.from('user_stats').select('user_id, reactions_received, game_points, xp, level, bonus');
 if (r.error || !r.data) return;
 userStats = {};
 r.data.forEach(function (x) { userStats[x.user_id] = x; });
@@ -2135,7 +2306,7 @@ if (isAdminId(id)) classes.push('admin');
 if (showStatus) classes.push('st-' + status);
 var tag = showStatus ? ' <span class="stag">(' + status + ')</span>' : '';
 var title = (status === 'away' && p.awayMsg) ? ' title="' + esc(p.awayMsg) + '"' : '';
-return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + '<span class="nmt">' + esc(p.name) + '</span>' + levelBadgeHtml(id) + tag + '</div>';
+return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + '<span class="nmt">' + esc(p.name) + '</span>' + levelBadgeHtml(id) + regionTagHtml(id) + tag + '</div>';
 }).join('');
 /* The online count used to live in the icon-heavy status bar up top; it now lives in the main
    chat's own footer line (directly below that bar), alongside the watermark -- threads and
@@ -2533,17 +2704,19 @@ var already = {};
 liveMembers(g).forEach(function (m) { already[m.user_id] = 1; });
 var picked = await pickPeople('Add to this group…', GROUP_MAX - liveMembers(g).length, already);
 if (!picked || !picked.length) return;
-var added = 0, failed = null;
+var added = [], failed = null;
 for (var i = 0; i < picked.length; i++) {
 if (already[picked[i]]) continue;
 var r = await sb.rpc('gc_add_to_group', { p_conversation: cid, p_user: picked[i] });
 if (r.error) { failed = r.error; break; }
-added++;
+added.push(picked[i]);
 }
 await loadMyGroups();
 renameWin(groupKey(cid), groupTitleFor(cid));
 if (failed) imSys(groupKey(cid), groupErrorText(failed));
-else if (added) imSys(groupKey(cid), added === 1 ? 'Someone new is in the group.' : added + ' people joined the group.');
+/* v176: one "joined the group" line per person, the same line everyone else gets from the
+   membership feed; groupMemberLine drops the INSERT that follows so it is not said twice. */
+added.forEach(function (uid) { groupMemberLine(cid, uid, 'joined'); });
 }
 async function leaveGroup(cid) {
 if (!confirm('Leave this group? You will stop seeing it, and everything in it.')) return;
@@ -2635,6 +2808,27 @@ g.title = c.title || null; applyGroupTitle(c.id);
 /* Without this, someone adding you to a group does nothing visible until you reload: the group's
    messages are readable the moment the membership row lands, but the client has never heard of
    the group so renderIM has nowhere to put them. */
+/* v176: "<name> joined the group" / "<name> left the group" in the group's own log. A member's
+   row is never deleted (gc_leave_group sets left_at; gc_add_to_group brings a leaver back by
+   clearing it), so every membership change is an INSERT or an UPDATE and the payload always
+   carries user_id, member_name and left_at -- no REPLICA IDENTITY FULL needed. The line is drawn
+   from the realtime event and nowhere else, so a reload (loadMyGroups) never repeats it; the one
+   exception is the adder's own tab, which says so as soon as gc_add_to_group returns, and the
+   INSERT that follows must not say it again. groupMemberLine keeps a short memory of what it
+   has drawn (group, person, joined/left) for that: a real re-add after a leave is at least two
+   events apart and never within the window. */
+var groupLinesDrawn = {}; // 'cid:uid:joined' -> when it was drawn (ms)
+var GROUP_LINE_DEDUPE_MS = 20 * 1000;
+function groupMemberLine(cid, uid, kind, name) {
+if (!me || uid === me.id) return false;
+var k = cid + ':' + uid + ':' + kind, now = Date.now();
+if (groupLinesDrawn[k] && now - groupLinesDrawn[k] < GROUP_LINE_DEDUPE_MS) return false;
+groupLinesDrawn[k] = now;
+Object.keys(groupLinesDrawn).forEach(function (x) { if (now - groupLinesDrawn[x] > GROUP_LINE_DEDUPE_MS) delete groupLinesDrawn[x]; });
+var who = name || groupMemberName(myGroups[cid], uid);
+imSys(groupKey(cid), who + (kind === 'left' ? ' left the group' : ' joined the group'));
+return true;
+}
 function watchGroupMembership(channel) {
 channel.on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, async function (p) {
 var row = p.new || p.old; if (!row) return;
@@ -2642,10 +2836,14 @@ var mine = row.user_id === me.id;
 var known = !!myGroups[row.conversation_id];
 if (!mine && !known) return;             // a group I am not in and have never heard of
 /* v160: most UPDATEs on this table are a read marker moving (gc_mark_group_read runs whenever
-   anyone reads the group). Who is in the group has not changed, so there is nothing to reload. */
-if (p.eventType === 'UPDATE' && known) {
+   anyone reads the group). Who is in the group has not changed, so there is nothing to reload.
+   v176: what the change was, decided before the reload replaces the member list. */
+var change = null; // 'joined' | 'left' | null
+if (known) {
 var wasIn = liveMembers(myGroups[row.conversation_id]).some(function (m) { return m.user_id === row.user_id; });
-if (wasIn === !row.left_at) return;
+if (p.eventType === 'UPDATE' && wasIn === !row.left_at) return;
+if (p.eventType === 'DELETE') change = wasIn ? 'left' : null;
+else change = row.left_at ? (wasIn ? 'left' : null) : 'joined';
 }
 var before = known;
 await loadMyGroups();
@@ -2659,6 +2857,13 @@ addSys('You were added to a group: ' + groupTitleFor(row.conversation_id) + '. I
 try { playSound('friend-request'); } catch (e) {}
 } else if (nowIn) {
 renameWin(groupKey(row.conversation_id), groupTitleFor(row.conversation_id));
+/* The name the person goes by now (presence, then profiles as loadMyGroups just read them),
+   then the name on the row, which is only the one they had the day they were added. */
+if (change && !mine) {
+var nm = (people[row.user_id] && people[row.user_id].name) || groupMemberName(myGroups[row.conversation_id], row.user_id);
+if (!nm || nm === 'Someone' || nm === '(no name)') nm = row.member_name || nm || 'Someone';
+groupMemberLine(row.conversation_id, row.user_id, change, nm);
+}
 }
 });
 }
@@ -3438,6 +3643,8 @@ items.push(['Get Info', function () { showInfo(id, name); }]);
    offered a friend request instead, unless that person has opened their whispers to everyone. */
 if (reachable && !blocked[id]) items.push(['Whisper', function () { tryWhisper(id, name, true); }]);
 if (reachable && !blocked[id]) items.push(['Tag in Chat', function () { tagInChat(name); }]);
+/* v175: a one-tap hello that needs no friendship (wave(), first_hour_feature.sql) */
+if (id !== me.id && !blocked[id]) items.push(['👋 Wave', function () { waveAt(id, name); }]);
 /* Sharing someone's card does not require them to be reachable -- you are sending a pointer to a
    person, not a message to them, and the card resolves from whoever the reader can see. */
 if (id !== me.id) items.push(['Send Their Card To\u2026', function () { shareUserWith(id, name); }]);
@@ -3456,7 +3663,7 @@ if (friends[id]) items.push(['Move to Group', async function () { var g = await 
 if (isAdmin && mutedUsers[id]) items.push(['Unmute', function () { unmute(id, name); }]);
 if (isAdmin && !mutedUsers[id]) items.push(['Mute', function () { muteUser(id, name); }, 'danger']);
 if (isAdmin) items.push(['Kick', function () { var r = prompt('Reason for kicking ' + name + '? (optional)'); if (r !== null) kick(id, name, r); }, 'danger']);
-menu.innerHTML = '<div class="hd">' + avatarHtml(id, name, 'ava-menu') + '<span class="hd-name' + (isAdminId(id) ? ' admin' : '') + '">' + esc(name) + '</span>' + levelBadgeHtml(id) + '</div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
+menu.innerHTML = '<div class="hd">' + avatarHtml(id, name, 'ava-menu') + '<span class="hd-name' + (isAdminId(id) ? ' admin' : '') + '">' + esc(name) + '</span>' + levelBadgeHtml(id) + regionTagHtml(id) + '</div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
 menu.querySelectorAll('button').forEach(function (b) { b.onclick = function () { closeMenu(); items[+b.dataset.i][1](); }; });
 menu.classList.add('open');
 var r = anchor.getBoundingClientRect();
@@ -3484,6 +3691,7 @@ log.onclick = function (e) {
 if (Date.now() < suppressClickUntil) return; // this click is the tail end of a long-press that already acted
 var img = e.target.closest('img.gif'); if (img) { openLightbox(img.src); return; }
 var rpt = e.target.closest('.rpt-msg[data-mid]'); if (rpt) { e.stopPropagation(); reportMessage(rpt.dataset.mid); return; }
+var wb = e.target.closest('.sys-act[data-wave]'); if (wb) { e.stopPropagation(); if (!wb.disabled) { wb.disabled = true; waveAt(wb.dataset.wave, wb.dataset.name); } return; } // v175
 var rpill = e.target.closest('.react-pill'); if (rpill) { e.stopPropagation(); var rc2 = rpill.closest('.reactions'); toggleReaction(rc2.dataset.rtype, Number(rc2.dataset.rid), rpill.dataset.emoji); return; }
 var b = e.target.closest('.who[data-id]'); if (!b || b.dataset.id === me.id) return;
 e.stopPropagation(); openMenu(b.dataset.id, b, b.dataset.name);
@@ -4109,7 +4317,7 @@ var row = p.new; if (row.status !== 'pending') return;
 incomingRequests[row.id] = { id: row.id, senderId: row.sender_id, senderName: row.sender_name || '?', createdAt: row.created_at, intro: row.intro || '' };
 playSound('friendreq');
 if (!dockOpen && dmBar) { dmBar.classList.remove('flash'); void dmBar.offsetWidth; dmBar.classList.add('flash'); }
-notifyDesktop((row.sender_name || 'Someone') + ' wants to be friends', row.intro || 'Tap to see your friend requests', 'gc-friendreq-' + row.id, function () { openFriendReqPanel(); });
+notifyDesktop((row.sender_name || 'Someone') + ' wants to be friends', row.intro || 'Tap to see your friend requests', 'gc-friendreq-' + row.sender_id, function () { openFriendReqPanel(); }); // v176: the sender's id, the same tag the push carries
 addSys((row.sender_name || 'Someone') + ' sent you a friend request. 🤝' + (row.intro ? ' “' + row.intro + '”' : ''));
 updateFriendReqBadge(); renderFriendReqPanel();
 });
@@ -4139,6 +4347,78 @@ friendReqChannel.subscribe();
 }
 function unsubscribeFriendRequests() {
 if (friendReqChannel) { friendReqChannel.unsubscribe(); friendReqChannel = null; }
+}
+
+/* ---------- v175: waves and the newcomer's welcome (first_hour_feature.sql) ----------
+   Two small tables on realtime, on a channel of their own (never the room channel: a listened-to
+   table missing from the publication would stop every other listener there, the build 154 outage).
+     waves     "X waved at you 👋" -- one row per wave, only the two people involved can read it.
+               wave(p_target) does the throttling (one per person a day, twenty a day) and refuses
+               across a block, or from anyone banned or muted.
+     welcomes  one row the first time an account signs on with a name (welcome_newcomer() stamps
+               profiles.welcomed_at, so it can never repeat). Everyone signed in draws
+               "🎉 X just walked in -- say hi!" from the INSERT, with a wave button on the line. */
+var firstHourChannel = null, wavesSeen = {}, welcomesSeen = {};
+/* a system line that carries a button (addSys escapes everything on purpose; this one takes
+   ready-made HTML, so callers escape the names themselves) */
+function addSysHtml(html) {
+var d = document.createElement('div'); d.className = 'm sys';
+d.innerHTML = '<span class="t">' + fmt(Date.now()) + '</span>' + html;
+dayDivider(log, 'room', Date.now());
+log.appendChild(d); log.scrollTop = log.scrollHeight;
+}
+function waveBtnHtml(id, name, label) { return '<button type="button" class="sys-act" data-wave="' + esc(id) + '" data-name="' + esc(name) + '">👋 ' + esc(label || 'Wave') + '</button>'; }
+async function waveAt(id, name) {
+if (!me || !sb || id === me.id) return;
+var r = await sb.rpc('wave', { p_target: id });
+if (r.error) { addSys('Could not wave: ' + r.error.message); return; }
+var d = r.data || {};
+if (d.ok) { addSys('You waved at ' + name + ' 👋'); playSound('ding'); return; }
+var why = { already: 'You already waved at ' + name + ' today. One wave per person a day.', limit: 'That’s twenty waves today — enough hellos for one day.',
+blocked: 'You can’t wave at ' + name + '.', muted: 'You can’t wave right now.', unknown: name + ' isn’t around any more.', self: 'Waving at yourself, are we.' };
+addSys(why[d.reason] || 'Could not wave.');
+}
+function waveArrived(row) {
+if (!me || !row || row.to_id !== me.id || wavesSeen[row.id]) return;
+wavesSeen[row.id] = true;
+if (blocked[row.from_id]) return;
+var name = (people[row.from_id] && people[row.from_id].name) || row.from_name || 'Someone';
+addSysHtml('<b class="who" data-id="' + esc(row.from_id) + '" data-name="' + esc(name) + '" tabindex="0"><span class="nmt">' + esc(name) + '</span></b> waved at you 👋 ' + waveBtnHtml(row.from_id, name, 'Wave back'));
+playSound('ding');
+if (document.hidden) bumpTitle();
+notifyDesktop(name + ' waved at you 👋', 'Tap a name to wave back', 'gc-wave-' + row.from_id);
+}
+function welcomeArrived(row) {
+if (!me || !row || row.user_id === me.id || welcomesSeen[row.user_id]) return;
+welcomesSeen[row.user_id] = true;
+if (Date.now() - Date.parse(row.created_at) > 5 * 60000) return; // an old row, not an arrival
+var name = (people[row.user_id] && people[row.user_id].name) || row.name || 'Someone';
+addSysHtml('🎉 <b class="who" data-id="' + esc(row.user_id) + '" data-name="' + esc(name) + '" tabindex="0"><span class="nmt">' + esc(name) + '</span></b> just walked in — say hi! ' + waveBtnHtml(row.user_id, name, 'Wave'));
+}
+function subscribeFirstHour() {
+if (firstHourChannel || !sb || !me) return;
+firstHourChannel = sb.channel('firsthour-' + me.id)
+.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'waves', filter: 'to_id=eq.' + me.id }, function (p) { waveArrived(p.new); })
+.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'welcomes' }, function (p) { welcomeArrived(p.new); })
+.subscribe();
+}
+function unsubscribeFirstHour() {
+if (firstHourChannel) { try { sb.removeChannel(firstHourChannel); } catch (e) {} firstHourChannel = null; }
+wavesSeen = {}; welcomesSeen = {};
+}
+/* The newcomer's side: once per account the server says fresh, and this browser draws the two
+   local lines -- who is here right now (same region first) and one pointer at what to do. */
+async function welcomeNewcomer() {
+if (!me || !sb) return;
+var r = await sb.rpc('welcome_newcomer');
+if (r.error || !r.data || !r.data.fresh) return;
+var mine = me.region || '';
+var ids = Object.keys(people).filter(function (id) { return id !== me.id && !blocked[id]; })
+.sort(function (a, b) { var ra = (mine && regionOf(a) === mine) ? 0 : 1, rb = (mine && regionOf(b) === mine) ? 0 : 1; return ra - rb || people[a].name.localeCompare(people[b].name); });
+var names = ids.slice(0, 3).map(function (id) { return people[id].name; }), rest = ids.length - names.length;
+if (!ids.length) addSys('Nobody else is in just now. Quick seat in the Game Room opens a table for you, and the next person in will see you there.');
+else addSys('Here now: ' + (names.length > 1 ? names.slice(0, -1).join(', ') + (rest ? ', ' : ' and ') + names[names.length - 1] : names[0]) + (rest ? ' and ' + rest + ' other' + (rest === 1 ? '' : 's') : '') + (mine && regionOf(ids[0]) === mine ? ' (' + regionLabel(mine) + ' first)' : '') + '.');
+addSys('Tap a name to wave 👋, or hit Quick seat in the Game Room.');
 }
 /* Shared by sendFriendRequest and the "Add Friend" menu item -- finds the pending incoming
    request (if any) from a given sender, so both places can offer "Accept" instead of sending a
@@ -4359,6 +4639,7 @@ if (reportsBadge) reportsBadge.classList.add('hidden');
 unsubscribeBugReports();
 unsubscribeIdeas();
 unsubscribeFriendRequests();
+unsubscribeFirstHour(); // v175
 closeFriendReqPanel();
 incomingRequests = {}; outgoingPending = {};
 if (bugBtn) bugBtn.classList.add('hidden');
@@ -5078,7 +5359,9 @@ Object.keys(hdGames).forEach(function (k) { var g = hdGames[k]; if (g.status !==
 return { w: w, l: l, net: net };
 }
 function myXp() { return xpOfUser(me.id); }
-function xpOfUser(id) { var st = userStats[id]; return st ? (st.xp != null ? st.xp : (st.reactions_received || 0) + (st.game_points || 0)) : 0; }
+/* What the tables will let you bet: level XP plus the starter purse (v174, starter_purse_feature.sql
+   -- the server's hd_xp counts the same two). The purse never counts towards the level. */
+function xpOfUser(id) { var st = userStats[id]; return st ? (st.xp != null ? st.xp : (st.reactions_received || 0) + (st.game_points || 0)) + (st.bonus || 0) : 0; }
 function holdemStakesMenu(peerId, name) {
 var anchor = wins[peerId] && wins[peerId].el.querySelector('.icomp .games');
 if (!anchor) return;
@@ -5114,7 +5397,7 @@ triggerPush(peerId, me.name + ' wants to play Hold’em for ' + amt + ' XP', 'Op
 }
 /* XP moved in or out of a table: re-read my own row so the level badge follows. */
 async function refreshMyStats() {
-var r = await sb.from('user_stats').select('user_id, reactions_received, game_points, xp, level').eq('user_id', me.id).maybeSingle();
+var r = await sb.from('user_stats').select('user_id, reactions_received, game_points, xp, level, bonus').eq('user_id', me.id).maybeSingle();
 if (!r.error && r.data) { userStats[me.id] = r.data; refreshLevelBadges(me.id); }
 }
 function renderHdCard(g, opts) {
@@ -6279,9 +6562,9 @@ if (!(amt >= st.min && amt <= st.max)) { grNotice('Sit down with ' + st.min + ' 
 if (amt > have) { grNotice('You only have ' + have + ' XP.'); return null; }
 return amt;
 }
-async function grHdOpen(stakes) {
+async function grHdOpen(stakes, preset) {
 if (grBusy || !me) return;
-var amt = await grHdAskBuyIn(stakes, 'Open a Hold’em table');
+var amt = preset != null ? preset : await grHdAskBuyIn(stakes, 'Open a Hold’em table'); // v175: Quick seat picks the buy-in itself
 if (amt == null) return;
 grBusy = true;
 try {
@@ -6295,10 +6578,10 @@ grSys('Your table is open, and it has been announced in the main chat. Deal once
 if (typeof refreshMyStats === 'function') refreshMyStats();
 } finally { grBusy = false; renderGameRoom(); grMarkBtn(); }
 }
-async function grHdSit(tid) {
+async function grHdSit(tid, preset) {
 if (grBusy || !me) return;
 var t = grTables[tid]; if (!t) return;
-var amt = await grHdAskBuyIn(t.stakes || 'low', 'Sit down at ' + (t.host_name || 'this') + (t.host_name ? '’s' : '') + ' table');
+var amt = preset != null ? preset : await grHdAskBuyIn(t.stakes || 'low', 'Sit down at ' + (t.host_name || 'this') + (t.host_name ? '’s' : '') + ' table');
 if (amt == null) return;
 grBusy = true;
 try {
@@ -6329,6 +6612,53 @@ if (grMySeat && grMySeat.table_id === tid) grSys(players >= 4 ? 'All four player
 return;
 }
 await grSit(tid, t.status === 'open' && players < 4 ? 'player' : 'spectator');
+}
+/* v175: Quick seat -- one tap for someone with no friends and no idea where to go. Sits at the open
+   table with the most people waiting for a player; failing that at the newest table with a free
+   player seat (a Hold'em hand in play still takes a new player at the next deal); failing that it
+   opens a low-stakes Hold'em table. The Hold'em buy-in is min(the table's max, what they can cover),
+   and if they can't cover the table's minimum the table is skipped -- or, with nothing to sit at,
+   they're told. Everything goes through the same sit/open rpcs as the buttons; no money path of
+   its own. */
+function grQuickPick() {
+var have = myXp();
+function fits(t) {
+if (t.status === 'closed' || blocked[t.host_id] || grSeatsOf(t.id, 'player').length >= 4) return false;
+if (t.game === 'holdem') return have >= (HD_STAKES[t.stakes] || HD_STAKES.low).min;
+return t.status === 'open';
+}
+var all = Object.keys(grTables).map(function (k) { return grTables[k]; }).filter(fits);
+var waiting = all.filter(function (t) { return t.status === 'open' && grSeatsOf(t.id, 'player').length > 0; })
+.sort(function (a, b) { return grSeatsOf(b.id, 'player').length - grSeatsOf(a.id, 'player').length || b.id - a.id; });
+if (waiting.length) return waiting[0];
+all.sort(function (a, b) { return b.id - a.id; });
+return all[0] || null;
+}
+async function grQuickSeat() {
+if (grBusy || !me) return;
+if (grMySeat) { grNotice('You’re already at a table.'); return; }
+await loadGameRoom(); // the freshest list: Quick seat should never chase a table that just filled
+if (grMySeat) return;
+var t = grQuickPick(), have = myXp(), st;
+if (t && t.game === 'holdem') {
+st = HD_STAKES[t.stakes] || HD_STAKES.low;
+grNote = ''; await grHdSit(t.id, Math.max(st.min, Math.min(st.max, have)));
+if (grMySeat) grSys('Quick seat: you sat down at ' + (t.host_name || 'someone') + '’s table with ' + Math.max(st.min, Math.min(st.max, have)) + ' XP.');
+return;
+}
+if (t) {
+grNote = ''; await grSit(t.id, 'player');
+if (grMySeat) grSys('Quick seat: you sat down at ' + (t.host_name || 'someone') + '’s ' + grGame(t).name + ' table.');
+return;
+}
+st = HD_STAKES.low;
+if (have < st.min) {
+var skipped = Object.keys(grTables).some(function (k) { var x = grTables[k]; return x.game === 'holdem' && x.status !== 'closed' && grSeatsOf(x.id, 'player').length < 4; });
+grNotice('You need at least ' + st.min + ' XP to sit down at a Hold’em table (you have ' + have + ')' + (skipped ? ', so the open Hold’em tables are out of reach for now' : '') + '. Start a UNO table instead: it costs nothing, and winning pays XP.');
+return;
+}
+await grHdOpen('low', Math.min(st.max, have));
+if (grMySeat) grSys('Quick seat: nobody had a table going, so this low-stakes Hold’em table is yours. It’s announced in the main chat; deal once someone sits down.');
 }
 async function grDismissInvite(tid) {
 delete grInvites[tid]; dismissToasts('gtable-' + tid);
@@ -6426,6 +6756,7 @@ if (invs.length) html += '<div class="gr-invites">' + invs.map(function (v) {
 return '<div class="gr-invite"><span>✉ <b>' + esc(v.from_name || 'A friend') + '</b> invites you to their ' + esc(grGame(grTables[v.table_id]).name) + ' table.</span>'
 + '<span class="gr-btns"><button type="button" class="btn gr-join" data-t="' + v.table_id + '">Join</button><button type="button" class="btn gr-noinv" data-t="' + v.table_id + '">No thanks</button></span></div>';
 }).join('') + '</div>';
+html += '<div class="gr-quick"><button type="button" class="btn gr-quickseat">⚡ Quick seat</button><span class="gr-quick-s">Sit at the fullest open table — or open one if nobody’s playing.</span></div>'; // v175
 html += '<div class="gr-open"><div class="gr-open-hd">Start a table</div><div class="gr-open-row">'
 + '<button type="button" class="gr-newtable" data-game="uno"><span class="gr-nt-i">🃏</span><span class="gr-nt-n">UNO</span><span class="gr-nt-s">2–4 players · watchers welcome</span></button>'
 + '<button type="button" class="gr-newtable" data-game="holdem"><span class="gr-nt-i">♠</span><span class="gr-nt-n">Hold’em</span><span class="gr-nt-s">2–4 players · bet your XP · watchers welcome</span></button>'
@@ -6795,6 +7126,7 @@ if (b.classList.contains('who')) { if (b.dataset.id && b.dataset.id !== me.id) {
 if (b.disabled) return;
 var cl = b.classList;
 if (cl.contains('gr-newtable')) { if (b.dataset.game === 'holdem') { e.stopPropagation(); grHdStakesMenu(b); } else grOpenTable(b.dataset.game); }
+else if (cl.contains('gr-quickseat')) grQuickSeat(); // v175
 else if (cl.contains('gr-hdsit')) grHdSit(Number(b.dataset.t));
 else if (cl.contains('gr-sit')) grSit(Number(b.dataset.t), b.dataset.role);
 else if (cl.contains('gr-join')) grJoin(Number(b.dataset.t));
@@ -6937,7 +7269,7 @@ if (SFX[cmd]) { sendSfx(cmd, null, arg); return true; }
 switch (cmd) {
 case 'w': case 'whisper': return false; // handled by send()
 case 'whoami': addSys('You are ' + me.name + ' — id ' + me.id + (isAdmin ? ' (admin)' : '')); return true;
-case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. The ⚔ in a whisper challenges them to Tic-Tac-Toe (a win is worth 3 XP, a draw 1); the 🎲 menu has the games: Tic-Tac-Toe (3 XP a win), UNO (5), Hangman (3) and Texas Hold’em, where you bet real XP at a low (blinds 1/2) or high (2/5) stakes table. Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or your own name beside it to rename your character. The ⚡ in a whisper window sends a buzz. Sound commands (/slap, /kiss, /laugh, /cry, /spit, /fart, /gunshot … type /sounds for all of them) play for the whole room, or for just the two of you inside a whisper. Set a status message from your status pill. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
+case 'help': addSys('Commands: /w name msg · /nick newname · /block name · /unblock name · /blocks · /addfriend name · /removefriend name · /movegroup name group · /friends · /setbio text · /report name reason · /whoami' + (isAdmin ? ' · /kick name [reason] · /unban name · /bans · /mute name · /unmute name · /muted · /reports · /bugreports' : '') + '. Click a name in the chat log or Online list for options. The ⚔ in a whisper challenges them to Tic-Tac-Toe (a win is worth 3 XP, a draw 1); the 🎲 menu has the games: Tic-Tac-Toe (3 XP a win), UNO (5), Hangman (3) and Texas Hold’em, where you bet real XP at a low (blinds 1/2) or high (2/5) stakes table. Whispers are friends-only unless someone opens theirs to everyone ("Whispers" in the "..." menu); admins can always be reached. Tap 🚩 on a message to report that exact message. Click your status pill (bottom bar) to go Away/Busy, or "Change name" beside it to rename your character or pick your region. 👋 Wave on anyone’s name menu says hello without a friend request (one wave per person a day). Quick seat in the Game Room sits you at the fullest open table. The ⚡ in a whisper window sends a buzz. Sound commands (/slap, /kiss, /laugh, /cry, /spit, /fart, /gunshot … type /sounds for all of them) play for the whole room, or for just the two of you inside a whisper. Set a status message from your status pill. Found something broken? Use "Report a bug" in the "..." menu.'); return true;
 case 'gif': openGifPicker(rest ? m[2] + ' ' + rest : arg, 'main', gifBtn); return true;
 case 'sounds': addSys('Sound commands (everyone in the room hears them; in a whisper, just the two of you): ' + SFX_LIST.map(function (k) { return '/' + k; }).join(' · ') + '. Add a name to aim one: /slap Perry.'); return true;
 case 'block': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot block yourself.'); return true; } block(id, people[id].name); return true;
@@ -8934,6 +9266,7 @@ function unlockName() {
 lockedName = null;
 var sn = $('sn');
 sn.readOnly = false; sn.value = ''; sn.classList.remove('locked');
+if ($('snRegionRow')) $('snRegionRow').classList.remove('hidden');
 $('join').textContent = emailMode ? 'Sign in' : 'Enter the room';
 if ($('snNote')) $('snNote').classList.add('hidden');
 autoFocus(sn);
@@ -8959,6 +9292,7 @@ if (!n) return;
 lockedName = n;
 var sn = $('sn');
 sn.value = n; sn.readOnly = true; sn.classList.add('locked');
+if ($('snRegionRow')) $('snRegionRow').classList.add('hidden'); // v175: a returning character sets its region from its own name menu
 if (!emailMode) $('join').textContent = 'Enter as ' + n;
 if ($('snNote')) $('snNote').classList.remove('hidden');
 if (!remember) return; // the character is remembered, entering the room is not
@@ -9079,12 +9413,12 @@ adminToggle.textContent = emailMode ? 'Use a character name instead' : 'Sign in 
 if ($('nameFields')) $('nameFields').classList.toggle('hidden', emailMode);
 /* The invite key is only asked of the anonymous/character-name path -- an admin's email and
    password already prove who they are, so there's nothing for a key to gate here. */
-if (gateFields) gateFields.classList.toggle('hidden', emailMode);
-if ($('gateNote')) $('gateNote').classList.toggle('hidden', emailMode);
+if (gateFields) gateFields.classList.toggle('hidden', emailMode || !keyRequired());
+if ($('gateNote')) $('gateNote').classList.toggle('hidden', emailMode || !keyRequired());
 $('sn').readOnly = !emailMode && !!lockedName;
 if ($('snNote')) $('snNote').classList.toggle('hidden', emailMode || !lockedName);
 fail('');
-autoFocus(emailMode ? adminEmail : (accessCode && !accessCode.value ? accessCode : $('sn')));
+autoFocus(emailMode ? adminEmail : (keyRequired() && accessCode && !accessCode.value ? accessCode : $('sn')));
 };
 }
 /* Cloudflare Turnstile (join-screen human check): the widget calls these globally-named
@@ -9149,15 +9483,15 @@ if (!adminEmailVal || !adminPasswordVal) { fail('Enter your email and password.'
 // their credentials already prove who they are. A resumed session skips it too: the key (and
 // the Turnstile check just below) gate NEW entry, not an already-vetted device reconnecting --
 // see verify-join further down for the matching server-side half of that reasoning.
-keyCode = accessCode ? accessCode.value.trim() : '';
-if (!keyCode) { fail('Enter your invite key.'); return; }
+keyCode = keyRequired() && accessCode ? accessCode.value.trim() : '';
+if (!keyCode && keyRequired()) { fail('Enter your invite key.'); return; }
 if (window.turnstile && !turnstileToken) { fail('Please complete the verification check above.'); return; }
 }
 ensureAudioCtx(); // warm up audio on this user gesture so later sounds aren't blocked by autoplay policy
 $('join').disabled = true; setStatus(resuming ? 'Reconnecting...' : 'Signing on...');
 try {
 sb = sb || window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
-if (!emailMode && !resuming) {
+if (!emailMode && !resuming && keyRequired()) {
 var kv = await verifyAccessCode(keyCode);
 if (!kv || !kv.ok) {
 throw new Error(kv && kv.reason === 'revoked' ? 'This key has been revoked.' : kv && kv.reason === 'ip_locked' ? 'This key is already in use on another network.' : 'Invalid key.');
@@ -9200,7 +9534,10 @@ await sb.auth.refreshSession(); // updateUser() above doesn't rotate the JWT; re
    other device's -- can reclaim their own name immediately instead of hitting the 30-day-stale
    wait: see supabase/beta_key_name_reclaim.sql, which only allows the early release when both
    accounts were claimed with the same invite key. */
-var claim = await sb.rpc('claim_name', { p_name: n, p_key: keyCode || null });
+/* v175: the region picked on the sign-on screen goes with a fresh claim only; a resume or an
+   email sign-in sends none, and the server keeps whatever the profile already has. */
+var snRegion = $('snRegion'), regionPick = (!emailMode && !resuming && snRegion && regionLabel(snRegion.value)) ? snRegion.value : null;
+var claim = await sb.rpc('claim_name', { p_name: n, p_key: keyCode || null, p_region: regionPick });
 if (claim.error) throw claim.error;
 if (claim.data && claim.data.ok === false) {
 /* A pinned name can only fail here if it went stale (30 days away) and somebody else took it
@@ -9219,18 +9556,30 @@ if (!emailMode && !resuming) {
 // that already exists -- has already been through it once.
 try {
 var vj = await sb.functions.invoke('verify-join', { body: { turnstileToken: turnstileToken } });
+/* v177: the function answers its refusals with a 403, which supabase-js hands back as an error
+   whose context is the Response -- read the verdict out of it, or the checks below never see it. */
+if (!vj.data && vj.error && vj.error.context && typeof vj.error.context.json === 'function') {
+try { vj.data = await vj.error.context.json(); } catch (e) {}
+}
 if (vj.data && vj.data.ok === false && vj.data.reason === 'turnstile_failed') {
 throw new Error('Verification failed. Please reload the page and try again.');
 }
+/* v177: bans follow the network (supabase/ip_bans_feature.sql) -- verify-join has just banned this
+   new account because an active ban came from the same network. Nothing to retry. */
+if (vj.data && vj.data.ok === false && vj.data.reason === 'banned') {
+throw new Error('This network is banned from Gypsy Chat.');
+}
 } catch (vjErr) {
-if (vjErr && vjErr.message && vjErr.message.indexOf('Verification failed') === 0) throw vjErr;
+if (vjErr && vjErr.message && (vjErr.message.indexOf('Verification failed') === 0 || vjErr.message.indexOf('This network is banned') === 0)) throw vjErr;
 console.warn('verify-join check did not complete:', vjErr);
 }
 }
-me = { id: user.id, name: n, avatarUrl: null };
+me = { id: user.id, name: n, avatarUrl: null, region: (claim.data && claim.data.region) || '' };
 manualStatus = 'online'; myAwayMsg = ''; autoIdle = false; awayReplied = {};
-var myProf = await sb.from('profiles').select('avatar_url, whisper_policy, status_message').eq('user_id', me.id).maybeSingle();
+var myProf = await sb.from('profiles').select('avatar_url, whisper_policy, status_message, region').eq('user_id', me.id).maybeSingle();
 if (!myProf.error && myProf.data && myProf.data.avatar_url) me.avatarUrl = myProf.data.avatar_url;
+if (!myProf.error && myProf.data && myProf.data.region) me.region = myProf.data.region;
+try { if (me.region) localStorage.setItem('gc_region', me.region); } catch (e) {}
 myStatusMsg = (!myProf.error && myProf.data && myProf.data.status_message) || '';
 whisperPolicy = (!myProf.error && myProf.data && myProf.data.whisper_policy) || 'friends';
 whisperPolicyCache = {}; // a fresh sign-on shouldn't trust last session's lookups
@@ -9411,7 +9760,8 @@ var ban = await sb.from('bans').select('reason, expires_at').eq('user_id', me.id
 if (ban.data && (!ban.data.expires_at || new Date(ban.data.expires_at) > new Date())) { await channel.unsubscribe(); channel = null; throw new Error('You have been removed from this room.' + (ban.data.reason ? ' Reason: ' + ban.data.reason : '')); }
 await loadBlocks(); await loadAdmin(); await loadMyModeration(); await loadFriends(); await loadFriendRequests(); await loadDmReads(); await loadUserStats();
 subscribeFriendRequests();
-await channel.track({ name: n, status: 'online', awayMsg: '', statusMsg: myStatusMsg || '', avatarUrl: me.avatarUrl || '' });
+subscribeFirstHour(); // v175: waves, and newcomers walking in
+await channel.track({ name: n, status: 'online', awayMsg: '', statusMsg: myStatusMsg || '', avatarUrl: me.avatarUrl || '', region: me.region || '' });
 
 // history: recent room messages plus my recent whispers (RLS makes the server only return what I may see)
 var h = await sb.from('messages').select('*').eq('room', C.ROOM || 'main').order('created_at', { ascending: false }).limit(C.HISTORY || 200);
@@ -9466,6 +9816,7 @@ if ($('saveBtn')) $('saveBtn').classList.toggle('hidden', !isAnonAccount);
 if ($('logoutBtn')) $('logoutBtn').classList.remove('hidden');
 setSignedOnStatus();
 addSys('Welcome, ' + me.name + '. Tap a name for options, or type /help.');
+welcomeNewcomer(); // v175: the first time ever, the room hears about it and this browser gets "Here now".
 /* v128: the lobby intro plays on arrival, but not on every refresh -- once per half hour per device; the plain login sound covers the rest */
 var introAt = 0; try { introAt = +localStorage.getItem('gc_intro_at') || 0; } catch (e) {}
 if (Date.now() - introAt > 30 * 60000) { try { localStorage.setItem('gc_intro_at', String(Date.now())); } catch (e) {} playSound('intro'); } else playSound('signon');
@@ -9500,6 +9851,7 @@ if (!grTipSeen) { addSys('New: the Game Room. Open a table for UNO or Hold’em 
 resetIdle();
 startRecentPeopleHeartbeat();
 autoFocus(msg); // into the room: on a phone, no keyboard until they tap the composer
+routePendingNotification(); // v176: the notification that opened this page, now that there is somewhere to go
 } catch (e) {
 fail(e.message || String(e)); setStatus('Not signed on'); $('join').disabled = false; me = null; hideConnBar();
 if (window.turnstile) { try { turnstile.reset(); } catch (resetErr) {} }
@@ -9544,9 +9896,15 @@ return res.data || { ok: false, reason: 'invalid' };
 // been revoked.
 try {
 var storedCode = localStorage.getItem('gc_access_code');
-if (storedCode && accessCode) accessCode.value = storedCode;
+if (storedCode && accessCode && keyRequired()) accessCode.value = storedCode;
 } catch (e) {}
-autoFocus(accessCode && !accessCode.value ? accessCode : $('sn'));
+if (!keyRequired()) { if (gateFields) gateFields.classList.add('hidden'); if ($('gateNote')) $('gateNote').classList.add('hidden'); }
+/* v175: the optional region on the sign-on screen -- the fixed list, remembered on this device */
+if ($('snRegion')) {
+$('snRegion').innerHTML = '<option value="">— optional —</option>' + REGIONS.map(function (r) { return '<option value="' + r[0] + '">' + esc(r[1]) + '</option>'; }).join('');
+try { var storedRegion = localStorage.getItem('gc_region'); if (storedRegion && regionLabel(storedRegion)) $('snRegion').value = storedRegion; } catch (e) {}
+}
+autoFocus(keyRequired() && accessCode && !accessCode.value ? accessCode : $('sn'));
 
 /* ---------- PWA service worker ---------- */
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
@@ -9587,6 +9945,9 @@ if (updateBanner) updateBanner.classList.remove('hidden');
    instead of silently going stale until a future send fails against the dead one. */
 navigator.serviceWorker.addEventListener('message', function (e) {
 var d = e.data || {};
+/* v176: a click on a push notification, relayed by sw.js's notificationclick to this (now
+   focused) window. Before sign-on has finished it is kept and routed then (routeNotification). */
+if (d.type === 'NOTIFICATION_CLICK') { routeNotification(d.tag || ''); return; }
 if (d.type !== 'PUSH_SUBSCRIPTION_CHANGED' || !d.subscription || !sb || !me) return;
 var j = d.subscription;
 // v163: same save as subscribeToPush, for the same reason (see gc_save_push_subscription)
