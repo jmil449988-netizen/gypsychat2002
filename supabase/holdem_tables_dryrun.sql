@@ -72,7 +72,8 @@ begin
     insert into auth.users (id) values (P[i]);
     insert into public.profiles (user_id, name) values (P[i], 'zzHoldemTest' || i);
   end loop;
-  insert into public.user_stats (user_id, game_points) values (P[1], 100), (P[2], 30), (P[3], 30), (P[4], 30), (P[5], 3);
+  insert into public.user_stats (user_id, game_points) values (P[1], 100), (P[2], 30), (P[3], 30), (P[4], 30), (P[5], 3)
+    on conflict (user_id) do update set game_points = excluded.game_points, bonus = 0;  -- (the starter purse trigger made the rows; no purse here, so the XP sums below hold)
   w0 := pg_temp.world(P);
 
   ------------------------------------------------------------------ opening and sitting down: the escrow
