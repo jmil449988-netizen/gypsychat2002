@@ -58,7 +58,13 @@ end $f$;
 create function pg_temp.mute(p uuid) returns void language plpgsql security definer as $f$
 begin
   if to_regclass('public.chat_moderation') is not null then
-    execute 'insert into public.chat_moderation (user_id, muted) values ($1, true) on conflict (user_id) do update set muted = true' using p;
+    -- production's is_muted_or_cooling (disciplinary_actions_feature.sql) wants muted AND (muted_permanent or a
+    -- live muted_until); the older scaffold only has muted
+    if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'chat_moderation' and column_name = 'muted_permanent') then
+      execute 'insert into public.chat_moderation (user_id, muted, muted_permanent) values ($1, true, true) on conflict (user_id) do update set muted = true, muted_permanent = true' using p;
+    else
+      execute 'insert into public.chat_moderation (user_id, muted) values ($1, true) on conflict (user_id) do update set muted = true' using p;
+    end if;
   else
     execute 'insert into public.mutes (user_id) values ($1)' using p;
   end if;
