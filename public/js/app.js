@@ -94,7 +94,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 177;
+var BUILD_NUMBER = 178;
 /* v172: pixel-art icons (public/icons/ui-*.png, drawn at 4x their pixel grid so a browser only ever scales them
    down): a thread spool for Threads, a poker table for the Game Room (its page header and toasts too), a red
    Romani wagon wheel -- sixteen spokes, as on the flag -- for Roulette, which turns slowly, an envelope for
@@ -866,7 +866,7 @@ if (!jwt) return;
 return fetch(C.SUPABASE_URL + '/functions/v1/send-board-push', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt },
-body: JSON.stringify({ board: board, title: me.name + ' posted on ' + boardById(board).name, body: blurb, tag: 'gc-board-' + board })
+body: JSON.stringify({ board: board, thread: thread.id, title: me.name + ' posted on ' + boardById(board).name, body: blurb, tag: 'gc-board-' + board })
 });
 }).catch(function () {});
 }
@@ -7280,7 +7280,7 @@ case 'removefriend': id = Object.keys(friends).filter(function (k) { return (fri
 case 'movegroup': id = Object.keys(friends).filter(function (k) { return (friends[k].name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('You have not added a friend named ' + arg + '.'); return true; } moveFriendGroup(id, rest); return true;
 case 'friends': var fl = Object.keys(friends).map(function (k) { return friends[k].name + (people[k] ? ' (online)' : ' (offline)') + (friends[k].group ? ' [' + friends[k].group + ']' : ''); }); addSys(fl.length ? 'Friends: ' + fl.join(', ') : 'You have no friends added yet.'); return true;
 case 'nick': case 'name': await renameCharacter(rest ? (arg + ' ' + rest) : arg); return true;
-case 'setbio': case 'bio': var bioText = rest ? (arg + ' ' + rest) : arg; if (!bioText) { addSys('Usage: /setbio your text here'); return true; } var rb = await sb.from('profiles').upsert({ user_id: me.id, bio: sanitizeInput(bioText).slice(0, 300), updated_at: new Date().toISOString() }); if (rb.error) { addSys('Could not save your info: ' + rb.error.message); return true; } addSys('Your profile info has been updated.'); return true;
+case 'setbio': case 'bio': var bioText = rest ? (arg + ' ' + rest) : arg; if (!bioText) { addSys('Usage: /setbio your text here'); return true; } var rb = await sb.from('profiles').update({ bio: sanitizeInput(bioText).slice(0, 300), updated_at: new Date().toISOString() }).eq('user_id', me.id); if (rb.error) { addSys('Could not save your info: ' + rb.error.message); return true; } addSys('Your profile info has been updated.'); return true;
 case 'report': id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot report yourself.'); return true; } if (!rest) { addSys('Usage: /report name reason'); return true; } report(id, people[id].name, rest); return true;
 case 'kick': if (!isAdmin) { addSys('Only an admin may kick.'); return true; } id = findId(arg); if (!id) { addSys('No one here is named ' + arg + '.'); return true; } if (id === me.id) { addSys('You cannot kick yourself.'); return true; } kick(id, people[id].name, rest); return true;
 case 'unban': if (!isAdmin) { addSys('Only an admin may lift bans.'); return true; } id = Object.keys(bans).filter(function (k) { return (bans[k].banned_name || '').toLowerCase() === arg.toLowerCase(); })[0]; if (!id) { addSys('No ban found for ' + arg + '.'); return true; } unban(id, arg); return true;
@@ -7734,7 +7734,7 @@ var pub = sb.storage.from('avatars').getPublicUrl(path);
 var url = pub.data && pub.data.publicUrl;
 if (!url) { addSys('Profile picture upload failed.'); return; }
 url += '?v=' + Date.now();
-var rp = await sb.from('profiles').upsert({ user_id: me.id, avatar_url: url, updated_at: new Date().toISOString() });
+var rp = await sb.from('profiles').update({ avatar_url: url, updated_at: new Date().toISOString() }).eq('user_id', me.id);
 if (rp.error) { addSys('Could not save your profile picture: ' + rp.error.message); return; }
 me.avatarUrl = url;
 updateAvaBtn(); updateMyPresence(); renderPeople();
@@ -9617,9 +9617,20 @@ if (isAdmin && bans[p.key]) channel.send({ type: 'broadcast', event: 'kick', pay
 });
 channel.on('broadcast', { event: 'kick' }, function (p) {
 var k = p.payload || {};
-if (k.user_id === me.id) { kicked(k.reason); return; }
+/* v178: a broadcast is just a message any browser can send, so nothing here is taken on trust.
+   The one being kicked checks its own ban row (the admin's kick() wrote one; RLS lets a person
+   see their own) before leaving; everyone else only prints the line when the bans table says so
+   (only admins can read it, so for a regular viewer a fake kick is silent). */
+if (k.user_id === me.id) {
+sb.from('bans').select('user_id').eq('user_id', me.id).maybeSingle().then(function (r) { if (r.data) kicked(k.reason); });
+return;
+}
+if (!isAdmin) return;
+sb.from('bans').select('user_id').eq('user_id', k.user_id).maybeSingle().then(function (r) {
+if (!r.data) return;
 if (k.reason !== 'banned') addSys(k.name + ' was removed from the room by ' + k.by + '.');
 if (wins[k.user_id]) { wins[k.user_id].gone = true; imSys(k.user_id, k.name + ' was removed from the room.'); }
+});
 });
 channel.on('broadcast', { event: 'buzz' }, function (p) {
 var b = p.payload || {}; if (b.to !== me.id) return;
