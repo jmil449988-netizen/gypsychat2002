@@ -1272,3 +1272,24 @@ anonymous account creation is unlimited until Supabase's captcha for anonymous s
 the test only); app.js parses; the earlier client suites still pass. Not testable here: the push gate end
 to end (needs the functions deployed) — the SQL side is exercised by hand in the dry run's spirit once
 applied.
+
+## Build 179 — the player card (19 Sept 2026)
+
+Current state: **app.js 179, style.css 123, cache `gc2000-v210`.** No database change.
+
+The user: "revamp the context menu for users into more of a playercard from the original xbox. xp level
+region and bio all in one place." The name menu (Online list, Friends list, chat log, leaderboard, threads)
+now opens with a gamercard in the 360 style: a name bar with an Admin or Friend tag; a 64px avatar tile;
+beside it the level badge and XP total (plus the starter purse when there is one), a bar showing progress
+to the next level (level L runs from 3(L−1)² to 3L² XP), the region, and the status dot with the status or
+away message; under it the bio in a parchment box. The actions sit below in a two-column grid. The bio,
+and the region for anyone not in the room, arrive from `profiles` a moment after the card opens. "Get
+Info" is gone from the menu — the bio is on the card (the popup code stays for now, unused).
+
+Also: the region tag no longer sits on Online-list rows (it squeezed names to "AA.R…"; the card carries it).
+The user's own region was set to Canada by the earlier simulation and is left for them to clear from
+Change name → Region if they like.
+
+Rendered the card in Chromium from the real stylesheet (friend and admin variants, flames on the admin name
+intact); app.js parses; the build-175/176 client suites pass apart from two checks that asserted the old
+row tag and the old menu header.
