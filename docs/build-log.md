@@ -1293,3 +1293,23 @@ Change name → Region if they like.
 Rendered the card in Chromium from the real stylesheet (friend and admin variants, flames on the admin name
 intact); app.js parses; the build-175/176 client suites pass apart from two checks that asserted the old
 row tag and the old menu header.
+
+## Build 180 — keeping people signed in, on iPhone (19 Sept 2026)
+
+Current state: **app.js 180, style.css 123, cache `gc2000-v211`.** No database change.
+
+The user asked whether sign-ins could be "indefinite, so they get push notifications until they log out".
+Checked against the live Auth settings: they already are — time-box "never", inactivity timeout "never",
+single-session off; the push device row lives until Log out or the bell is switched off; the app re-saves
+the subscription on every open and on `pushsubscriptionchange`; the 30-minute idle disconnect leaves the
+room but keeps the session. What ends notifications is on the device, out of the server's reach: iPhone
+Safari purges a site's stored data (the login) after 7 days without a visit unless the site is installed
+to the Home Screen (exempt — and the only place iOS delivers web push at all); Android revokes permissions
+from apps unused for months; a push service can drop a subscription (already handled); each push has a
+12-hour TTL by design.
+
+So: a once-per-device line at sign-on on iPhone when the site is not installed — Safari forgets the site
+after 7 days away unless it's on the Home Screen (Share → Add to Home Screen), notifications only work
+from there, and, for an anonymous character, tap 🔑 to add an email so it can always be recovered. Shown
+again a month later if still not installed (`gc_install_tip`). The bell's own iOS message already covered
+the install step; this one reaches people before they lose an account to it.
