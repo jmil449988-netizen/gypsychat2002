@@ -5,7 +5,10 @@
 -- the stakes (hd_stakes) and the XP escrow (hd_xp / hd_credit). Decided with the user, 18 Sept 2026:
 --   * Chips are XP and change hands as a PURE TRANSFER: no daily cap on Hold'em (table_results rows for
 --     Hold'em carry game = 'holdem' and game_points_today only counts 'uno').
---   * Two missed turns in a row and you're out: your stack goes back to your XP and you leave the table.
+--   * Two missed turns in a row and you're out, and (build 173, the user's call after the first live test) your
+--     whole stack stays on the table: it goes into the pot of the hand being played, for whoever wins it.
+--     Nothing is destroyed and nothing goes to the house. Leaving, cashing out, busting, a quiet device and the
+--     table closing all still send your stack home.
 --   * Spectators watch and chat only.
 -- The same two stakes as the heads-up game, picked by whoever opens the table: LOW (blinds 1/2, sit down
 -- with 5-10 XP) and HIGH (blinds 2/5, 10-50 XP). Your buy-in leaves your XP when you take a player seat
@@ -175,29 +178,35 @@ language sql immutable set search_path = public as $$
 -- A player gives up their seat: their stack goes back to their XP and the result is written down.
 -- Anything they put in this hand stays in the pot. The seat's live-hand flags are cleared, so the hand
 -- carries on without them (callers fold them first, if they were still in it).
+-- 'idle' (two missed turns in a row, build 173) is the exception: the whole stack is forfeited into the
+-- hand's pot -- counted as that seat's contribution, so a showdown's side-pot arithmetic sees it and it
+-- reaches whoever wins the hand -- and the result records the loss of the whole buy-in.
 create or replace function public.ht_cashout(p_table bigint, p_seat integer, p_outcome text) returns void
 language plpgsql security definer set search_path = public as $$
-declare h public.holdem_tables; u uuid; amt int; net int; n int;
-  su uuid[]; sn text[]; st int[]; bi int[]; ih boolean[]; fo boolean[]; ac boolean[]; bt int[]; mi int[]; wo int[]; sh text[];
+declare h public.holdem_tables; u uuid; amt int; net int; n int; forfeit int := 0;
+  su uuid[]; sn text[]; st int[]; bi int[]; ih boolean[]; fo boolean[]; ac boolean[]; bt int[]; ct int[]; mi int[]; wo int[]; sh text[];
 begin
   select * into h from public.holdem_tables where table_id = p_table for update;
   u := h.seat_user[p_seat];
   if u is null then return; end if;
-  amt := h.stack[p_seat]; net := amt - h.buy_in[p_seat];
+  amt := h.stack[p_seat];
+  if p_outcome = 'idle' and h.street in ('preflop', 'flop', 'turn', 'river') then forfeit := amt; amt := 0; end if;
+  net := amt - h.buy_in[p_seat];
   n := public.ht_count(h, 'funded');
   if amt > 0 then perform public.hd_credit(u, amt); end if;
   insert into public.table_results (table_id, round, game, user_id, place, players, outcome, points)
     values (p_table, h.cashouts + 1, 'holdem', u, 0, greatest(n, 1), p_outcome, net);
   su := h.seat_user; sn := h.seat_name; st := h.stack; bi := h.buy_in; ih := h.in_hand; fo := h.folded; ac := h.acted;
-  bt := h.bet; mi := h.missed; wo := h.won; sh := h.shown;
+  bt := h.bet; ct := h.contrib; mi := h.missed; wo := h.won; sh := h.shown;
   su[p_seat] := null; sn[p_seat] := null; st[p_seat] := 0; bi[p_seat] := 0; ac[p_seat] := false; mi[p_seat] := 0; wo[p_seat] := 0; sh[p_seat] := null;
+  ct[p_seat] := ct[p_seat] + forfeit;
   if h.in_hand[p_seat] and h.street in ('preflop', 'flop', 'turn', 'river') then
     fo[p_seat] := true;                         -- out of the hand; their chips stay in the middle
   else
     ih[p_seat] := false; fo[p_seat] := false;
   end if;
   update public.holdem_tables set seat_user = su, seat_name = sn, stack = st, buy_in = bi, in_hand = ih, folded = fo, acted = ac,
-    pot = pot + bt[p_seat], bet[p_seat] = 0, missed = mi, won = wo, shown = sh, cashouts = cashouts + 1,
+    pot = pot + bt[p_seat] + forfeit, bet[p_seat] = 0, contrib = ct, missed = mi, won = wo, shown = sh, cashouts = cashouts + 1,
     turn = case when turn = p_seat then null else turn end, updated_at = now()
   where table_id = p_table;
 end $$;
@@ -415,7 +424,7 @@ begin
   was_turn := h.turn = p_seat; t_now := h.turn;
   perform public.ht_cashout(p_table, p_seat, p_outcome);
   if live then
-    update public.holdem_tables set last_action = coalesce(h.seat_name[p_seat], 'Someone') || case when p_outcome = 'idle' then ' missed two turns in a row and is out' else ' folds and leaves the table' end
+    update public.holdem_tables set last_action = coalesce(h.seat_name[p_seat], 'Someone') || case when p_outcome = 'idle' then ' missed two turns in a row and is out: their chips stay in the pot' else ' folds and leaves the table' end
       where table_id = p_table;
     -- carry on: from their seat if it was their turn, otherwise leave the turn where it was
     perform public.ht_advance(p_table, case when was_turn or t_now is null then p_seat else ((t_now + 2) % 4) + 1 end);
@@ -807,7 +816,7 @@ begin
     ac := h.acted; fo := h.folded; ac[i] := true;
     if not can_check then fo[i] := true; end if;
     update public.holdem_tables set missed = mi, acted = ac, folded = fo,
-      last_action = whom || ' ran out of time and ' || case when can_check then 'checks' else 'folds' end || '. One more missed turn and they''re out.',
+      last_action = whom || ' ran out of time and ' || case when can_check then 'checks' else 'folds' end || '. One more missed turn and they''re out, chips and all.',
       updated_at = now() where table_id = p_table;
     perform public.ht_advance(p_table, i);
   end if;

@@ -273,13 +273,14 @@ begin
   reset role;
   update public.holdem_tables set turn = i, turn_started_at = now() - interval '40 seconds' where table_id = tid;
   h := pg_temp.h(tid);
-  x0 := pg_temp.xp(h.seat_user[i]) + h.stack[i];
+  x0 := pg_temp.xp(h.seat_user[i]); x1 := h.stack[i]; n := h.pot + h.bet[1] + h.bet[2] + h.bet[3] + h.bet[4] + x1; s := 'idle:' || (-h.buy_in[i])::text;
   set local role authenticated;
   f := h.seat_user[i];
   h := public.holdem_table_timeout(tid);
-  perform pg_temp.ck('36 second miss in a row: out, stack back to XP, off the table', h.seat_user[i] is null
+  perform pg_temp.ck('36 second miss in a row: out, off the table, the whole stack forfeited into the pot', h.seat_user[i] is null
     and not exists (select 1 from public.table_seats where table_id = tid and user_id = f::uuid) and pg_temp.xp(f::uuid) = x0
-    and pg_temp.res(tid, f::uuid) like 'idle:%', format('seat %s xp %s want %s result %s', h.seat_user, pg_temp.xp(f::uuid), x0, pg_temp.res(tid, f::uuid)));
+    and (h.street = 'between' or h.pot + h.bet[1] + h.bet[2] + h.bet[3] + h.bet[4] = n)
+    and pg_temp.res(tid, f::uuid) = s, format('seat %s xp %s want %s pot %s want %s result %s', h.seat_user, pg_temp.xp(f::uuid), x0, h.pot, n, pg_temp.res(tid, f::uuid)));
   perform pg_temp.ck('37 XP conserved through the idle rule', pg_temp.world(P) = w0, format('%s vs %s', pg_temp.world(P), w0));
   -- whoever is left: a new hand, then someone leaves mid-hand, then the table closes mid-hand
   reset role;
