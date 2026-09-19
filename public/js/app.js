@@ -94,7 +94,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 178;
+var BUILD_NUMBER = 179;
 /* v172: pixel-art icons (public/icons/ui-*.png, drawn at 4x their pixel grid so a browser only ever scales them
    down): a thread spool for Threads, a poker table for the Game Room (its page header and toasts too), a red
    Romani wagon wheel -- sixteen spokes, as on the flag -- for Roulette, which turns slowly, an envelope for
@@ -2306,7 +2306,7 @@ if (isAdminId(id)) classes.push('admin');
 if (showStatus) classes.push('st-' + status);
 var tag = showStatus ? ' <span class="stag">(' + status + ')</span>' : '';
 var title = (status === 'away' && p.awayMsg) ? ' title="' + esc(p.awayMsg) + '"' : '';
-return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + '<span class="nmt">' + esc(p.name) + '</span>' + levelBadgeHtml(id) + regionTagHtml(id) + tag + '</div>';
+return '<div class="' + classes.join(' ').trim() + '" tabindex="' + (isSelf ? -1 : 0) + '" data-id="' + esc(id) + '"' + title + '>' + avatarHtml(id, p.name) + '<span class="nmt">' + esc(p.name) + '</span>' + levelBadgeHtml(id) + tag + '</div>';  // v179: the region moved onto the player card; a tag here squeezed the name
 }).join('');
 /* The online count used to live in the icon-heavy status bar up top; it now lives in the main
    chat's own footer line (directly below that bar), alongside the watermark -- threads and
@@ -3629,6 +3629,39 @@ function tagInChat(name) {
   msg.focus();
   msg.selectionStart = msg.selectionEnd = newPos;
 }
+function playerCardHtml(id, name) {
+var s = userStats[id], lvl = s ? s.level : 1, xp = s ? xpOf(s) : 0;
+var lo = 3 * (lvl - 1) * (lvl - 1), hi = 3 * lvl * lvl, pct = Math.max(0, Math.min(100, Math.round((xp - lo) / (hi - lo) * 100)));
+var p = people[id], rec = recentPeopleEntries()[id];
+var st = p ? (p.status || 'online') : 'offline';
+var stLabel = { online: 'Online', away: 'Away', busy: 'Busy', idle: 'Idle', offline: (rec ? 'Just left' : (friends[id] ? 'Offline' : 'Not here')) }[st] || st;
+var stMsg = p ? (st === 'away' && p.awayMsg ? p.awayMsg : (p.statusMsg || '')) : '';
+var purse = s && s.bonus > 0 ? ' <span class="pc-purse" title="Starter purse: table money, not level XP">+' + s.bonus + '</span>' : '';
+return '<div class="pcard' + (isAdminId(id) ? ' admin' : '') + '" data-for="' + esc(id) + '">' +
+'<div class="pc-name hd"><span class="hd-name' + (isAdminId(id) ? ' admin' : '') + '"><span class="nmt">' + esc(name) + '</span></span>' + (isAdminId(id) ? '<span class="pc-role">Admin</span>' : (friends[id] ? '<span class="pc-role friend">Friend</span>' : '')) + '</div>' +
+'<div class="pc-row">' + avatarHtml(id, name, 'ava-card') +
+'<div class="pc-lines">' +
+'<div class="pc-line pc-xp">' + levelBadgeHtml(id) + '<span class="pc-xpn">' + xp.toLocaleString() + ' XP' + purse + '</span></div>' +
+'<div class="pc-bar" title="' + (s ? esc(xpToNext(s) + ' XP to level ' + (lvl + 1)) : '') + '"><i style="width:' + pct + '%"></i></div>' +
+'<div class="pc-line pc-region" data-pc="region">' + (regionLabel(regionOf(id)) ? '🌍 ' + esc(regionLabel(regionOf(id))) : '<span class="pc-dim">🌍 No region</span>') + '</div>' +
+'<div class="pc-line pc-status st-' + esc(st) + '"><i class="pc-dot"></i>' + esc(stLabel) + (stMsg ? ' <span class="pc-stmsg">— ' + esc(stMsg) + '</span>' : '') + '</div>' +
+'</div></div>' +
+'<div class="pc-bio" data-pc="bio"><span class="pc-dim">…</span></div>' +
+'</div>';
+}
+/* the profile fields the card can't know from presence alone (bio always; region for people not in
+   the room; the status line for offline friends) */
+async function fillPlayerCard(id) {
+if (!sb) return;
+var r = await sb.from('profiles').select('bio, region, status_message').eq('user_id', id).maybeSingle();
+var card = menu.querySelector('.pcard'); if (!card || card.dataset.for !== id) return;
+var d = (!r.error && r.data) || {};
+var bioEl = card.querySelector('[data-pc="bio"]');
+if (bioEl) { if (d.bio) { bioEl.textContent = d.bio; bioEl.classList.remove('empty'); } else { bioEl.innerHTML = '<span class="pc-dim">No profile info set.</span>'; bioEl.classList.add('empty'); } }
+var regEl = card.querySelector('[data-pc="region"]');
+if (regEl && !regionOf(id) && d.region && regionLabel(d.region)) regEl.innerHTML = '🌍 ' + esc(regionLabel(d.region));
+if (!people[id] && d.status_message) { var stEl = card.querySelector('.pc-status'); if (stEl && !stEl.querySelector('.pc-stmsg')) stEl.insertAdjacentHTML('beforeend', ' <span class="pc-stmsg">— ' + esc(d.status_message) + '</span>'); }
+}
 function openMenu(id, anchor, fallbackName) {
 var online = !!people[id];
 /* Reachable (can still receive a whisper) is a wider set than online (live in the room right now)
@@ -3638,7 +3671,6 @@ var recent = recentPeopleEntries()[id];
 var reachable = online || !!recent;
 var name = (online && people[id].name) || (recent && recent.name) || (friends[id] && friends[id].name) || fallbackName; if (!name) return;
 var items = [];
-items.push(['Get Info', function () { showInfo(id, name); }]);
 /* Whisper goes through tryWhisper: friends (and admins) open straight away; anyone else is
    offered a friend request instead, unless that person has opened their whispers to everyone. */
 if (reachable && !blocked[id]) items.push(['Whisper', function () { tryWhisper(id, name, true); }]);
@@ -3663,7 +3695,12 @@ if (friends[id]) items.push(['Move to Group', async function () { var g = await 
 if (isAdmin && mutedUsers[id]) items.push(['Unmute', function () { unmute(id, name); }]);
 if (isAdmin && !mutedUsers[id]) items.push(['Mute', function () { muteUser(id, name); }, 'danger']);
 if (isAdmin) items.push(['Kick', function () { var r = prompt('Reason for kicking ' + name + '? (optional)'); if (r !== null) kick(id, name, r); }, 'danger']);
-menu.innerHTML = '<div class="hd">' + avatarHtml(id, name, 'ava-menu') + '<span class="hd-name' + (isAdminId(id) ? ' admin' : '') + '">' + esc(name) + '</span>' + levelBadgeHtml(id) + regionTagHtml(id) + '</div>' + items.map(function (it, i) { return '<button type="button" role="menuitem" class="' + (it[2] || '') + '" data-i="' + i + '">' + it[0] + '</button>'; }).join('');
+/* v179: the player card -- the old Get Info popup, level badge, region tag and status folded into
+   one Xbox-360-style gamercard at the top of the menu (avatar, name, XP with the bar to the next
+   level, region, status, bio), with the actions in a two-column grid under it. The bio and, for
+   people not in the room, the region come from profiles a moment later. */
+menu.innerHTML = playerCardHtml(id, name) + '<div class="acts">' + items.map(function (it, i) { return '<button type="button" role="menuitem" data-i="' + i + '"' + (it[2] ? ' class="' + it[2] + '"' : '') + '>' + esc(it[0]) + '</button>'; }).join('') + '</div>';
+fillPlayerCard(id);
 menu.querySelectorAll('button').forEach(function (b) { b.onclick = function () { closeMenu(); items[+b.dataset.i][1](); }; });
 menu.classList.add('open');
 var r = anchor.getBoundingClientRect();
