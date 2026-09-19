@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/style.css?v=121">
+<link rel="stylesheet" href="./css/style.css?v=122">
 </head>
 <body>
 <div class="gc-root">
@@ -63,6 +63,8 @@
 <div id="nameFields">
 <label for="sn">Character name</label>
 <input id="sn" class="sunk" maxlength="16" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="e.g. xXsk8rXx">
+<div id="snRegionRow"><label for="snRegion">Region</label>
+<select id="snRegion" class="sunk" aria-label="Region (optional)"><option value="">— optional —</option></select></div>
 <div class="sn-note hidden" id="snNote">This device already has a character — you can rename it once you're in. <button type="button" class="sn-reset" id="snReset">Start over as someone new</button></div>
 </div>
 <div class="admin-fields hidden" id="adminFields">
@@ -509,7 +511,7 @@
      HEIC itself in an <img>/<canvas>, so without this, photos straight from an iPhone camera roll
      (when the OS hands them over unconverted) fail to upload as profile pictures or image posts. -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
-<script src="./js/appconfig.js?v=2"></script>
-<script src="./js/app.js?v=173"></script>
+<script src="./js/appconfig.js?v=3"></script>
+<script src="./js/app.js?v=177"></script>
 </body>
 </html>

@@ -3,8 +3,8 @@ Chat itself always needs a connection; this only makes the UI load offline.
 v2: bumped the cache name and hardened the fetch/install paths to bypass the HTTP cache — iOS
 Safari in particular can hold onto an old app.js/index.html far more stubbornly than desktop
 Chrome, which silently ran stale code (missing new features) even though the deploy succeeded. */
-var CACHE = 'gc2000-v204';
-var SHELL = ['./', './index.html', './css/style.css?v=121', './js/appconfig.js?v=2', './js/app.js?v=173', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png', './icons/ui-spool.png', './icons/ui-table.png', './icons/ui-wheel.png', './icons/ui-envelope.png', './icons/ui-bulb.png', './sounds/airhorn.mp3', './sounds/badum.mp3', './sounds/boo.mp3', './sounds/burp.mp3', './sounds/cheers.mp3', './sounds/clap.mp3', './sounds/crickets.mp3', './sounds/cry.mp3', './sounds/friend-logon.mp3', './sounds/gunshot.mp3', './sounds/howl.mp3', './sounds/kiss.mp3', './sounds/knock.mp3', './sounds/laugh.mp3', './sounds/slap.mp3', './sounds/sneeze.mp3', './sounds/login.mp3', './sounds/pm.mp3', './sounds/friend-request.mp3', './sounds/game-invite.mp3', './sounds/spit.mp3', './sounds/fart.mp3', './sounds/drumroll.mp3', './sounds/ding.mp3', './sounds/buzz.mp3', './sounds/turn.mp3', './sounds/tick.mp3', './sounds/tock.mp3', './sounds/coin.mp3', './sounds/win.mp3', './sounds/lose.mp3', './sounds/hm-right.mp3', './sounds/hm-wrong.mp3', './sounds/levelup.mp3', './sounds/intro.mp3', './sounds/logout.mp3', './sounds/signoff.mp3', './sounds/unroll.mp3', './sounds/wheel.mp3', './sounds/card.mp3', './sounds/chips.mp3', './sounds/trapdoor.mp3', './sounds/fortune.mp3', './sounds/send.mp3', './sounds/recv.mp3', './sounds/bell.mp3'];
+var CACHE = 'gc2000-v208';
+var SHELL = ['./', './index.html', './css/style.css?v=122', './js/appconfig.js?v=3', './js/app.js?v=177', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png', './icons/ui-spool.png', './icons/ui-table.png', './icons/ui-wheel.png', './icons/ui-envelope.png', './icons/ui-bulb.png', './sounds/airhorn.mp3', './sounds/badum.mp3', './sounds/boo.mp3', './sounds/burp.mp3', './sounds/cheers.mp3', './sounds/clap.mp3', './sounds/crickets.mp3', './sounds/cry.mp3', './sounds/friend-logon.mp3', './sounds/gunshot.mp3', './sounds/howl.mp3', './sounds/kiss.mp3', './sounds/knock.mp3', './sounds/laugh.mp3', './sounds/slap.mp3', './sounds/sneeze.mp3', './sounds/login.mp3', './sounds/pm.mp3', './sounds/friend-request.mp3', './sounds/game-invite.mp3', './sounds/spit.mp3', './sounds/fart.mp3', './sounds/drumroll.mp3', './sounds/ding.mp3', './sounds/buzz.mp3', './sounds/turn.mp3', './sounds/tick.mp3', './sounds/tock.mp3', './sounds/coin.mp3', './sounds/win.mp3', './sounds/lose.mp3', './sounds/hm-right.mp3', './sounds/hm-wrong.mp3', './sounds/levelup.mp3', './sounds/intro.mp3', './sounds/logout.mp3', './sounds/signoff.mp3', './sounds/unroll.mp3', './sounds/wheel.mp3', './sounds/card.mp3', './sounds/chips.mp3', './sounds/trapdoor.mp3', './sounds/fortune.mp3', './sounds/send.mp3', './sounds/recv.mp3', './sounds/bell.mp3'];
 self.addEventListener('install', function (e) {
 e.waitUntil(
 caches.open(CACHE).then(function (c) {
@@ -73,13 +73,27 @@ data: { url: url }
 );
 });
 /* Clicking the OS notification should jump straight into the app -- reuse an already-open tab if
-   there is one (so it doesn't spawn a duplicate), otherwise open a fresh one. */
+   there is one (so it doesn't spawn a duplicate), otherwise open a fresh one.
+   v207 (build 176): and land on the right thing. The tag says what the notification was about
+   (gc-whisper-<sender>, gc-group-<id>, gc-hd-<game>, gc-mention, ...; the list is in app.js,
+   routeNotification). An open window gets it as a message once it has focus, and app.js opens
+   the whisper, group, card or board. With no window open, the tag rides in the URL hash
+   (./#n=<tag>): app.js reads it at load, takes it off the address bar, and routes it once
+   sign-on has finished. A hash, not a query string, so the request is the same './' the
+   shell cache already holds. Windows that are only prerendering or already closing (no
+   focus()) are skipped; the first that can be focused wins, the way it did before. */
 self.addEventListener('notificationclick', function (e) {
 e.notification.close();
+var tag = (e.notification.tag && e.notification.tag !== 'gc-push') ? e.notification.tag : '';
 var url = (e.notification.data && e.notification.data.url) || './';
+if (tag) url = url.split('#')[0] + '#n=' + tag;
 e.waitUntil(
 self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
-for (var i = 0; i < list.length; i++) { if ('focus' in list[i]) return list[i].focus(); }
+for (var i = 0; i < list.length; i++) {
+if (!('focus' in list[i])) continue;
+var c = list[i];
+return Promise.resolve(c.focus()).then(function (fc) { (fc || c).postMessage({ type: 'NOTIFICATION_CLICK', tag: tag }); }, function () { c.postMessage({ type: 'NOTIFICATION_CLICK', tag: tag }); });
+}
 if (self.clients.openWindow) return self.clients.openWindow(url);
 })
 );
