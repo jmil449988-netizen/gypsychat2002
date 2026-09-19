@@ -94,7 +94,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 179;
+var BUILD_NUMBER = 180;
 /* v172: pixel-art icons (public/icons/ui-*.png, drawn at 4x their pixel grid so a browser only ever scales them
    down): a thread spool for Threads, a poker table for the Game Room (its page header and toasts too), a red
    Romani wagon wheel -- sixteen spokes, as on the flag -- for Roulette, which turns slowly, an envelope for
@@ -9875,6 +9875,20 @@ setTimeout(startTour, 1500);
 var whisperTipSeen = false; try { whisperTipSeen = localStorage.getItem('gc_whisper_tip') === '1'; } catch (e) {}
 if (!whisperTipSeen) { addSys('New: whispers are friends-only. Anyone can still send you a friend request (with a hello attached), and you can open your whispers to everyone under ⋯ → Whispers.'); try { localStorage.setItem('gc_whisper_tip', '1'); } catch (e) {} }
 if (isAnonAccount) addSys('Heads up: ' + me.name + ' and your friends list are saved in this browser only. Tap the 🔑 below to add an email and keep them on any device.');
+/* v180: iPhone Safari purges a site's stored data -- the login, and with it an anonymous character --
+   after 7 days without a visit, unless the site is installed to the Home Screen (installed web apps
+   are exempt, and iOS only delivers push to those anyway). Say so once per device, and again a
+   month later if it still isn't installed. Nothing server-side can reach this; the sessions
+   themselves never expire (Auth: time-box and inactivity are both "never"). */
+try {
+if (isIOSDevice() && !isStandaloneDisplay()) {
+var tipAt = +localStorage.getItem('gc_install_tip') || 0;
+if (Date.now() - tipAt > 30 * 24 * 3600 * 1000) {
+localStorage.setItem('gc_install_tip', String(Date.now()));
+addSys('📱 iPhone tip: Safari forgets this site — your sign-in included — after 7 days away, unless Gypsy Chat is on your Home Screen (Share → Add to Home Screen). Notifications only work from there too.' + (isAnonAccount ? ' And tap the 🔑 to add an email, so ' + me.name + ' can always be recovered.' : ''));
+}
+}
+} catch (e) {}
 if (threadsPanel) {
 threadsPanel.classList.add('ready');
 renderBoards(); renderTags(); fillNewSelects(); loadMySubs();
