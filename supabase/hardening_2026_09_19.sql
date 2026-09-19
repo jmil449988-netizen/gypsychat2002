@@ -35,8 +35,12 @@
 --   6. Trigger functions were executable by anon/public (harmless -- PostgREST refuses to call a
 --      function that returns trigger -- but tidy): revoked.
 --
--- Two more findings live outside SQL: the send-push / send-board-push edge functions accept any
--- target and any text from any signed-in caller (fixed in supabase/functions/*, to be deployed), and
+--   7. The send-push / send-board-push edge functions accepted any target and any text from any
+--      signed-in caller: an untraceable channel for spam or a fake "you've been banned, go to ..." to
+--      anyone. push_gate() / board_push_gate() (service role only) now decide, and the functions in
+--      supabase/functions/* ask them (to be deployed from the dashboard).
+--
+-- One more finding lives outside SQL:
 -- the 'kick' broadcast is trusted by every browser (fixed in build 178, the client checks its own
 -- ban row before leaving). See docs/build-log.md, build 178.
 --
@@ -173,5 +177,70 @@ begin
     execute format('revoke execute on function %s from public, anon, authenticated', f);
   end loop;
 end $$;
+
+-- 7. the push gate --------------------------------------------------------------------------------------
+-- send-push used to deliver any title and text to any account for any signed-in caller. Now the
+-- function asks this first (service role only): a push may go from A to B when B has not blocked A,
+-- A is not banned or muted, and the two have some standing -- B takes whispers from A, they share a
+-- live game or a table, A has a pending friend request to B, or they share a group -- and A has sent
+-- fewer than 60 pushes in the last hour and none to B in the last 3 seconds. Answers 'ok' or the
+-- reason, and records the send.
+create table if not exists public.push_log (
+  id         bigint generated always as identity primary key,
+  sender_id  uuid not null,
+  target_id  uuid not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists push_log_sender on public.push_log (sender_id, created_at desc);
+alter table public.push_log enable row level security;
+revoke all on public.push_log from public, anon, authenticated;
+
+create or replace function public.push_gate(p_from uuid, p_to uuid) returns text
+language plpgsql security definer set search_path = public as $$
+declare standing boolean;
+begin
+  if p_from is null or p_to is null or p_from = p_to then return 'bad_request'; end if;
+  if public.is_banned(p_from) or public.is_muted_or_cooling(p_from) then return 'muted'; end if;
+  if public.has_blocked(p_to, p_from) or public.has_blocked(p_from, p_to) then return 'blocked'; end if;
+  if (select count(*) from public.push_log where sender_id = p_from and created_at > now() - interval '1 hour') >= 60 then return 'limit'; end if;
+  if exists (select 1 from public.push_log where sender_id = p_from and target_id = p_to and created_at > now() - interval '3 seconds') then return 'too_fast'; end if;
+  standing := public.can_whisper(p_from, p_to)
+    or exists (select 1 from public.friend_requests where sender_id = p_from and recipient_id = p_to and status = 'pending')
+    or exists (select 1 from public.conversation_members a join public.conversation_members b on b.conversation_id = a.conversation_id
+                where a.user_id = p_from and b.user_id = p_to and a.left_at is null and b.left_at is null)
+    or exists (select 1 from public.table_seats a join public.table_seats b on b.table_id = a.table_id where a.user_id = p_from and b.user_id = p_to)
+    or exists (select 1 from public.table_invites where from_id = p_from and user_id = p_to)
+    or exists (select 1 from public.games g where g.status in ('pending', 'active') and ((g.challenger_id = p_from and g.opponent_id = p_to) or (g.challenger_id = p_to and g.opponent_id = p_from)))
+    or exists (select 1 from public.uno_games g where g.status in ('pending', 'active') and ((g.challenger_id = p_from and g.opponent_id = p_to) or (g.challenger_id = p_to and g.opponent_id = p_from)))
+    or exists (select 1 from public.hangman_games g where g.status in ('pending', 'active') and ((g.challenger_id = p_from and g.opponent_id = p_to) or (g.challenger_id = p_to and g.opponent_id = p_from)))
+    or exists (select 1 from public.holdem_games g where g.status in ('pending', 'active') and ((g.challenger_id = p_from and g.opponent_id = p_to) or (g.challenger_id = p_to and g.opponent_id = p_from)))
+    or exists (select 1 from public.prasta_games g where g.status in ('pending', 'active') and ((g.challenger_id = p_from and g.opponent_id = p_to) or (g.challenger_id = p_to and g.opponent_id = p_from)))
+    or exists (select 1 from public.battleship_games g where g.status in ('pending', 'active') and ((g.challenger_id = p_from and g.opponent_id = p_to) or (g.challenger_id = p_to and g.opponent_id = p_from)));
+  if not standing then return 'no_standing'; end if;
+  delete from public.push_log where created_at < now() - interval '2 hours';        -- housekeeping, no scheduler
+  insert into public.push_log (sender_id, target_id) values (p_from, p_to);
+  return 'ok';
+end $$;
+revoke execute on function public.push_gate(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.push_gate(uuid, uuid) to service_role;
+
+-- and the board push: only for a thread the caller really just posted, once per thread, one a minute
+create table if not exists public.board_push_log (thread_id bigint primary key, sender_id uuid not null, created_at timestamptz not null default now());
+alter table public.board_push_log enable row level security;
+revoke all on public.board_push_log from public, anon, authenticated;
+create or replace function public.board_push_gate(p_from uuid, p_thread bigint, p_board text) returns text
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_from is null or p_thread is null then return 'bad_request'; end if;
+  if public.is_banned(p_from) or public.is_muted_or_cooling(p_from) then return 'muted'; end if;
+  if not exists (select 1 from public.threads t where t.id = p_thread and t.op_id = p_from and t.board = p_board and t.created_at > now() - interval '5 minutes') then return 'no_thread'; end if;
+  if exists (select 1 from public.board_push_log where thread_id = p_thread) then return 'already'; end if;
+  if exists (select 1 from public.board_push_log where sender_id = p_from and created_at > now() - interval '1 minute') then return 'too_fast'; end if;
+  delete from public.board_push_log where created_at < now() - interval '1 day';
+  insert into public.board_push_log (thread_id, sender_id) values (p_thread, p_from);
+  return 'ok';
+end $$;
+revoke execute on function public.board_push_gate(uuid, bigint, text) from public, anon, authenticated;
+grant execute on function public.board_push_gate(uuid, bigint, text) to service_role;
 
 notify pgrst, 'reload schema';

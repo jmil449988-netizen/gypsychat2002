@@ -58,7 +58,10 @@ begin
   r := (public.claim_name('zzHardC2')) ->> 'ok';
   perform pg_temp.ck('10 claim_name still renames', r = 'true' and (select name from public.profiles where user_id = C) = 'zzHardC2', r);
 
-  -- 2. reaction XP ceiling: B reacts to A's room messages
+  -- 2. reaction XP ceiling: B reacts to A's room messages (the 15-per-10-seconds limiter is switched
+  -- off for this transaction only -- it is rolled back with everything else -- so the test can hurry)
+  alter table public.reactions disable trigger reactions_rate_limit;
+  alter table public.messages disable trigger messages_rate_limit;
   insert into public.messages (sender_id, sender_name, body) values (A, 'zzHardA', 'hello') returning id into mid;
   perform set_config('request.jwt.claims', '{}', true);
   for i in 1..12 loop
@@ -66,8 +69,7 @@ begin
     ids := ids || mid;
     r := pg_temp.try_as(B, format('insert into public.reactions (target_type, target_id, user_id, emoji) values (%L, %s, %L, %L)', 'message', mid, B, '👍'));
     if r <> '' then raise exception 'reaction % failed: %', i, r; end if;
-    perform pg_sleep(0.05);
-  end loop;
+      end loop;
   perform pg_temp.ck('11 twelve reactions from one person award ten', pg_temp.rr(A) = 10, pg_temp.rr(A)::text);
   perform pg_temp.ck('12 the two over the line are kept but not awarded', (select count(*) from public.reactions where user_id = B and not awarded) = 2);
   perform set_config('request.jwt.claims', '{}', true);
@@ -88,8 +90,7 @@ begin
         r := pg_temp.try_as(X, format('insert into public.reactions (target_type, target_id, user_id, emoji) values (%L, %s, %L, %L)', 'message', ids[j], X, '👍'));
         if r <> '' then raise exception 'reactor % # % failed: %', i, j, r; end if;
         n := n + 1;
-        perform pg_sleep(0.02);
-      end loop;
+              end loop;
     end;
   end loop;
   perform pg_temp.ck('16 seventy more reactions from seven people stop at the 60-a-day ceiling', pg_temp.rr(A) = 60, pg_temp.rr(A)::text);
@@ -121,6 +122,19 @@ begin
                    and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))));
   perform pg_temp.ck('25 user_stats still has no write policy', not exists (select 1 from pg_policies where tablename = 'user_stats' and cmd <> 'SELECT'));
   perform pg_temp.ck('26 my_uploads_since answers for a signed-in person', pg_temp.try_as(A, 'select public.my_uploads_since(''avatars'', interval ''1 hour'')') = '');
+
+  -- 7. push gates (as the owner, the way the edge functions call them)
+  perform set_config('request.jwt.claims', '{}', true);
+  perform pg_temp.ck('27 push_gate: no standing between strangers', public.push_gate(A, C) = 'no_standing', public.push_gate(A, C));
+  perform pg_temp.ck('28 push_gate: browsers cannot call it', pg_temp.try_as(A, format('select public.push_gate(%L, %L)', A, C)) like '%permission denied%');
+  insert into public.friends (owner_id, friend_id, friend_name) values (C, A, 'zzHardA');   -- C takes whispers from A
+  perform pg_temp.ck('29 push_gate: a friend may be pushed', public.push_gate(A, C) = 'ok');
+  perform pg_temp.ck('30 push_gate: not twice within three seconds', public.push_gate(A, C) = 'too_fast');
+  insert into public.blocks (blocker_id, blocked_id) values (C, A);
+  perform pg_temp.ck('31 push_gate: a block wins over friendship', public.push_gate(B, C) <> 'ok' and public.push_gate(A, C) = 'blocked', public.push_gate(A, C));
+  insert into public.threads (op_id, op_name, body, board) values (A, 'zzHardA', 'hello', 'gen') returning id into mid;
+  perform pg_temp.ck('32 board_push_gate: the poster may push once', public.board_push_gate(A, mid, 'gen') = 'ok' and public.board_push_gate(A, mid, 'gen') = 'already');
+  perform pg_temp.ck('33 board_push_gate: not for someone else''s thread', public.board_push_gate(B, mid, 'gen') = 'no_thread');
 
   raise exception E'\n%fails: %', current_setting('gr.log', true), coalesce(nullif(current_setting('gr.fails', true), ''), '0');
 end $t$;
