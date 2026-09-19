@@ -941,3 +941,36 @@ The service worker caches all five icons.
 **Not tested yet:** a real upload from a phone (the storage server itself isn't part of the local tests).
 
 **Release plan note:** `suggestions` and the `suggestions` storage bucket join the release reset list.
+
+# Build 173: idle players forfeit their stack (18 Sept 2026)
+
+Current state: **app.js 173, style.css 121, cache `gc2000-v204`.** Database: `supabase/holdem_idle_forfeit.sql`
+(applied; `holdem_tables_feature.sql` updated to match, `holdem_tables_dryrun.sql` check 36 rewritten).
+
+**The first live Hold'em test** (the user on a phone as Steve miller, Claude on the desktop as AA.Romani.world,
+table 11): opening, buy-in, deal, raise, call, all-in with the board run out, a showdown, a bust to the watchers,
+buy-back, the table restarting by itself, a reload finding the seat again, a first miss (fold + warning) and the
+second miss standing the player up. All as designed, XP conserved to the chip. One oddity: three seconds after
+hand 4 the desktop seat cashed out without a click from Claude; the money settled correctly, cause unknown
+(possibly a replayed click from the browser extension, which was misbehaving that evening).
+
+**The user's call after it:** being stood up for two missed turns in a row should cost the stack. Now the whole
+stack goes into the pot of the hand being played, counted as that seat's contribution so the side-pot arithmetic
+sees it, and the result records the loss of the whole buy-in. Nothing is destroyed and nothing goes to the house:
+whoever wins that hand takes it. Every other way of leaving a seat still sends the stack home.
+
+Noted to the user before building it: the big poker sites never take a stack for idling (they auto-fold and mark
+the player sitting out), so this is harsher than the norm, and a phone dying mid-hand hands the stack to whoever
+is left. Kept "two misses in a row, same hand or the next" rather than "same hand only", because a first miss
+that folds you ends your hand, so a same-hand rule could never fire and an idle player would squat in the seat.
+
+Screen text updated: the seat-lost note, the rules blurb, and the first-miss warning ("...they're out, chips and all").
+
+**Tested:** 47/47 locally and in a rolled-back production run (check 36 now asserts the forfeit lands in the pot
+and the result reads idle:-buy_in; 37 that XP is conserved); the migration also tested on the previous schema;
+the stress run (197 hands, 1,600 XP in and out); the UNO tables' 62 checks; the Hold'em integration test (241);
+the page loads clean. Applied, then verified the new function bodies are live and the helpers stay
+service_role-only. Live files match the repo.
+
+Also this evening, at the user's request "for the time being before we go live": Steve miller set to level 85,
+AA.Romani.world and S.S SIGINT to level 100, by setting game_points directly (level = floor(sqrt(XP/3)) + 1).
