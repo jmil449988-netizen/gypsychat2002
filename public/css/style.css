@@ -2399,3 +2399,33 @@ background:linear-gradient(180deg,#0f0d0b,#1a1612);border:1px solid var(--gold-l
 .login select.sunk{font:inherit;color:var(--bone);width:240px;padding:5px 6px;display:block;margin:0 auto 10px;outline:none;border-radius:0}
 .login select.sunk:focus{box-shadow:inset 0 0 18px #000,0 0 0 1px var(--gold)}
 .login select.sunk option{background:#171310;color:var(--bone)}
+/* v123: the player card -- an Xbox-360-style gamercard at the top of the name menu (build 179) */
+.nmenu{min-width:250px;max-width:300px}
+.nmenu .pcard{margin:-4px -4px 4px;padding:0 0 8px;background:linear-gradient(180deg,#1a1410,#0f0c09);border-bottom:2px double var(--gold-lo)}
+.nmenu .pc-name{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;font:700 13px Cinzel,Georgia,serif;letter-spacing:1px;color:var(--gold);background:linear-gradient(90deg,rgba(201,162,74,.22),rgba(201,162,74,.04));border-bottom:1px solid var(--gold-lo);text-shadow:0 1px 0 #000}
+.nmenu .pc-name .nmt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.nmenu .pc-name.hd{flex-wrap:nowrap;margin-bottom:0}
+.nmenu .pc-name .hd-name{min-width:0;max-width:none;overflow:hidden;text-overflow:ellipsis}
+.nmenu .pc-name .hd-name.admin{margin-bottom:0;padding:1px 5px;overflow:visible}
+.nmenu .pc-role{flex:none;font:700 9px Cinzel,Georgia,serif;letter-spacing:1px;text-transform:uppercase;color:#0f0c09;background:var(--gold);padding:2px 6px;border-radius:2px}
+.nmenu .pc-role.friend{background:var(--leaf);color:#e9f5e9}
+.nmenu .pc-row{display:flex;gap:10px;padding:9px 10px 4px;align-items:stretch}
+.nmenu .ava-card{width:64px;height:64px;font-size:26px;flex:none;margin:0;border:3px solid var(--gold-lo);border-radius:3px;box-shadow:0 0 0 1px #000,inset 0 0 12px #000}
+.nmenu .pc-lines{display:flex;flex-direction:column;justify-content:center;gap:4px;min-width:0;flex:1;font-size:12px;color:var(--bone)}
+.nmenu .pc-line{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.nmenu .pc-xp .lvl{margin:0;flex:none}
+.nmenu .pc-xpn{font-variant-numeric:tabular-nums;color:var(--gold-hi)}
+.nmenu .pc-purse{font-size:10px;color:#9ad19a;margin-left:2px}
+.nmenu .pc-bar{position:relative;height:6px;background:#0a0806;border:1px solid #3a3026;border-radius:2px;overflow:hidden;box-shadow:inset 0 0 4px #000}
+.nmenu .pc-bar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#8a6a2a,var(--gold-hi));box-shadow:0 0 6px rgba(241,217,138,.5)}
+.nmenu .pc-status .pc-dot{width:8px;height:8px;border-radius:50%;background:#3a3026;flex:none;box-shadow:0 0 0 1px #000}
+.nmenu .pc-status.st-online .pc-dot{background:var(--leaf);box-shadow:0 0 6px rgba(90,161,90,.9)}
+.nmenu .pc-status.st-away .pc-dot{background:var(--gold);box-shadow:0 0 5px rgba(201,162,74,.7)}
+.nmenu .pc-status.st-busy .pc-dot{background:var(--blood);box-shadow:0 0 5px rgba(179,38,30,.7)}
+.nmenu .pc-status.st-idle .pc-dot{background:#5f6b7a}
+.nmenu .pc-stmsg{color:var(--ash);font-style:italic;overflow:hidden;text-overflow:ellipsis}
+.nmenu .pc-dim{color:#5f5648;font-style:italic}
+.nmenu .pc-bio{margin:6px 10px 0;padding:6px 8px;font:italic 12px/1.45 "IM Fell English",Georgia,serif;color:var(--bone);background:rgba(0,0,0,.35);border:1px solid #2a2119;border-radius:2px;max-height:66px;overflow:hidden;white-space:pre-wrap;word-break:break-word}
+.nmenu .acts{display:grid;grid-template-columns:1fr 1fr;gap:2px 4px}
+.nmenu .acts button{font-size:12px;padding:5px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:500px){.nmenu{max-width:calc(100vw - 12px)}}
