@@ -1209,3 +1209,66 @@ it now. Cost of the design: a shared NAT can catch a bystander; `/unban` lifts i
 build-175/176 client suites still pass (the tester's run). Not tested live: `verify-join` with a banned hash
 (needs the function deployed), the switch off (needs a deploy with it off — the sign-on path it takes is the
 existing resume/email path minus one check).
+
+## Build 178 — a light pen test, and the doors it found (19 Sept 2026)
+
+Current state: **app.js 178, style.css 122, cache `gc2000-v209`.** Database: `supabase/hardening_2026_09_19.sql`
+(+ `hardening_2026_09_19_dryrun.sql`, 26 checks). Edge functions `send-push` (now in the repo) and
+`send-board-push` rewritten, to be deployed from the dashboard.
+
+The user asked for "a light pen test" and to "tighten up any back doors", with real-money payments in mind.
+Scope: everything a signed-in browser can reach. Method: the effective grants, RLS and storage policies,
+realtime publication and function privileges were read from the live catalogs; then a rolled-back session
+as `authenticated` (a real uid in `request.jwt.claims`) tried the writes and reads a hostile browser would
+try; then the edge functions and the client's HTML sinks and broadcast handlers were read.
+
+**What held.** `user_stats` (XP, level, purse) has no write policy and every money helper (`hd_credit`,
+`game_award`, the `ht_*`/`ut_*`/`bs_*` internals) refuses browsers — the lockdown of step 0 is in force.
+`admins` and `bans` refuse. Other people's whispers, group lines, hole cards, hands, ships, push
+subscriptions, read marks, the join IP log and the invite keys are invisible. Storage uploads are confined
+to the caller's own folder; the private buckets are admin-only. Names on messages, threads and replies are
+checked against `profiles`, so chat impersonation fails. Every HTML sink checked passes user text through
+`esc()`; the autolinker only makes `http(s)` links from already-escaped text. `appconfig.js` holds only the
+anon key and the VAPID public key.
+
+**What did not hold — fixed:**
+
+1. *profiles* (High): "update own profile" covered every column. A browser could rename itself past
+   `claim_name`'s 2–16 rule, clear `welcomed_at` and call `welcome_newcomer` again for a "just walked in"
+   line on demand, change `access_key_id`, set `avatar_url` to any host (every viewer's IP handed to it),
+   and after the reset flip `beta_tester`. Now column-level UPDATE on avatar_url, bio, status_message,
+   whisper_policy, region, updated_at only; no browser INSERT (the two client upserts became updates); a
+   CHECK that the name matches the rule and the avatar lives in this project's bucket.
+2. *Reaction XP* (High, and the real money risk): 15 reactions per 10 s, one XP per distinct emoji, free
+   anonymous accounts — two browsers could mint ~5,000 XP an hour. Now a reaction counts for XP only while
+   the author is under 60 awarded today and this reactor has given them fewer than 10 today; the reaction
+   itself always shows. `reactions.awarded` records which counted, so removing one only takes back XP it
+   gave (churn nets zero; the ledger `reaction_awards` is invisible to browsers).
+3. *Push notifications* (High): `send-push` sent any title and text to any account for any caller, and
+   `send-board-push` to every follower of any board — an untraceable spam/phishing channel wearing the
+   app's badge. Now `push_gate()` decides (standing between the two: whispers allowed, a live game or table,
+   a pending friend request, a shared group; no block; not banned/muted; 60 an hour, none to the same
+   person within 3 s) and `board_push_gate()` only for a thread the caller posted on that board in the last
+   five minutes, once. Titles are prefixed with the sender's real name; links in bodies become "[link]".
+4. *The 'kick' broadcast* (Medium): any browser could broadcast a kick for any user id — the target's
+   client threw itself out and everyone saw "X was removed by Admin". Now the target checks its own ban
+   row before leaving (kick() writes the ban first), and only admins print the line, after checking the
+   bans table. Regular viewers see the ordinary leave line instead.
+5. *friend_requests* (Low): the sender could mark their own request accepted. Recipient only now, and
+   only status/responded_at.
+6. *conversation_members* (Low): an UPDATE policy let a member clear their own `left_at` and walk back
+   into a group they left. Dropped (read marks use `gc_mark_group_read`).
+7. *Storage volume* (Low): per-person ceilings — avatars 20/h, thread images 40/h, voice notes 60/h, bug
+   reports 20/day, suggestions 30/day — via `my_uploads_since()`.
+8. Trigger functions executable by anon (cosmetic): revoked.
+
+**Left as is, on purpose, and worth knowing before money:** presence names are client-supplied (a browser
+could show a fake name in the Online list; messages still can't be forged); game XP can still be farmed by
+one person playing their own second account up to the 500-a-day cap per account — so XP must never be
+redeemable for money or prizes, only bought; `verify-access-key` has no brute-force limit (moot at release);
+anonymous account creation is unlimited until Supabase's captcha for anonymous sign-ins is switched on.
+
+**Tested:** the dry run 26/26 in a rolled-back run on the live database (the rate limiters are muted inside
+the test only); app.js parses; the earlier client suites still pass. Not testable here: the push gate end
+to end (needs the functions deployed) — the SQL side is exercised by hand in the dry run's spirit once
+applied.
