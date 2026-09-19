@@ -78,7 +78,7 @@ if ($('rouletteWatermark')) $('rouletteWatermark').textContent = WATERMARK_TEXT;
    report earlier, purely because a phone was still running yesterday's cached build. Shown in two
    low-key spots (the sign-on screen and the "more" popover) rather than announced anywhere, so
    it's there to check the moment it's needed without normally being visible enough to matter. */
-var BUILD_NUMBER = 172;
+var BUILD_NUMBER = 173;
 /* v172: pixel-art icons (public/icons/ui-*.png, drawn at 4x their pixel grid so a browser only ever scales them
    down): a thread spool for Threads, a poker table for the Game Room (its page header and toasts too), a red
    Romani wagon wheel -- sixteen spokes, as on the flag -- for Roulette, which turns slowly, an envelope for
@@ -5940,7 +5940,7 @@ function grWhyGone(tid) {
 var t = grTables[tid], mi = grMyIndex();
 if (!t || t.status === 'closed') return 'The table closed.';
 if (grUno && grUno.table_id === tid && mi >= 0 && grUno.outcome[mi] === 'idle') return 'You missed two turns in a row, so you were taken off the table.';
-if (grHdIdleOut === tid || (grHd && grHd.table_id === tid && grHd.last_action && grHd.last_action.indexOf(me.name + ' missed two turns') === 0)) return 'You missed two turns in a row, so you were taken off the table. Your chips went back to your XP.';
+if (grHdIdleOut === tid || (grHd && grHd.table_id === tid && grHd.last_action && grHd.last_action.indexOf(me.name + ' missed two turns') === 0)) return 'You missed two turns in a row, so you were taken off the table. Your chips stayed in the pot for that hand.';
 if (grIsHd(tid) && grHdLastStack === 0) return 'You ran out of chips, and every watcher’s seat was taken, so you left the table.';
 if (grIsHd(tid)) return 'You were taken off the table: this device went quiet for a few minutes. Your chips went back to your XP.';
 return 'You were taken off the table: this device went quiet for a few minutes.';
@@ -6638,7 +6638,7 @@ html += '<div class="gr-hd-result">' + (h.hand_result ? '<div class="gr-hd-res-t
 var n = grHdFunded(h);
 if (t.host_id === me.id) html += '<div class="gr-dealrow">' + (n >= 2 ? '<button type="button" class="btn gr-deal">' + (h.hand_no ? 'Deal' : 'Deal the first hand') + '</button>' : '<span class="gr-wait">Waiting for at least one more player with chips…</span>') + '</div>';
 else html += '<div class="gr-wait">' + (n >= 2 ? 'Waiting for ' + esc(t.host_name || 'the host') + ' to deal…' : 'Waiting for players…') + '</div>';
-if (!h.hand_no) html += '<div class="gr-rules">No-limit Texas Hold’em for 2–4 players, for real XP (' + esc(grStakesLong(t).toLowerCase()) + '). Your buy-in leaves your XP when you sit down, and your whole stack comes back when you get up. The host deals the first hand; after that they come by themselves. Miss two turns in a row and you’re out, but your chips still come back to you.</div>';
+if (!h.hand_no) html += '<div class="gr-rules">No-limit Texas Hold’em for 2–4 players, for real XP (' + esc(grStakesLong(t).toLowerCase()) + '). Your buy-in leaves your XP when you sit down, and your whole stack comes back when you get up. The host deals the first hand; after that they come by themselves. Miss two turns in a row and you’re out, and your chips stay on the table for that hand.</div>';
 }
 el.innerHTML = html;
 el.classList.toggle('live', live);
