@@ -58,10 +58,22 @@ Deno.serve(async (req) => {
   try { payload = await req.json(); } catch { return json({ error: 'bad json' }, 400); }
 
   const board = typeof payload.board === 'string' ? payload.board : '';
-  const title = typeof payload.title === 'string' ? payload.title.slice(0, 120) : 'Gypsy Chat 2000';
-  const body = typeof payload.body === 'string' ? payload.body.slice(0, 200) : '';
+  let title = typeof payload.title === 'string' ? payload.title.slice(0, 120) : 'Gypsy Chat 2000';
+  const body = (typeof payload.body === 'string' ? payload.body.slice(0, 200) : '').replace(/https?:\/\/\S+/gi, '[link]');
   const tag = typeof payload.tag === 'string' ? payload.tag.slice(0, 60) : 'gc-board';
+  const threadId = Number(payload.thread);
   if (!board) return json({ error: 'no board' }, 400);
+  if (!Number.isFinite(threadId) || threadId <= 0) return json({ error: 'no thread' }, 400);
+
+  // Hardened 19 Sept 2026 (supabase/hardening_2026_09_19.sql): board_push_gate() only lets a push out
+  // for a thread this caller really posted on this board in the last five minutes, once per thread,
+  // one a minute per person -- before, any account could push any text to every follower of a board.
+  const { data: verdict, error: gateErr } = await admin.rpc('board_push_gate', { p_from: callerId, p_thread: threadId, p_board: board });
+  if (gateErr) return json({ error: 'gate failed', detail: gateErr.message }, 500);
+  if (verdict !== 'ok') return json({ error: verdict }, 403);
+  const { data: prof } = await admin.from('profiles').select('name').eq('user_id', callerId).maybeSingle();
+  const senderName = prof && prof.name ? String(prof.name) : 'Someone';
+  if (title.toLowerCase().indexOf(senderName.toLowerCase()) !== 0) title = (senderName + ': ' + title).slice(0, 120);
 
   // The exclude is always the caller, taken from the verified token rather than from the body.
   // The client sends its own id too, but trusting that would let anyone suppress or redirect a
