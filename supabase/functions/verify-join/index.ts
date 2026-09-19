@@ -91,6 +91,35 @@ Deno.serve(async (req) => {
       return Response.json({ ok: false, reason: "turnstile_failed" }, { status: 403, headers: corsHeaders });
     }
 
+    // Bans follow the network (supabase/ip_bans_feature.sql): an active ban stamped with this join's
+    // ip_hash bans the new account too, before it is logged or let in. Fails open on a lookup error --
+    // the ban still stands on the original account, this is the spread, not the ban itself.
+    try {
+      const nowIso = new Date().toISOString();
+      const { data: hit } = await admin
+        .from("bans")
+        .select("user_id, banned_name, expires_at")
+        .eq("ip_hash", ipHash)
+        .neq("user_id", userId)
+        .or("expires_at.is.null,expires_at.gt." + nowIso)
+        .limit(1)
+        .maybeSingle();
+      if (hit) {
+        const { data: prof } = await admin.from("profiles").select("name").eq("user_id", userId).maybeSingle();
+        await admin.from("bans").upsert({
+          user_id: userId,
+          banned_name: prof && prof.name ? prof.name : null,
+          reason: "same network as " + (hit.banned_name || "a banned account"),
+          banned_by: null,
+          expires_at: hit.expires_at,
+          ip_hash: ipHash,
+        }, { onConflict: "user_id" });
+        console.warn("ip ban spread", userId, "from", hit.user_id);
+        return Response.json({ ok: false, reason: "banned" }, { status: 403, headers: corsHeaders });
+      }
+    } catch (banErr) {
+      console.error("ip ban check failed", banErr);
+    }
     await admin.from("join_ip_log").insert({ ip_hash: ipHash, user_id: userId });
 
     const windowStart = new Date(Date.now() - CHURN_WINDOW_MINUTES * 60 * 1000).toISOString();
