@@ -974,3 +974,238 @@ service_role-only. Live files match the repo.
 
 Also this evening, at the user's request "for the time being before we go live": Steve miller set to level 85,
 AA.Romani.world and S.S SIGINT to level 100, by setting game_points directly (level = floor(sqrt(XP/3)) + 1).
+
+## Build 174 — the starter purse (19 Sept 2026)
+
+Current state: **app.js 174, style.css 121, cache `gc2000-v205`.** Database: `supabase/starter_purse_feature.sql`
+(with `starter_purse_dryrun.sql`, 26 checks).
+
+The user: "give new users a 100 xp to begin with that doesnt affect their level." Every new character (the
+AFTER INSERT trigger on `profiles`, which is where `claim_name` creates one) gets a 100 XP purse in
+`user_stats.bonus`, once per account (`bonus_granted`). The purse is table money only: `hd_xp()` -- the
+"can you cover this buy-in?" number every game uses -- now counts it, while `xp` and `level` stay generated
+from reactions + game points exactly as before. `hd_credit()` does the bookkeeping in one place: a buy-in
+takes from the purse first (`bonus_in_play` remembers how much), a payout refills the purse up to that and
+only the remainder becomes level-counting XP. Lost purse chips are gone; the leftover `bonus_in_play` is
+written off at the next buy-in when the player sits at no other table (`hd_seated_elsewhere`, which skips
+rows touched in the same transaction, i.e. the game being created). XP conservation unchanged.
+
+Existing accounts are not touched; the release reset recreates the profiles, so the trigger hands the purse
+to everyone then. Known and accepted: two friends can pass a purse from one to the other at a table, turning
+it into level XP for the winner -- 100 XP, once per account, about level 6.
+
+Client: the level popover and the badge tooltip show the purse as its own line; the buy-in checks
+(`xpOfUser`) count it, as the server does. `holdem_tables_dryrun.sql` now expects the trigger to have made
+the test people's stats rows.
+
+Tested: 26/26 locally and in a rolled-back production run; the seated-elsewhere branch against committed
+rows locally; the Hold'em tables (47) and UNO tables (62) dry runs on top of the purse.
+
+## Build 175 — the first-hour package (19 Sept 2026)
+
+Current state: **app.js 175, style.css 122, cache `gc2000-v206`.** Database: `supabase/first_hour_feature.sql`
+(with `first_hour_dryrun.sql`, 52 checks). Not yet applied to production or deployed: built on branch
+`build-b` for the lead to merge.
+
+**Asked for:** what a brand-new person with no friends can do in their first hour. Four things.
+
+**A welcome with names.** The first time an account signs on with a name, everyone in the room sees
+"🎉 Name just walked in — say hi!" with a 👋 Wave button on the line, and the newcomer alone sees "Here now:
+A, B, C and 4 others" (people from their own region first, when they picked one) and "Tap a name to wave 👋,
+or hit Quick seat in the Game Room". System lines are client-only in this app, so the room line is drawn from
+a realtime INSERT on a new `welcomes` table that only the server writes: `welcome_newcomer()`, called by the
+browser right after its first successful `claim_name`, stamps `profiles.welcomed_at` and writes the one row.
+A reload, a rename or a second call does nothing; a banned account is not announced; the migration stamps
+every existing character so nobody who was here before is welcomed twice (the release reset recreates the
+profiles, so everybody gets a proper welcome then). Rows older than a day are swept by the next welcome.
+
+**Waves.** "👋 Wave" on any name's menu (and on the newcomer line) says hello without a friend request. The
+other person gets "Name waved at you 👋" with a "Wave back" button, a ding and a desktop notification.
+`wave(p_target)` writes one row to `waves`, which only the two people involved can read; it allows one wave
+per person a day and twenty a day in all, refuses across a block in either direction, and refuses anyone
+banned, muted or cooling down (the same `is_banned` / `is_muted_or_cooling` every send policy uses). A wave
+back is a wave of its own. Both tables sit on a channel of their own in the client (`firsthour-<id>`), never
+the room channel, so a slip there could not take the room down (build 154).
+
+**Quick seat.** One button at the top of the Game Room: sits you at the open table with the most people
+waiting for a player; failing that at the newest table with a free player seat (a Hold'em hand in play still
+takes a new player at the next deal); failing that it opens a low-stakes Hold'em table, announced in the main
+chat as usual. Hold'em tables you can't cover are skipped. The buy-in is min(the table's max, what you have);
+if you can't cover the minimum of a low table and there is nothing else to sit at, it says so and points at
+UNO. Everything goes through the same `holdem_table_sit` / `holdem_table_open` / `table_sit` rpcs as the
+buttons -- no money path of its own.
+
+**A region.** An optional, fixed-list region on the sign-on screen (USA, Canada, UK & Ireland, Europe, Latin
+America, Australia & NZ, Elsewhere), stored as `profiles.region` and remembered on the device. `claim_name`
+takes it as an optional third argument (`p_region`); the old one- and two-argument calls still work, and a
+call without a region never blanks one already set. The "Change name" pill in the bottom bar is now a small
+menu: rename, or pick (or clear) your region. It shows as a small muted tag beside names in the Online list
+and in the name menu's header, carried in presence like the status message. Cosmetic: the tag is whatever the
+person's own browser says, the server-side copy is what the welcome uses.
+
+**Tested**
+- Database, locally (rolled back): 52 checks, 0 failed -- the three ways of calling `claim_name`, the region
+  kept across a rename and only taking the fixed list, a person setting their own region and not anyone
+  else's, the welcome firing once (not on a reload, a rename, a banned account, an existing character), the
+  sweep, waves (throttles, wave back, blocks both ways, mutes, bans, the 20-a-day limit and its reset, the
+  sweep, who can read what, browsers unable to write), grants, security definer + pinned search_path, RLS,
+  the publication. The Hold'em tables (47) and UNO tables (62) dry runs still pass on top.
+- Client: the whole app in jsdom against a stub Supabase, calling the real functions: 31 checks, 0 failed
+  (region tags, the Wave item, the wave lines and the spent Wave back button, blocked senders, the newcomer
+  lines with same-region-first ordering, the own-name menu and the region write, the Quick seat pick order,
+  the clamped buy-ins through the real rpc names, the can't-cover message, the sign-on select). The page loads
+  with no errors.
+
+**Not tested yet:** production (the dry run should be run there in a rolled-back transaction first, as
+usual), real realtime with two browsers, and how the region select and the tag look on a real phone.
+
+**Release plan note:** `welcomes` and `waves` join the release reset list.
+
+## Build 176 — joined/left lines, one notification not two, and clicks that land somewhere (19 Sept 2026)
+
+Current state: **app.js 176, style.css 122, cache `gc2000-v207`.** No database change. Built on branch
+`build-c` (on top of 175) for the lead to merge; not deployed. The service worker's shell list now names
+`style.css?v=122` and `app.js?v=176` (it had drifted to 121 / 173 over the last few builds; the fetch
+handler caches whatever is asked for, so it never mattered, but it was wrong).
+
+Three small things from the "still open" lists of builds 162 and 164.
+
+**"Alice joined the group" / "Bob left the group."** Since 162's back-test: "Nobody else in a group is
+told when someone leaves or is added." The group's own log now says so, from the membership feed
+(`conversation_members` on the room channel, the same events 160 made arrive). A member's row is never
+deleted -- `gc_leave_group` sets `left_at`, and `gc_add_to_group` brings a leaver back by clearing it --
+so every change is an INSERT or an UPDATE and the payload always carries `user_id`, `member_name` and
+`left_at`. No `REPLICA IDENTITY FULL`, no migration. The name is the one the person goes by now
+(presence, then the profile name `loadMyGroups` reads), falling back to the name on the row. A read
+marker moving (most UPDATEs) still draws nothing; being added yourself still gets "You were added to a
+group". The adder's own tab says "Carol joined the group" the moment `gc_add_to_group` returns (in place
+of the old "Someone new is in the group."), and `groupMemberLine` remembers what it drew for 20 seconds so
+the INSERT that follows does not say it twice. Should a hand-made DELETE ever happen, the key alone is
+enough (the primary key is `(conversation_id, user_id)`). Nothing is drawn from a reload of the member
+list, so the initial load and `catchUp()` never repeat a line.
+
+**One desktop notification, not two.** Build 164 guessed it: "with Gypsy Chat open in a background tab
+and the bell on, a whisper probably shows two desktop notifications (the page's and the push's)." It
+does. `notifyDesktop()` fires the instant the realtime row lands whenever the tab is hidden or unfocused;
+`sw.js` drops a push only while a Gypsy Chat window has *focus*, and a background tab has none; and
+Chrome never lets a page notification and a service-worker notification replace each other, even with
+the same tag. So every whisper and mention showed twice, a second or two apart, on any desktop with the
+tab open somewhere behind. Design chosen: **the push is the one that shows** (it has renotify, it works
+with the tab closed, and it is what a phone shows anyway). When this device holds a push subscription
+(`pushSubscribed`, set by `subscribeToPush` once `gc_save_push_subscription` succeeds, cleared by
+`unsubscribeFromPush`) and the event is one the sender also pushes -- whisper, buzz, mention, group
+mention, friend request, game challenge, table invite -- the page waits six seconds and then asks the
+service worker registration for a notification with the same tag (`getNotifications({tag})`). Found:
+done. Not found -- a dead registration like build 163 #5, the push service slow, the sender's function
+call failed -- the page shows its own, six seconds late rather than never. Anything nobody pushes (a
+wave) and any device without a subscription shows at once as before. For the tag match to hold the
+friend-request tag on the page is now `gc-friendreq-<sender id>`, which is what the push carries (it was
+the request row's id). Phones are not touched: Android never showed page notifications (`new
+Notification` throws there) and the Capacitor shell has no push path of its own.
+
+Trade-off worth knowing: the fallback is six seconds late, and if someone dismisses the push within those
+six seconds the page shows a second one. Both seemed better than the old certain double. Not tested with
+real push on a real desktop -- it should be, with the tab in the background: exactly one notification
+per whisper.
+
+**Notification clicks go somewhere.** Build 164 also: "A notification click only brings the tab forward;
+it does not open the whisper or thread." The tag is all a push carries that says what it was about
+(`send-push` sends title, body, tag and a bare url), so the tag is the address, `routeNotification(tag)`:
+`gc-whisper-<sender>` and `gc-buzz-<sender>` open that whisper; `gc-group-<id>` that group; `gc-game-`,
+`gc-uno-`, `gc-hm-`, `gc-hd-`, `gc-pr-`, `gc-bs-<game id>` the whisper with the other player, scrolled to
+that card (a game not in its store yet is fetched by id; the card is looked for a few times over three
+seconds because the game loads after sign-on are not awaited); `gc-table-<id>` the Game Room;
+`gc-friendreq-*` the friend requests; `gc-mention` the main room at the newest line that names you
+(the Game Room, board, roulette, leaderboard or admin page closed in front of it; on a phone the
+conversation dock collapsed too); `gc-board-<board>` that board; anything else the room. Two ways a
+click gets there. With the app open anywhere, `sw.js`'s `notificationclick` focuses that window and
+posts `{type:'NOTIFICATION_CLICK', tag}` to it, and the page routes it (or keeps it in
+`pendingNotifTag` if sign-on has not finished). With nothing open it opens `./#n=<tag>`; app.js reads the
+hash at load, takes it off the address bar, and routes it at the end of `join()` once the history is in
+-- the hash rather than a query string so the request is the same `./` the shell cache holds. The page's
+own notifications take the same route when they have no click handler of their own.
+
+**Tested** (`scratchpad/bc/bc_test.js`, the real app in jsdom with a stub Supabase, 43 checks, 0 failed):
+the initial member list drawing nothing; INSERT -> joined; the same event twice; a read marker; leaving;
+a second leave update; coming back under the name presence knows; a key-only DELETE; reloads drawing
+nothing; my own add; a group I am not in; the adder's own line and the INSERT after it dropped. Then no
+subscription -> at once; subscribed and the push showed -> never; subscribed and no push -> after the
+grace; focus regained during the grace -> nothing; a wave at once; a focused tab never. Then each tag's
+route, an unloaded game fetched by id, unknown games and people routing nowhere, the tag kept before
+sign-on and routed after, the service worker's message, a page notification's click, the hash read and
+removed at load, and `sw.js` itself (focus + message with a window open, `./#n=<tag>` with none, the
+plain page for the `gc-push` fallback tag). The 175 first-hour test (31) still passes on this tree, and
+the page loads with no errors.
+
+**Not tested:** anything live -- a real push on a real desktop, and a click on a real phone notification
+with the app closed (the `#n=` hash through an installed PWA's start URL is the part to watch).
+
+## Build 177 — the release cutover, built ahead of time (19 Sept 2026)
+
+Current state: **app.js 177, style.css 122, appconfig.js v3, cache `gc2000-v208`.** Database (to apply before
+release, in this order): `supabase/first_hour_feature.sql` (build 175), `supabase/ip_bans_feature.sql` (this build);
+`supabase/release_reset.sql` is run on release day only. Edge function `verify-join` updated in the repo, to be
+deployed from the dashboard. Builds 174–177 went up together.
+
+The user asked for the work to be split up: Build A (this, the cutover) by the lead, Build B (175, the first-hour
+package) and Build C (176, the small fixes) by helpers one after the other on the same file, and the suites run
+by a tester. Decisions still marked open on 18 Sept were taken as recommended, since the user said to do what was
+laid out: content is wiped at the reset (room history, whispers, groups, the board, Ballot Box notes — reactions
+count toward XP, so keeping old messages would keep old levels); admins and bans are kept; mutes, strikes and
+cooldowns are cleared; user and bug reports and suggestions are archived and cleared.
+
+**The switch.** `appconfig.js` gains `INVITE_KEY_REQUIRED` (true today). False = the sign-on screen drops the key
+field and its note, `join()` skips the key check and sends no key to `claim_name`; resumed sessions and email
+sign-ins never asked for one, so nobody already in is affected. Turnstile stays. Flipping it means editing one
+line, bumping `appconfig.js?v=` in index.html and sw.js (and the sw cache name), and uploading those three.
+
+**Per-device settings clear once.** `RELEASE_EPOCH` (0 today). The release build sets it to 1; the first load on
+each device removes every `gc_*` localStorage key (sound volume and mutes, first-run tips, dock layout, the stored
+invite key, the remembered region) and stamps `gc_epoch`. The Supabase session is not a `gc_` key, so nobody is
+signed out.
+
+**The reset script** (`release_reset.sql`, one transaction, one DO block): copies every public table into a
+`beta_archive` schema the app cannot see (plus `kept_logins` / `deleted_logins`), then one `truncate` of every
+table except `profiles`, `admins`, `bans`, `access_keys` — a single statement without CASCADE, so a kept table
+referencing a wiped one would refuse loudly rather than be emptied quietly; resets the kept profiles to login +
+name + region (status, picture, bio, whisper setting and the welcome stamp cleared, so release day welcomes
+everyone through build 175's line); deletes every nameless login; stamps `profiles.beta_tester` on the keepers;
+hands each a fresh `user_stats` row with the 100 XP purse (the purse trigger only fires on a new profile). With
+`set local gc.dryrun = '1'` it ends by raising, so `begin; set local gc.dryrun = '1'; <file> rollback;` is a
+practice run whose error text is the report: every table's count before and after, the archive size, the
+logins deleted and kept. Practice-run locally (29 tables archived; the purse handed to the keepers; everything
+else 0). Storage buckets are emptied from the dashboard by hand — deleting `storage.objects` rows would orphan
+the files.
+
+**Bans follow the network** (`ip_bans_feature.sql` + `verify-join`). The IP-locked keys were what made bans
+stick; without keys a banned person is one reload from a new character. `bans.ip_hash` is stamped by a trigger
+from the account's latest `join_ip_log` row (backfilled for today's bans, kept through the reset because `bans`
+is kept), and `verify-join` bans any fresh sign-on whose hash matches an active ban ("same network as <name>",
+same expiry) and answers `reason: banned`; the client says "This network is banned from Gypsy Chat." and stops.
+Also fixed on the way: the function's refusals are 403s, which supabase-js returns as an error with the Response
+in `error.context` — the client never read the body, so `turnstile_failed` could not actually be seen. It reads
+it now. Cost of the design: a shared NAT can catch a bystander; `/unban` lifts it like any ban.
+
+**Release checklist** (the user's part marked ⚑):
+
+1. ⚑ Email provider: Supabase Auth → SMTP settings → a real provider (Resend or Postmark: verified sending
+   domain, API key as the SMTP password). Supabase's built-in mail is 2 an hour to team addresses only. Needed
+   for password resets on "Save with email" accounts. Turn on "Confirm email" only if wanted (today it is off,
+   which is why Save with email attaches at once).
+2. ⚑ Supabase Auth → Attack protection → enable captcha (Turnstile, the same site key) for anonymous sign-ins,
+   since no key will stop bots creating accounts. The client already renders Turnstile; the token must then also
+   be passed to `signInAnonymously({ options: { captchaToken } })` — a one-line change to make when this is
+   switched on (not done yet, so the sign-on keeps working today).
+3. Apply `first_hour_feature.sql` and `ip_bans_feature.sql` (practice runs first), deploy `verify-join` from the
+   dashboard Code tab, then upload builds 174–177 (done together).
+4. ⚑ Ask testers to 🔑 Save with email before release day if they switch devices (no key = no early name reclaim).
+5. Release day: warn the room → close it briefly → `release_reset.sql` practice run, read the report, real run →
+   empty the five buckets from the dashboard → flip `INVITE_KEY_REQUIRED` to false and `RELEASE_EPOCH` to 1,
+   bump `appconfig.js?v=4` in index.html and sw.js, new cache name, upload → sign on as a new anonymous character
+   and as an email account, check the welcome line, a wave, Quick seat, the purse → reopen.
+6. A month later: `drop schema beta_archive cascade;`
+
+**Tested:** the reset script practice-run locally; the ban stamp trigger locally; app.js parses and the
+build-175/176 client suites still pass (the tester's run). Not tested live: `verify-join` with a banned hash
+(needs the function deployed), the switch off (needs a deploy with it off — the sign-on path it takes is the
+existing resume/email path minus one check).
